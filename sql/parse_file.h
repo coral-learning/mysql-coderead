@@ -11,15 +11,15 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef _PARSE_FILE_H_
 #define _PARSE_FILE_H_
 
 #include "my_global.h"                          // uchar
 #include "sql_string.h"                         // LEX_STRING
-#include "sql_alloc.h"
+#include "sql_list.h"                           // Sql_alloc
 
 class THD;
 
@@ -42,7 +42,7 @@ enum file_opt_type {
 struct File_option
 {
   LEX_STRING name;		/**< Name of the option */
-  size_t offset;		/**< offset to base address of value */
+  int offset;			/**< offset to base address of value */
   file_opt_type type;		/**< Option type */
 };
 
@@ -57,8 +57,8 @@ class Unknown_key_hook
 public:
   Unknown_key_hook() {}                       /* Remove gcc warning */
   virtual ~Unknown_key_hook() {}              /* Remove gcc warning */
-  virtual bool process_unknown_string(const char *&unknown_key, uchar* base,
-                                      MEM_ROOT *mem_root, const char *end)= 0;
+  virtual bool process_unknown_string(char *&unknown_key, uchar* base,
+                                      MEM_ROOT *mem_root, char *end)= 0;
 };
 
 
@@ -68,20 +68,18 @@ class File_parser_dummy_hook: public Unknown_key_hook
 {
 public:
   File_parser_dummy_hook() {}                 /* Remove gcc warning */
-  virtual bool process_unknown_string(const char *&unknown_key, uchar* base,
-                                      MEM_ROOT *mem_root, const char *end);
+  virtual bool process_unknown_string(char *&unknown_key, uchar* base,
+                                      MEM_ROOT *mem_root, char *end);
 };
 
 extern File_parser_dummy_hook file_parser_dummy_hook;
 
-bool get_file_options_ulllist(const char *&ptr, const char *end,
-                              const char *line, uchar* base,
-                              File_option *parameter,
+bool get_file_options_ulllist(char *&ptr, char *end, char *line,
+                              uchar* base, File_option *parameter,
                               MEM_ROOT *mem_root);
 
-const char *
-parse_escaped_string(const char *ptr, const char *end, MEM_ROOT *mem_root,
-                     LEX_STRING *str);
+char *
+parse_escaped_string(char *ptr, char *end, MEM_ROOT *mem_root, LEX_STRING *str);
 
 class File_parser;
 File_parser *sql_parse_prepare(const LEX_STRING *file_name,
@@ -97,18 +95,18 @@ my_bool rename_in_schema_file(THD *thd,
 
 class File_parser: public Sql_alloc
 {
-  const char *start, *end;
+  char *buff, *start, *end;
   LEX_STRING file_type;
   my_bool content_ok;
 public:
-  File_parser() :start(0), end(0), content_ok(0)
+  File_parser() :buff(0), start(0), end(0), content_ok(0)
     { file_type.str= 0; file_type.length= 0; }
 
   my_bool ok() { return content_ok; }
-  const LEX_STRING *type() const { return &file_type; }
+  LEX_STRING *type() { return &file_type; }
   my_bool parse(uchar* base, MEM_ROOT *mem_root,
 		struct File_option *parameters, uint required,
-                Unknown_key_hook *hook) const;
+                Unknown_key_hook *hook);
 
   friend File_parser *sql_parse_prepare(const LEX_STRING *file_name,
 					MEM_ROOT *mem_root,

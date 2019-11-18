@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -458,11 +458,11 @@ int init_key_cache(KEY_CACHE *keycache, uint key_cache_block_size,
     keycache->hash_link_root= (HASH_LINK*) ((char*) keycache->hash_root +
 				            ALIGN_SIZE((sizeof(HASH_LINK*) *
 							keycache->hash_entries)));
-    memset(keycache->block_root, 0,
+    bzero((uchar*) keycache->block_root,
 	  keycache->disk_blocks * sizeof(BLOCK_LINK));
-    memset(keycache->hash_root, 0,
+    bzero((uchar*) keycache->hash_root,
           keycache->hash_entries * sizeof(HASH_LINK*));
-    memset(keycache->hash_link_root, 0,
+    bzero((uchar*) keycache->hash_link_root,
 	  keycache->hash_links * sizeof(HASH_LINK));
     keycache->hash_links_used= 0;
     keycache->free_hash_list= NULL;
@@ -494,9 +494,9 @@ int init_key_cache(KEY_CACHE *keycache, uint key_cache_block_size,
 		keycache->disk_blocks,  (long) keycache->block_root,
 		keycache->hash_entries, (long) keycache->hash_root,
 		keycache->hash_links,   (long) keycache->hash_link_root));
-    memset(keycache->changed_blocks, 0,
+    bzero((uchar*) keycache->changed_blocks,
 	  sizeof(keycache->changed_blocks[0]) * CHANGED_BLOCKS_HASH);
-    memset(keycache->file_blocks, 0,
+    bzero((uchar*) keycache->file_blocks,
 	  sizeof(keycache->file_blocks[0]) * CHANGED_BLOCKS_HASH);
   }
   else
@@ -2498,8 +2498,8 @@ static void read_block(KEY_CACHE *keycache,
 uchar *key_cache_read(KEY_CACHE *keycache,
                       File file, my_off_t filepos, int level,
                       uchar *buff, uint length,
-                      uint block_length MY_ATTRIBUTE((unused)),
-                      int return_buffer MY_ATTRIBUTE((unused)))
+                      uint block_length __attribute__((unused)),
+                      int return_buffer __attribute__((unused)))
 {
   my_bool locked_and_incremented= FALSE;
   int error=0;
@@ -2979,7 +2979,7 @@ int key_cache_insert(KEY_CACHE *keycache,
 int key_cache_write(KEY_CACHE *keycache,
                     File file, my_off_t filepos, int level,
                     uchar *buff, uint length,
-                    uint block_length  MY_ATTRIBUTE((unused)),
+                    uint block_length  __attribute__((unused)),
                     int dont_write)
 {
   my_bool locked_and_incremented= FALSE;
@@ -4206,7 +4206,7 @@ static int flush_all_key_blocks(KEY_CACHE *keycache)
     0 on success (always because it can't fail)
 */
 
-int reset_key_cache_counters(const char *name MY_ATTRIBUTE((unused)),
+int reset_key_cache_counters(const char *name __attribute__((unused)),
                              KEY_CACHE *key_cache)
 {
   DBUG_ENTER("reset_key_cache_counters");
@@ -4230,9 +4230,9 @@ int reset_key_cache_counters(const char *name MY_ATTRIBUTE((unused)),
 /*
   Test if disk-cache is ok
 */
-static void test_key_cache(KEY_CACHE *keycache MY_ATTRIBUTE((unused)),
-                           const char *where MY_ATTRIBUTE((unused)),
-                           my_bool lock MY_ATTRIBUTE((unused)))
+static void test_key_cache(KEY_CACHE *keycache __attribute__((unused)),
+                           const char *where __attribute__((unused)),
+                           my_bool lock __attribute__((unused)))
 {
   /* TODO */
 }

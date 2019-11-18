@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2012, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include "mysys_priv.h"
 #include <m_string.h>
@@ -173,6 +173,7 @@ static my_bool does_drive_exists(char drive_letter)
   return (drive_letter >= 'A' && drive_letter <= 'Z') &&
          (drive_mask & (0x1 << (drive_letter - 'A')));
 }
+#endif
 
 /**
   Verifies if the file name supplied is allowed or not. On Windows
@@ -182,21 +183,19 @@ static my_bool does_drive_exists(char drive_letter)
 
   @param name contains the file name with or without path
   @param length contains the length of file name
-  @param allow_current_dir TRUE if paths like C:foobar are allowed, 
-                           FALSE otherwise
  
   @return TRUE if the file name is allowed, FALSE otherwise.
 */
-my_bool is_filename_allowed(const char *name MY_ATTRIBUTE((unused)),
-                            size_t length MY_ATTRIBUTE((unused)),
-                            my_bool allow_current_dir MY_ATTRIBUTE((unused)))
+my_bool is_filename_allowed(const char *name __attribute__((unused)),
+                            size_t length __attribute__((unused)))
 {
+#ifdef __WIN__
   /* 
     For Windows, check if the file name contains : character.
     Start from end of path and search if the file name contains :
   */
   const char* ch = NULL;
-  for (ch= name + length - 1; ch >= name; --ch)
+  for(ch= name + length - 1; ch >= name; --ch)
   {
     if (FN_LIBCHAR == *ch || '/' == *ch)
       break;
@@ -208,13 +207,15 @@ my_bool is_filename_allowed(const char *name MY_ATTRIBUTE((unused)),
         names likes CC:foobar are not allowed since this syntax means ADS
         foobar in file CC.
       */
-      return (allow_current_dir && (ch - name == 1) && 
-              does_drive_exists(*name));
+      return ((ch - name == 1) && does_drive_exists(*name));
     }
   }
   return TRUE;
+#else
+  /* For other platforms, file names can contain colon : */
+  return TRUE;
+#endif
 } /* is_filename_allowed */
-#endif  /* __WIN__ */
 
 #if defined(__WIN__) || defined(__EMX__)
 
@@ -237,7 +238,7 @@ int check_if_legal_filename(const char *path)
   const char **reserved_name;
   DBUG_ENTER("check_if_legal_filename");
 
-  if (!is_filename_allowed(path, strlen(path), TRUE))
+  if(!is_filename_allowed(path, strlen(path)))
     DBUG_RETURN(1);
 
   path+= dirname_length(path);                  /* To start of filename */

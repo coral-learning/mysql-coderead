@@ -20,6 +20,10 @@
   that you can implement.
 */
 
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface			/* gcc class implementation */
+#endif
+
 #include <mysql.h>
 
 /* 
@@ -140,9 +144,8 @@ public:
   ulonglong table_flags() const
   {
     /* fix server to be able to get remote server table flags */
-    return (HA_PRIMARY_KEY_IN_READ_INDEX |
-            HA_PRIMARY_KEY_REQUIRED_FOR_POSITION | HA_FILE_BASED |
-            HA_REC_NOT_IN_SEQ | HA_AUTO_PART_KEY | HA_CAN_INDEX_BLOBS |
+    return (HA_PRIMARY_KEY_IN_READ_INDEX | HA_FILE_BASED
+            | HA_REC_NOT_IN_SEQ | HA_AUTO_PART_KEY | HA_CAN_INDEX_BLOBS |
             HA_BINLOG_ROW_CAPABLE | HA_BINLOG_STMT_CAPABLE |
             HA_NO_PREFIX_CHAR_KEYS | HA_PRIMARY_KEY_REQUIRED_FOR_DELETE |
             HA_NO_TRANSACTIONS /* until fixed by WL#2952 */ |

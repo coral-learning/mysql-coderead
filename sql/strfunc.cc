@@ -1,4 +1,4 @@
-/* Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003, 2012, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 /* Some useful string utility functions used by the MySQL server */
 
@@ -44,11 +44,10 @@
 
 static const char field_separator=',';
 
-ulonglong find_set(TYPELIB *lib, const char *str, uint length,
-                   const CHARSET_INFO *cs,
+ulonglong find_set(TYPELIB *lib, const char *str, uint length, CHARSET_INFO *cs,
                    char **err_pos, uint *err_len, bool *set_warning)
 {
-  const CHARSET_INFO *strip= cs ? cs : &my_charset_latin1;
+  CHARSET_INFO *strip= cs ? cs : &my_charset_latin1;
   const char *end= str + strip->cset->lengthsp(strip, str, length);
   ulonglong found= 0;
   *err_pos= 0;                  // No error yet
@@ -153,7 +152,7 @@ uint find_type(const TYPELIB *lib, const char *find, uint length,
 */
 
 uint find_type2(const TYPELIB *typelib, const char *x, uint length,
-                const CHARSET_INFO *cs)
+                CHARSET_INFO *cs)
 {
   int pos;
   const char *j;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2006, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2006, 2013, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,28 +11,21 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA */
 
 #include "rpl_utility.h"
 
 #ifndef MYSQL_CLIENT
 #include "unireg.h"                      // REQUIRED by later includes
 #include "rpl_rli.h"
-#include "sql_tmp_table.h"               // tmp tables
-#include "rpl_rli.h"
 #include "log_event.h"
-
-#include <algorithm>
-
-using std::min;
-using std::max;
-
+#include "sql_select.h"
 
 /**
    Function to compare two size_t integers for their relative
    order. Used below.
  */
-static int compare(size_t a, size_t b)
+int compare(size_t a, size_t b)
 {
   if (a < b)
     return -1;
@@ -40,7 +33,6 @@ static int compare(size_t a, size_t b)
     return 1;
   return 0;
 }
-#endif //MYSQL_CLIENT
 
 
 /**
@@ -48,7 +40,7 @@ static int compare(size_t a, size_t b)
 
    The somewhat contorted expression is to avoid overflow.
  */
-static uint32 uint_max(int bits) {
+uint32 uint_max(int bits) {
   return (((1UL << (bits - 1)) - 1) << 1) | 1;
 }
 
@@ -116,15 +108,12 @@ max_display_length_for_field(enum_field_types sql_type, unsigned int metadata)
 
   case MYSQL_TYPE_DATE:
   case MYSQL_TYPE_TIME:
-  case MYSQL_TYPE_TIME2:
     return 3;
 
   case MYSQL_TYPE_TIMESTAMP:
-  case MYSQL_TYPE_TIMESTAMP2:
     return 4;
 
   case MYSQL_TYPE_DATETIME:
-  case MYSQL_TYPE_DATETIME2:
     return 8;
 
   case MYSQL_TYPE_BIT:
@@ -170,7 +159,7 @@ max_display_length_for_field(enum_field_types sql_type, unsigned int metadata)
   }
 }
 
-#ifndef MYSQL_CLIENT
+
 /*
   Compare the pack lengths of a source field (on the master) and a
   target field (on the slave).
@@ -198,7 +187,6 @@ int compare_lengths(Field *field, enum_field_types source_type, uint16 metadata)
   DBUG_RETURN(result);
 }
 #endif //MYSQL_CLIENT
-
 /*********************************************************************
  *                   table_def member definitions                    *
  *********************************************************************/
@@ -238,12 +226,10 @@ uint32 table_def::calc_field_size(uint col, uchar *master_data) const
       /*
         We are reading the actual size from the master_data record
         because this field has the actual lengh stored in the first
-        one or two bytes.
+        byte.
       */
-      length= max_display_length_for_field(MYSQL_TYPE_STRING, m_field_metadata[col]) > 255 ? 2 : 1;
-
-      /* As in Field_string::unpack */
-      length+= ((length == 1) ? *master_data : uint2korr(master_data));
+      length= (uint) *master_data + 1;
+      DBUG_ASSERT(length != 0);
     }
     break;
   }
@@ -275,20 +261,11 @@ uint32 table_def::calc_field_size(uint col, uchar *master_data) const
   case MYSQL_TYPE_TIME:
     length= 3;
     break;
-  case MYSQL_TYPE_TIME2:
-    length= my_time_binary_length(m_field_metadata[col]);
-    break;
   case MYSQL_TYPE_TIMESTAMP:
     length= 4;
     break;
-  case MYSQL_TYPE_TIMESTAMP2:
-    length= my_timestamp_binary_length(m_field_metadata[col]);
-    break;
   case MYSQL_TYPE_DATETIME:
     length= 8;
-    break;
-  case MYSQL_TYPE_DATETIME2:
-    length= my_datetime_binary_length(m_field_metadata[col]);
     break;
   case MYSQL_TYPE_BIT:
   {
@@ -350,11 +327,10 @@ uint32 table_def::calc_field_size(uint col, uchar *master_data) const
   return length;
 }
 
-#if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
+#ifndef MYSQL_CLIENT
 /**
  */
-static void show_sql_type(enum_field_types type, uint16 metadata, String *str,
-                          const CHARSET_INFO *field_cs)
+void show_sql_type(enum_field_types type, uint16 metadata, String *str, CHARSET_INFO *field_cs)
 {
   DBUG_ENTER("show_sql_type");
   DBUG_PRINT("enter", ("type: %d, metadata: 0x%x", type, metadata));
@@ -386,7 +362,6 @@ static void show_sql_type(enum_field_types type, uint16 metadata, String *str,
     break;
 
   case MYSQL_TYPE_TIMESTAMP:
-  case MYSQL_TYPE_TIMESTAMP2:
     str->set_ascii(STRING_WITH_LEN("timestamp"));
     break;
 
@@ -404,12 +379,10 @@ static void show_sql_type(enum_field_types type, uint16 metadata, String *str,
     break;
 
   case MYSQL_TYPE_TIME:
-  case MYSQL_TYPE_TIME2:
     str->set_ascii(STRING_WITH_LEN("time"));
     break;
 
   case MYSQL_TYPE_DATETIME:
-  case MYSQL_TYPE_DATETIME2:
     str->set_ascii(STRING_WITH_LEN("datetime"));
     break;
 
@@ -420,7 +393,7 @@ static void show_sql_type(enum_field_types type, uint16 metadata, String *str,
   case MYSQL_TYPE_VAR_STRING:
   case MYSQL_TYPE_VARCHAR:
     {
-      const CHARSET_INFO *cs= str->charset();
+      CHARSET_INFO *cs= str->charset();
       uint32 length=
         cs->cset->snprintf(cs, (char*) str->ptr(), str->alloced_length(),
                            "varchar(%u)", metadata);
@@ -430,7 +403,7 @@ static void show_sql_type(enum_field_types type, uint16 metadata, String *str,
 
   case MYSQL_TYPE_BIT:
     {
-      const CHARSET_INFO *cs= str->charset();
+      CHARSET_INFO *cs= str->charset();
       int bit_length= 8 * (metadata >> 8) + (metadata & 0xFF);
       uint32 length=
         cs->cset->snprintf(cs, (char*) str->ptr(), str->alloced_length(),
@@ -441,7 +414,7 @@ static void show_sql_type(enum_field_types type, uint16 metadata, String *str,
 
   case MYSQL_TYPE_DECIMAL:
     {
-      const CHARSET_INFO *cs= str->charset();
+      CHARSET_INFO *cs= str->charset();
       uint32 length=
         cs->cset->snprintf(cs, (char*) str->ptr(), str->alloced_length(),
                            "decimal(%d,?)", metadata);
@@ -451,7 +424,7 @@ static void show_sql_type(enum_field_types type, uint16 metadata, String *str,
 
   case MYSQL_TYPE_NEWDECIMAL:
     {
-      const CHARSET_INFO *cs= str->charset();
+      CHARSET_INFO *cs= str->charset();
       uint32 length=
         cs->cset->snprintf(cs, (char*) str->ptr(), str->alloced_length(),
                            "decimal(%d,%d)", metadata >> 8, metadata & 0xff);
@@ -502,7 +475,7 @@ static void show_sql_type(enum_field_types type, uint16 metadata, String *str,
       /*
         This is taken from Field_string::unpack.
       */
-      const CHARSET_INFO *cs= str->charset();
+      CHARSET_INFO *cs= str->charset();
       uint bytes= (((metadata >> 4) & 0x300) ^ 0x300) + (metadata & 0x00ff);
       uint32 length=
         cs->cset->snprintf(cs, (char*) str->ptr(), str->alloced_length(),
@@ -555,48 +528,6 @@ bool is_conversion_ok(int order, Relay_log_info *rli)
   }
 
   DBUG_RETURN(true);
-}
-
-
-/**
-  Check if the types are criss cross means type1 is MYSQL_TYPE_TIMESTAMP
-  and type2 as MYSQL_TYPE_TIMESTAMP2 or vice versa.
-*/
-inline bool timestamp_cross_check(enum_field_types type1,
-                                  enum_field_types type2)
-{
-  return ((type1 == MYSQL_TYPE_TIMESTAMP &&
-          type2 == MYSQL_TYPE_TIMESTAMP2) ||
-          (type1 == MYSQL_TYPE_TIMESTAMP2 &&
-          type2 == MYSQL_TYPE_TIMESTAMP));
-}
-
-
-/**
-  Check if the types are criss cross means type1 is MYSQL_TYPE_DATETIME
-  and type2 as MYSQL_TYPE_DATETIME or vice versa.
-*/
-inline bool datetime_cross_check(enum_field_types type1,
-                                 enum_field_types type2)
-{
-  return ((type1 == MYSQL_TYPE_DATETIME &&
-          type2 == MYSQL_TYPE_DATETIME2) ||
-          (type1 == MYSQL_TYPE_DATETIME2 &&
-          type2 == MYSQL_TYPE_DATETIME));
-}
-
-
-/**
-  Check if the types are criss cross means type1 is MYSQL_TYPE_TIME
-  and type2 as MYSQL_TYPE_TIME2 or vice versa.
-*/
-inline bool time_cross_check(enum_field_types type1,
-                             enum_field_types type2)
-{
-  return ((type1 == MYSQL_TYPE_TIME&&
-          type2 == MYSQL_TYPE_TIME2) ||
-          (type1 == MYSQL_TYPE_TIME2 &&
-          type2 == MYSQL_TYPE_TIME));
 }
 
 
@@ -669,36 +600,6 @@ can_convert_field_to(Field *field,
       DBUG_RETURN(is_conversion_ok(*order_var, rli));
     else
       DBUG_RETURN(false);
-  }
-  else if (metadata == 0 &&
-           (timestamp_cross_check(field->real_type(), source_type) ||
-           datetime_cross_check(field->real_type(), source_type) ||
-           time_cross_check(field->real_type(), source_type)))
-  {
-    /*
-      In the above condition, we are taking care
-      of case where
-      1) Master having old TIME, TIMESTAMP, DATETIME
-      and slave have new TIME2, TIMESTAMP2, DATETIME2
-      or
-      2) Master having new TIMESTAMP2, DATETIME2, TIME2
-      with fraction part zero and slave have TIME,
-      TIMESTAMP, DATETIME.
-      We need second condition, as when we are
-      upgrading from 5.5 to 5.6 TIME, TIMESTAMP,
-      DATETIME columns are not upgraded to TIME(0),
-      TIMESTAMP(0), DATETIME(0).
-      So to support these conversion we are putting this
-      condition.
-    */
-    /*
-      TS-TODO: conversion from FSP1>FSP2.
-      Can do non-lossy conversion
-      from old TIME, TIMESTAMP, DATETIME
-      to new TIME(0), TIMESTAMP(0), DATETIME(0).
-    */
-    *order_var= -1;
-    DBUG_RETURN(true);
   }
   else if (!slave_type_conversions_options)
     DBUG_RETURN(false);
@@ -824,9 +725,6 @@ can_convert_field_to(Field *field,
   case MYSQL_TYPE_NULL:
   case MYSQL_TYPE_ENUM:
   case MYSQL_TYPE_SET:
-  case MYSQL_TYPE_TIMESTAMP2:
-  case MYSQL_TYPE_DATETIME2:
-  case MYSQL_TYPE_TIME2:
     DBUG_RETURN(false);
   }
   DBUG_RETURN(false);                                 // To keep GCC happy
@@ -868,7 +766,7 @@ table_def::compatible_with(THD *thd, Relay_log_info *rli,
   /*
     We only check the initial columns for the tables.
   */
-  uint const cols_to_check= min<ulong>(table->s->fields, size());
+  uint const cols_to_check= min(table->s->fields, size());
   TABLE *tmp_table= NULL;
 
   for (uint col= 0 ; col < cols_to_check ; ++col)
@@ -916,26 +814,14 @@ table_def::compatible_with(THD *thd, Relay_log_info *rli,
       const char *tbl_name= table->s->table_name.str;
       char source_buf[MAX_FIELD_WIDTH];
       char target_buf[MAX_FIELD_WIDTH];
-      enum loglevel report_level= INFORMATION_LEVEL;
-
       String source_type(source_buf, sizeof(source_buf), &my_charset_latin1);
       String target_type(target_buf, sizeof(target_buf), &my_charset_latin1);
       show_sql_type(type(col), field_metadata(col), &source_type, field->charset());
       field->sql_type(target_type);
-      if (!ignored_error_code(ER_SLAVE_CONVERSION_FAILED))
-      {
-        report_level= ERROR_LEVEL;
-        thd->is_slave_error= 1;
-      }
-      /* In case of ignored errors report warnings only if log_warnings > 1. */
-      else if (log_warnings > 1)
-        report_level= WARNING_LEVEL;
-
-      if (report_level != INFORMATION_LEVEL)
-        rli->report(report_level, ER_SLAVE_CONVERSION_FAILED,
-                    ER(ER_SLAVE_CONVERSION_FAILED),
-                    col, db_name, tbl_name,
-                    source_type.c_ptr_safe(), target_type.c_ptr_safe());
+      rli->report(ERROR_LEVEL, ER_SLAVE_CONVERSION_FAILED,
+                  ER(ER_SLAVE_CONVERSION_FAILED),
+                  col, db_name, tbl_name,
+                  source_type.c_ptr_safe(), target_type.c_ptr_safe());
       return false;
     }
   }
@@ -985,19 +871,7 @@ TABLE *table_def::create_conversion_table(THD *thd, Relay_log_info *rli, TABLE *
     min(columns@master, columns@slave) columns in the
     conversion table.
   */
-  uint const cols_to_create= min<ulong>(target_table->s->fields, size());
-
-  // Default value : treat all values signed
-  bool unsigned_flag= FALSE;
-
-  // Check if slave_type_conversions contains ALL_UNSIGNED
-  unsigned_flag= slave_type_conversions_options &
-                  (ULL(1) << SLAVE_TYPE_CONVERSIONS_ALL_UNSIGNED);
-
-  // Check if slave_type_conversions contains ALL_SIGNED
-  unsigned_flag= unsigned_flag && !(slave_type_conversions_options &
-                 (ULL(1) << SLAVE_TYPE_CONVERSIONS_ALL_SIGNED));
-
+  uint const cols_to_create= min(target_table->s->fields, size());
   for (uint col= 0 ; col < cols_to_create; ++col)
   {
     Create_field *field_def=
@@ -1057,13 +931,13 @@ TABLE *table_def::create_conversion_table(THD *thd, Relay_log_info *rli, TABLE *
 
     DBUG_PRINT("debug", ("sql_type: %d, target_field: '%s', max_length: %d, decimals: %d,"
                          " maybe_null: %d, unsigned_flag: %d, pack_length: %u",
-                         binlog_type(col), target_table->field[col]->field_name,
-                         max_length, decimals, TRUE, unsigned_flag, pack_length));
+                         type(col), target_table->field[col]->field_name,
+                         max_length, decimals, TRUE, FALSE, pack_length));
     field_def->init_for_tmp_table(type(col),
                                   max_length,
                                   decimals,
-                                  TRUE,          // maybe_null
-                                  unsigned_flag, // unsigned_flag
+                                  TRUE,         // maybe_null
+                                  FALSE,        // unsigned_flag
                                   pack_length);
     field_def->charset= target_table->field[col]->charset();
     field_def->interval= interval;
@@ -1073,23 +947,10 @@ TABLE *table_def::create_conversion_table(THD *thd, Relay_log_info *rli, TABLE *
 
 err:
   if (conv_table == NULL)
-  {
-    enum loglevel report_level= INFORMATION_LEVEL;
-    if (!ignored_error_code(ER_SLAVE_CANT_CREATE_CONVERSION))
-    {
-      report_level= ERROR_LEVEL;
-      thd->is_slave_error= 1;
-    }
-    /* In case of ignored errors report warnings only if log_warnings > 1. */
-    else if (log_warnings > 1)
-      report_level= WARNING_LEVEL;
-
-    if (report_level != INFORMATION_LEVEL)
-      rli->report(report_level, ER_SLAVE_CANT_CREATE_CONVERSION,
-                  ER(ER_SLAVE_CANT_CREATE_CONVERSION),
-                  target_table->s->db.str,
-                  target_table->s->table_name.str);
-  }
+    rli->report(ERROR_LEVEL, ER_SLAVE_CANT_CREATE_CONVERSION,
+                ER(ER_SLAVE_CANT_CREATE_CONVERSION),
+                target_table->s->db.str,
+                target_table->s->table_name.str);
   DBUG_RETURN(conv_table);
 }
 
@@ -1109,7 +970,7 @@ table_def::table_def(unsigned char *types, ulong size,
                                      &m_null_bits, (size + 7) / 8,
                                      NULL);
 
-  memset(m_field_metadata, 0, size * sizeof(uint16));
+  bzero(m_field_metadata, size * sizeof(uint16));
 
   if (m_type)
     memcpy(m_type, types, size);
@@ -1127,7 +988,7 @@ table_def::table_def(unsigned char *types, ulong size,
     int index= 0;
     for (unsigned int i= 0; i < m_size; i++)
     {
-      switch (binlog_type(i)) {
+      switch (m_type[i]) {
       case MYSQL_TYPE_TINY_BLOB:
       case MYSQL_TYPE_BLOB:
       case MYSQL_TYPE_MEDIUM_BLOB:
@@ -1154,7 +1015,7 @@ table_def::table_def(unsigned char *types, ulong size,
       }
       case MYSQL_TYPE_BIT:
       {
-        uint16 x= field_metadata[index++];
+        uint16 x= field_metadata[index++]; 
         x = x + (field_metadata[index++] << 8U);
         m_field_metadata[i]= x;
         break;
@@ -1176,11 +1037,6 @@ table_def::table_def(unsigned char *types, ulong size,
         m_field_metadata[i]= x;
         break;
       }
-      case MYSQL_TYPE_TIME2:
-      case MYSQL_TYPE_DATETIME2:
-      case MYSQL_TYPE_TIMESTAMP2:
-        m_field_metadata[i]= field_metadata[index++];
-        break;
       default:
         m_field_metadata[i]= 0;
         break;
@@ -1201,421 +1057,23 @@ table_def::~table_def()
 #endif
 }
 
-/**
-   @param   even_buf    point to the buffer containing serialized event
-   @param   event_len   length of the event accounting possible checksum alg
-
-   @return  TRUE        if test fails
-            FALSE       as success
-*/
-bool event_checksum_test(uchar *event_buf, ulong event_len, uint8 alg)
-{
-  bool res= FALSE;
-  uint16 flags= 0; // to store in FD's buffer flags orig value
-
-  if (alg != BINLOG_CHECKSUM_ALG_OFF && alg != BINLOG_CHECKSUM_ALG_UNDEF)
-  {
-    ha_checksum incoming;
-    ha_checksum computed;
-
-    if (event_buf[EVENT_TYPE_OFFSET] == FORMAT_DESCRIPTION_EVENT)
-    {
-#ifndef DBUG_OFF
-      int8 fd_alg= event_buf[event_len - BINLOG_CHECKSUM_LEN -
-                             BINLOG_CHECKSUM_ALG_DESC_LEN];
-#endif
-      /*
-        FD event is checksummed and therefore verified w/o the binlog-in-use flag
-      */
-      flags= uint2korr(event_buf + FLAGS_OFFSET);
-      if (flags & LOG_EVENT_BINLOG_IN_USE_F)
-        event_buf[FLAGS_OFFSET] &= ~LOG_EVENT_BINLOG_IN_USE_F;
-      /*
-         The only algorithm currently is CRC32. Zero indicates
-         the binlog file is checksum-free *except* the FD-event.
-      */
-      DBUG_ASSERT(fd_alg == BINLOG_CHECKSUM_ALG_CRC32 || fd_alg == 0);
-      DBUG_ASSERT(alg == BINLOG_CHECKSUM_ALG_CRC32);
-      /*
-        Complile time guard to watch over  the max number of alg
-      */
-      compile_time_assert(BINLOG_CHECKSUM_ALG_ENUM_END <= 0x80);
-    }
-    incoming= uint4korr(event_buf + event_len - BINLOG_CHECKSUM_LEN);
-    computed= my_checksum(0L, NULL, 0);
-    /* checksum the event content but the checksum part itself */
-    computed= my_checksum(computed, (const uchar*) event_buf,
-                          event_len - BINLOG_CHECKSUM_LEN);
-    if (flags != 0)
-    {
-      /* restoring the orig value of flags of FD */
-      DBUG_ASSERT(event_buf[EVENT_TYPE_OFFSET] == FORMAT_DESCRIPTION_EVENT);
-      event_buf[FLAGS_OFFSET]= flags;
-    }
-    res= !(computed == incoming);
-  }
-  return DBUG_EVALUATE_IF("simulate_checksum_test_failure", TRUE, res);
-}
-
-#ifndef MYSQL_CLIENT
-
-#define HASH_ROWS_POS_SEARCH_INVALID -1
-
-/**
-  Utility methods for handling row based operations.
- */
-
-static uchar*
-hash_slave_rows_get_key(const uchar *record,
-                        size_t *length,
-                        my_bool not_used MY_ATTRIBUTE((unused)))
-{
-  DBUG_ENTER("get_key");
-
-  HASH_ROW_ENTRY *entry=(HASH_ROW_ENTRY *) record;
-  HASH_ROW_PREAMBLE *preamble= entry->preamble;
-  *length= preamble->length;
-
-  DBUG_RETURN((uchar*) &preamble->hash_value);
-}
-
-static void
-hash_slave_rows_free_entry(HASH_ROW_ENTRY *entry)
-{
-  DBUG_ENTER("free_entry");
-  if (entry)
-  {
-    if (entry->preamble)
-      my_free(entry->preamble);
-    if (entry->positions)
-      my_free(entry->positions);
-    my_free(entry);
-  }
-  DBUG_VOID_RETURN;
-}
-
-bool Hash_slave_rows::is_empty(void)
-{
-  return (m_hash.records == 0);
-}
-
-/**
-   Hashing commodity structures and functions.
- */
-
-bool Hash_slave_rows::init(void)
-{
-  if (my_hash_init(&m_hash,
-                   &my_charset_bin,                /* the charater set information */
-                   16 /* TODO */,                  /* growth size */
-                   0,                              /* key offset */
-                   0,                              /* key length */
-                   hash_slave_rows_get_key,                        /* get function pointer */
-                   (my_hash_free_key) hash_slave_rows_free_entry,  /* freefunction pointer */
-                   MYF(0)))                        /* flags */
-    return true;
-  return false;
-}
-
-bool Hash_slave_rows::deinit(void)
-{
-  if (my_hash_inited(&m_hash))
-    my_hash_free(&m_hash);
-
-  return 0;
-}
-
-int Hash_slave_rows::size()
-{
-  return m_hash.records;
-}
-
-HASH_ROW_ENTRY* Hash_slave_rows::make_entry()
-{
-  return make_entry(NULL, NULL);
-}
-
-HASH_ROW_ENTRY* Hash_slave_rows::make_entry(const uchar* bi_start, const uchar* bi_ends)
-{
-  DBUG_ENTER("Hash_slave_rows::make_entry");
-
-  HASH_ROW_ENTRY *entry= (HASH_ROW_ENTRY*) my_malloc(sizeof(HASH_ROW_ENTRY), MYF(0));
-  HASH_ROW_PREAMBLE *preamble= (HASH_ROW_PREAMBLE *) my_malloc(sizeof(HASH_ROW_PREAMBLE), MYF(0));
-  HASH_ROW_POS *pos= (HASH_ROW_POS *) my_malloc(sizeof(HASH_ROW_POS), MYF(0));
-
-  if (!entry || !preamble || !pos)
-    goto err;
-
-  /**
-     Filling in the preamble.
-   */
-  preamble->hash_value= 0;
-  preamble->length= sizeof(my_hash_value_type);
-  preamble->search_state= HASH_ROWS_POS_SEARCH_INVALID;
-  preamble->is_search_state_inited= false;
-
-  /**
-     Filling in the positions.
-   */
-  pos->bi_start= (const uchar *) bi_start;
-  pos->bi_ends= (const uchar *) bi_ends;
-
-  /**
-    Filling in the entry
-   */
-  entry->preamble= preamble;
-  entry->positions= pos;
-
-  DBUG_RETURN(entry);
-
-err:
-  if (entry)
-    my_free(entry);
-  if (preamble)
-    my_free(entry);
-  if (pos)
-    my_free(pos);
-  DBUG_RETURN(NULL);
-}
-
-bool
-Hash_slave_rows::put(TABLE *table,
-                     MY_BITMAP *cols,
-                     HASH_ROW_ENTRY* entry)
-{
-
-  DBUG_ENTER("Hash_slave_rows::put");
-
-  HASH_ROW_PREAMBLE* preamble= entry->preamble;
-
-  /**
-     Skip blobs and BIT fields from key calculation.
-     Handle X bits.
-     Handle nulled fields.
-     Handled fields not signaled.
-  */
-  preamble->hash_value= make_hash_key(table, cols);
-
-  my_hash_insert(&m_hash, (uchar *) entry);
-  DBUG_PRINT("debug", ("Added record to hash with key=%u", preamble->hash_value));
-  DBUG_RETURN(false);
-}
-
-HASH_ROW_ENTRY*
-Hash_slave_rows::get(TABLE *table, MY_BITMAP *cols)
-{
-  DBUG_ENTER("Hash_slave_rows::get");
-  HASH_SEARCH_STATE state;
-  my_hash_value_type key;
-  HASH_ROW_ENTRY *entry= NULL;
-
-  key= make_hash_key(table, cols);
-
-  DBUG_PRINT("debug", ("Looking for record with key=%u in the hash.", key));
-
-  entry= (HASH_ROW_ENTRY*) my_hash_first(&m_hash,
-                                         (const uchar*) &key,
-                                         sizeof(my_hash_value_type),
-                                         &state);
-  if (entry)
-  {
-    DBUG_PRINT("debug", ("Found record with key=%u in the hash.", key));
-
-    /**
-       Save the search state in case we need to go through entries for
-       the given key.
-    */
-    entry->preamble->search_state= state;
-    entry->preamble->is_search_state_inited= true;
-  }
-
-  DBUG_RETURN(entry);
-}
-
-bool Hash_slave_rows::next(HASH_ROW_ENTRY** entry)
-{
-  DBUG_ENTER("Hash_slave_rows::next");
-  DBUG_ASSERT(*entry);
-
-  if (*entry == NULL)
-    DBUG_RETURN(true);
-
-  HASH_ROW_PREAMBLE *preamble= (*entry)->preamble;
-
-  if (!preamble->is_search_state_inited)
-    DBUG_RETURN(true);
-
-  my_hash_value_type key= preamble->hash_value;
-  HASH_SEARCH_STATE state= preamble->search_state;
-
-  /*
-    Invalidate search for current preamble, because it is going to be
-    used in the search below (and search state is used in a
-    one-time-only basis).
-   */
-  preamble->search_state= HASH_ROWS_POS_SEARCH_INVALID;
-  preamble->is_search_state_inited= false;
-
-  DBUG_PRINT("debug", ("Looking for record with key=%u in the hash (next).", key));
-
-  /**
-     Do the actual search in the hash table.
-   */
-  *entry= (HASH_ROW_ENTRY*) my_hash_next(&m_hash,
-                                         (const uchar*) &key,
-                                         sizeof(my_hash_value_type),
-                                         &state);
-  if (*entry)
-  {
-    DBUG_PRINT("debug", ("Found record with key=%u in the hash (next).", key));
-    preamble= (*entry)->preamble;
-
-    /**
-       Save the search state for next iteration (if any).
-     */
-    preamble->search_state= state;
-    preamble->is_search_state_inited= true;
-  }
-
-  DBUG_RETURN(false);
-}
-
-bool
-Hash_slave_rows::del(HASH_ROW_ENTRY *entry)
-{
-  DBUG_ENTER("Hash_slave_rows::del");
-  DBUG_ASSERT(entry);
-
-  if (my_hash_delete(&m_hash, (uchar *) entry))
-    DBUG_RETURN(true);
-  DBUG_RETURN(false);
-}
-
-my_hash_value_type
-Hash_slave_rows::make_hash_key(TABLE *table, MY_BITMAP *cols)
-{
-  DBUG_ENTER("Hash_slave_rows::make_hash_key");
-  ha_checksum crc= 0L;
-
-  uchar *record= table->record[0];
-  uchar saved_x= 0, saved_filler= 0;
-
-  if (table->s->null_bytes > 0)
-  {
-    /*
-      If we have an X bit then we need to take care of it.
-    */
-    if (!(table->s->db_options_in_use & HA_OPTION_PACK_RECORD))
-    {
-      saved_x= record[0];
-      record[0]|= 1U;
-    }
-
-    /*
-      If (last_null_bit_pos == 0 && null_bytes > 1), then:
-      X bit (if any) + N nullable fields + M Field_bit fields = 8 bits
-      Ie, the entire byte is used.
-    */
-    if (table->s->last_null_bit_pos > 0)
-    {
-      saved_filler= record[table->s->null_bytes - 1];
-      record[table->s->null_bytes - 1]|=
-        256U - (1U << table->s->last_null_bit_pos);
-    }
-  }
-
-  /*
-    We can only checksum the bytes if all fields have been signaled
-    in the before image. Otherwise, unpack_row will not have set the
-    null_flags correctly (because it only unpacks those fields and
-    their flags that were actually in the before image).
-
-    @c record_compare, as it also skips null_flags if the read_set
-    was not marked completely.
-   */
-  if (bitmap_is_set_all(cols))
-  {
-    crc= my_checksum(crc, table->null_flags, table->s->null_bytes);
-    DBUG_PRINT("debug", ("make_hash_entry: hash after null_flags: %u", crc));
-  }
-
-  for (Field **ptr=table->field ;
-       *ptr && ((*ptr)->field_index < cols->n_bits);
-       ptr++)
-  {
-    Field *f= (*ptr);
-
-    /*
-      Field is set in the read_set and is isn't NULL.
-     */
-    if (bitmap_is_set(cols, f->field_index) && !f->is_null())
-    {
-      /*
-        BLOB and VARCHAR have pointers in their field, we must convert
-        to string; GEOMETRY is implemented on top of BLOB.
-        BIT may store its data among NULL bits, convert as well.
-      */
-      switch (f->type()) {
-        case MYSQL_TYPE_BLOB:
-        case MYSQL_TYPE_VARCHAR:
-        case MYSQL_TYPE_GEOMETRY:
-        case MYSQL_TYPE_BIT:
-        {
-          String tmp;
-          f->val_str(&tmp);
-          crc= my_checksum(crc, (uchar*) tmp.ptr(), tmp.length());
-          break;
-        }
-        default:
-          crc= my_checksum(crc, f->ptr, f->data_length());
-          break;
-      }
-#ifndef DBUG_OFF
-      String tmp;
-      f->val_str(&tmp);
-      DBUG_PRINT("debug", ("make_hash_entry: hash after field %s=%s: %u", f->field_name, tmp.c_ptr_safe(), crc));
-#endif
-    }
-  }
-
-  /*
-    Restore the saved bytes.
-
-    TODO[record format ndb]: Remove this code once NDB returns the
-    correct record format.
-  */
-  if (table->s->null_bytes > 0)
-  {
-    if (!(table->s->db_options_in_use & HA_OPTION_PACK_RECORD))
-      record[0]= saved_x;
-
-    if (table->s->last_null_bit_pos)
-      record[table->s->null_bytes - 1]= saved_filler;
-  }
-
-  DBUG_PRINT("debug", ("Created key=%u", crc));
-  DBUG_RETURN(crc);
-}
-
-
-#endif
 
 #if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
 
-Deferred_log_events::Deferred_log_events(Relay_log_info *rli)
+Deferred_log_events::Deferred_log_events(Relay_log_info *rli) : last_added(NULL)
 {
   my_init_dynamic_array(&array, sizeof(Log_event *), 32, 16);
 }
 
-Deferred_log_events::~Deferred_log_events()
+Deferred_log_events::~Deferred_log_events() 
 {
   delete_dynamic(&array);
 }
 
 int Deferred_log_events::add(Log_event *ev)
 {
+  last_added= ev;
   insert_dynamic(&array, (uchar*) &ev);
-  ev->worker= NULL; // to mark event busy avoiding deletion
   return 0;
 }
 
@@ -1654,6 +1112,7 @@ void Deferred_log_events::rewind()
       Log_event *ev= *(Log_event **) dynamic_array_ptr(&array, i);
       delete ev;
     }
+    last_added= NULL;
     if (array.elements > array.max_element)
       freeze_size(&array);
     reset_dynamic(&array);

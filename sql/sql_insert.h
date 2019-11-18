@@ -1,4 +1,4 @@
-/* Copyright (c) 2006, 2013, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2006, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -21,12 +21,13 @@
 
 /* Instead of including sql_lex.h we add this typedef here */
 typedef List<Item> List_item;
+typedef struct st_copy_info COPY_INFO;
 
 bool mysql_prepare_insert(THD *thd, TABLE_LIST *table_list, TABLE *table,
                           List<Item> &fields, List_item *values,
                           List<Item> &update_fields,
                           List<Item> &update_values, enum_duplicates duplic,
-                          Item **where, bool select_insert,
+                          COND **where, bool select_insert,
                           bool check_fields, bool abort_on_warning);
 bool mysql_insert(THD *thd,TABLE_LIST *table,List<Item> &fields,
                   List<List_item> &values, List<Item> &update_fields,
@@ -38,10 +39,8 @@ void upgrade_lock_type_for_insert(THD *thd, thr_lock_type *lock_type,
 int check_that_all_fields_are_given_values(THD *thd, TABLE *entry,
                                            TABLE_LIST *table_list);
 void prepare_triggers_for_insert_stmt(TABLE *table);
-int write_record(THD *thd, TABLE *table,
-                 COPY_INFO *info, COPY_INFO *update);
+int write_record(THD *thd, TABLE *table, COPY_INFO *info);
 void kill_delayed_threads(void);
-bool validate_default_values_of_unset_fields(THD *thd, TABLE *table);
 
 #ifdef EMBEDDED_LIBRARY
 inline void kill_delayed_threads(void) {}

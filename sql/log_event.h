@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -28,10 +28,12 @@
 #ifndef _log_event_h
 #define _log_event_h
 
+#if defined(USE_PRAGMA_INTERFACE) && defined(MYSQL_SERVER)
+#pragma interface			/* gcc class implementation */
+#endif
+
 #include <my_bitmap.h>
 #include "rpl_constants.h"
-#include "table_id.h"
-#include <set>
 
 #ifdef MYSQL_CLIENT
 #include "sql_const.h"
@@ -44,31 +46,13 @@
 #include "rpl_record.h"
 #include "rpl_reporting.h"
 #include "sql_class.h"                          /* THD */
-#include "rpl_utility.h"                        /* Hash_slave_rows */
-#include "rpl_filter.h"
-#include "key.h"                                /* key_copy, compare_keys */
 #endif
 
 /* Forward declarations */
 class String;
-typedef ulonglong sql_mode_t;
-typedef struct st_db_worker_hash_entry db_worker_hash_entry;
-#if defined(HAVE_REPLICATION) && !defined(MYSQL_CLIENT)
-int ignored_error_code(int err_code);
-#endif
-#define PREFIX_SQL_LOAD "SQL_LOAD-"
 
-/**
-   Maximum length of the name of a temporary file
-   PREFIX LENGTH - 9 
-   UUID          - UUID_LENGTH
-   SEPARATORS    - 2
-   SERVER ID     - 10 (range of server ID 1 to (2^32)-1 = 4,294,967,295)
-   FILE ID       - 10 (uint)
-   EXTENSION     - 7  (Assuming that the extension is always less than 7 
-                       characters)
-*/
-#define TEMP_FILE_MAX_LEN UUID_LENGTH+38 
+#define PREFIX_SQL_LOAD "SQL_LOAD-"
+#define LONG_FIND_ROW_THRESHOLD 60 /* seconds */
 
 /**
    Either assert or return an error.
@@ -93,7 +77,6 @@ int ignored_error_code(int err_code);
 #define LOG_READ_MEM    -5
 #define LOG_READ_TRUNC  -6
 #define LOG_READ_TOO_LARGE -7
-#define LOG_READ_CHECKSUM_FAILURE -8
 
 #define LOG_EVENT_OFFSET 4
 
@@ -235,8 +218,8 @@ struct sql_ex_info
 
  ****************************************************************************/
 
-#define LOG_EVENT_HEADER_LEN 19U    /* the fixed header length */
-#define OLD_HEADER_LEN       13U    /* the fixed header length in 3.23 */
+#define LOG_EVENT_HEADER_LEN 19     /* the fixed header length */
+#define OLD_HEADER_LEN       13     /* the fixed header length in 3.23 */
 /*
    Fixed header length, where 4.x and 5.0 agree. That is, 5.0 may have a longer
    header (it will for sure when we have the unique event's ID), but at least
@@ -244,7 +227,7 @@ struct sql_ex_info
    event's ID, LOG_EVENT_HEADER_LEN will be something like 26, but
    LOG_EVENT_MINIMAL_HEADER_LEN will remain 19.
 */
-#define LOG_EVENT_MINIMAL_HEADER_LEN 19U
+#define LOG_EVENT_MINIMAL_HEADER_LEN 19
 
 /* event-specific post-header sizes */
 // where 3.23, 4.x and 5.0 agree
@@ -253,6 +236,7 @@ struct sql_ex_info
 #define QUERY_HEADER_LEN     (QUERY_HEADER_MINIMAL_LEN + 2)
 #define STOP_HEADER_LEN      0
 #define LOAD_HEADER_LEN      (4 + 4 + 4 + 1 +1 + 4)
+#define SLAVE_HEADER_LEN     0
 #define START_V3_HEADER_LEN     (2 + ST_SERVER_VER_LEN + 4)
 #define ROTATE_HEADER_LEN    8 // this is FROZEN (the Rotate post-header is frozen)
 #define INTVAR_HEADER_LEN      0
@@ -266,48 +250,28 @@ struct sql_ex_info
 #define FORMAT_DESCRIPTION_HEADER_LEN (START_V3_HEADER_LEN+1+LOG_EVENT_TYPES)
 #define XID_HEADER_LEN         0
 #define BEGIN_LOAD_QUERY_HEADER_LEN APPEND_BLOCK_HEADER_LEN
-#define ROWS_HEADER_LEN_V1     8
+#define ROWS_HEADER_LEN        8
 #define TABLE_MAP_HEADER_LEN   8
 #define EXECUTE_LOAD_QUERY_EXTRA_HEADER_LEN (4 + 4 + 4 + 1)
 #define EXECUTE_LOAD_QUERY_HEADER_LEN  (QUERY_HEADER_LEN + EXECUTE_LOAD_QUERY_EXTRA_HEADER_LEN)
 #define INCIDENT_HEADER_LEN    2
 #define HEARTBEAT_HEADER_LEN   0
-#define IGNORABLE_HEADER_LEN   0
-#define ROWS_HEADER_LEN_V2     10
-
-/*
-   The maximum number of updated databases that a status of
-   Query-log-event can carry.  It can redefined within a range
-   [1.. OVER_MAX_DBS_IN_EVENT_MTS].
-*/
-#define MAX_DBS_IN_EVENT_MTS 16
-
-/*
-   When the actual number of databases exceeds MAX_DBS_IN_EVENT_MTS
-   the value of OVER_MAX_DBS_IN_EVENT_MTS is is put into the
-   mts_accessed_dbs status.
-*/
-#define OVER_MAX_DBS_IN_EVENT_MTS 254
-
 /* 
   Max number of possible extra bytes in a replication event compared to a
   packet (i.e. a query) sent from client to master;
   First, an auxiliary log_event status vars estimation:
 */
-#define MAX_SIZE_LOG_EVENT_STATUS (1U + 4          /* type, flags2 */   + \
-                                   1U + 8          /* type, sql_mode */ + \
-                                   1U + 1 + 255    /* type, length, catalog */ + \
-                                   1U + 4          /* type, auto_increment */ + \
-                                   1U + 6          /* type, charset */ + \
-                                   1U + 1 + 255    /* type, length, time_zone */ + \
-                                   1U + 2          /* type, lc_time_names_number */ + \
-                                   1U + 2          /* type, charset_database_number */ + \
-                                   1U + 8          /* type, table_map_for_update */ + \
-                                   1U + 4          /* type, master_data_written */ + \
-                                                   /* type, db_1, db_2, ... */  \
-                                   1U + (MAX_DBS_IN_EVENT_MTS * (1 + NAME_LEN)) + \
-                                   3U +            /* type, microseconds */ + \
-                                   1U + 16 + 1 + 60/* type, user_len, user, host_len, host */)
+#define MAX_SIZE_LOG_EVENT_STATUS (1 + 4          /* type, flags2 */   + \
+                                   1 + 8          /* type, sql_mode */ + \
+                                   1 + 1 + 255    /* type, length, catalog */ + \
+                                   1 + 4          /* type, auto_increment */ + \
+                                   1 + 6          /* type, charset */ + \
+                                   1 + 1 + 255    /* type, length, time_zone */ + \
+                                   1 + 2          /* type, lc_time_names_number */ + \
+                                   1 + 2          /* type, charset_database_number */ + \
+                                   1 + 8          /* type, table_map_for_update */ + \
+                                   1 + 4          /* type, master_data_written */ + \
+                                   1 + 16 + 1 + 60/* type, user_len, user, host_len, host */)
 #define MAX_LOG_EVENT_HEADER   ( /* in order of Query_log_event::write */ \
   LOG_EVENT_HEADER_LEN + /* write_header */ \
   QUERY_HEADER_LEN     + /* write_data */   \
@@ -385,15 +349,6 @@ struct sql_ex_info
 
 #define Q_INVOKER 11
 
-/*
-  Q_UPDATED_DB_NAMES status variable collects of the updated databases
-  total number and their names to be propagated to the slave in order
-  to facilitate the parallel applying of the Query events.
-*/
-#define Q_UPDATED_DB_NAMES 12
-
-#define Q_MICROSECONDS 13
-
 /* Intvar event post-header */
 
 /* Intvar event data */
@@ -448,9 +403,6 @@ struct sql_ex_info
 /* RW = "RoWs" */
 #define RW_MAPID_OFFSET    0
 #define RW_FLAGS_OFFSET    6
-#define RW_VHLEN_OFFSET    8
-#define RW_V_TAG_LEN       1
-#define RW_V_EXTRAINFO_TAG 0
 
 /* ELQ = "Execute Load Query" */
 #define ELQ_FILE_ID_OFFSET QUERY_HEADER_LEN
@@ -552,38 +504,6 @@ struct sql_ex_info
 #define LOG_EVENT_RELAY_LOG_F 0x40
 
 /**
-   @def LOG_EVENT_IGNORABLE_F
-
-   For an event, 'e', carrying a type code, that a slave,
-   's', does not recognize, 's' will check 'e' for
-   LOG_EVENT_IGNORABLE_F, and if the flag is set, then 'e'
-   is ignored. Otherwise, 's' acknowledges that it has
-   found an unknown event in the relay log.
-*/
-#define LOG_EVENT_IGNORABLE_F 0x80
-
-/**
-   @def LOG_EVENT_NO_FILTER_F
-
-   Events with this flag are not filtered (e.g. on the current
-   database) and are always written to the binary log regardless of
-   filters.
-*/
-#define LOG_EVENT_NO_FILTER_F 0x100
-
-/**
-   MTS: group of events can be marked to force its execution
-   in isolation from any other Workers.
-   So it's a marker for Coordinator to memorize and perform necessary
-   operations in order to guarantee no interference from other Workers.
-   The flag can be set ON only for an event that terminates its group.
-   Typically that is done for a transaction that contains 
-   a query accessing more than OVER_MAX_DBS_IN_EVENT_MTS databases.
-*/
-#define LOG_EVENT_MTS_ISOLATE_F 0x200
-
-
-/**
   @def OPTIONS_WRITTEN_TO_BIN_LOG
 
   OPTIONS_WRITTEN_TO_BIN_LOG are the bits of thd->options which must
@@ -617,22 +537,6 @@ struct sql_ex_info
 #endif
 #undef EXPECTED_OPTIONS         /* You shouldn't use this one */
 
-enum enum_binlog_checksum_alg {
-  BINLOG_CHECKSUM_ALG_OFF= 0,    // Events are without checksum though its generator
-                                 // is checksum-capable New Master (NM).
-  BINLOG_CHECKSUM_ALG_CRC32= 1,  // CRC32 of zlib algorithm.
-  BINLOG_CHECKSUM_ALG_ENUM_END,  // the cut line: valid alg range is [1, 0x7f].
-  BINLOG_CHECKSUM_ALG_UNDEF= 255 // special value to tag undetermined yet checksum
-                                 // or events from checksum-unaware servers
-};
-
-#define CHECKSUM_CRC32_SIGNATURE_LEN 4
-/**
-   defined statically while there is just one alg implemented
-*/
-#define BINLOG_CHECKSUM_LEN CHECKSUM_CRC32_SIGNATURE_LEN
-#define BINLOG_CHECKSUM_ALG_DESC_LEN 1  /* 1 byte checksum alg descriptor */
-
 /**
   @enum Log_event_type
 
@@ -651,7 +555,7 @@ enum Log_event_type
   ROTATE_EVENT= 4,
   INTVAR_EVENT= 5,
   LOAD_EVENT= 6,
-  SLAVE_EVENT= 7,  /* Unused. Slave_log_event code has been removed. (15th Oct. 2010) */
+  SLAVE_EVENT= 7,
   CREATE_FILE_EVENT= 8,
   APPEND_BLOCK_EVENT= 9,
   EXEC_LOAD_EVENT= 10,
@@ -680,11 +584,11 @@ enum Log_event_type
   PRE_GA_DELETE_ROWS_EVENT = 22,
 
   /*
-    These event numbers are used from 5.1.16 until mysql-trunk-xx
+    These event numbers are used from 5.1.16 and forward
    */
-  WRITE_ROWS_EVENT_V1 = 23,
-  UPDATE_ROWS_EVENT_V1 = 24,
-  DELETE_ROWS_EVENT_V1 = 25,
+  WRITE_ROWS_EVENT = 23,
+  UPDATE_ROWS_EVENT = 24,
+  DELETE_ROWS_EVENT = 25,
 
   /*
     Something out of the ordinary happened on the master
@@ -696,25 +600,7 @@ enum Log_event_type
     to ensure master's online status to slave 
   */
   HEARTBEAT_LOG_EVENT= 27,
-
-  /*
-    In some situations, it is necessary to send over ignorable
-    data to the slave: data that a slave can handle in case there
-    is code for handling it, but which can be ignored if it is not
-    recognized.
-  */
-  IGNORABLE_LOG_EVENT= 28,
-  ROWS_QUERY_LOG_EVENT= 29,
-
-  /* Version 2 of the Row events */
-  WRITE_ROWS_EVENT = 30,
-  UPDATE_ROWS_EVENT = 31,
-  DELETE_ROWS_EVENT = 32,
-
-  GTID_LOG_EVENT= 33,
-  ANONYMOUS_GTID_LOG_EVENT= 34,
-
-  PREVIOUS_GTIDS_LOG_EVENT= 35,
+  
   /*
     Add new events here - right above this comment!
     Existing events (except ENUM_END_EVENT) should never change their numbers
@@ -744,15 +630,14 @@ class THD;
 
 class Format_description_log_event;
 class Relay_log_info;
-class Slave_worker;
-class Slave_committed_queue;
 
 #ifdef MYSQL_CLIENT
 enum enum_base64_output_mode {
   BASE64_OUTPUT_NEVER= 0,
   BASE64_OUTPUT_AUTO= 1,
-  BASE64_OUTPUT_UNSPEC= 2,
-  BASE64_OUTPUT_DECODE_ROWS= 3,
+  BASE64_OUTPUT_ALWAYS= 2,
+  BASE64_OUTPUT_UNSPEC= 3,
+  BASE64_OUTPUT_DECODE_ROWS= 4,
   /* insert new output modes here */
   BASE64_OUTPUT_MODE_COUNT
 };
@@ -781,7 +666,7 @@ typedef struct st_print_event_info
   bool flags2_inited;
   uint32 flags2;
   bool sql_mode_inited;
-  sql_mode_t sql_mode;		/* must be same as THD.variables.sql_mode */
+  ulong sql_mode;		/* must be same as THD.variables.sql_mode */
   ulong auto_increment_increment, auto_increment_offset;
   bool charset_inited;
   char charset[6]; // 3 variables, each of them storable in 2 bytes
@@ -790,7 +675,6 @@ typedef struct st_print_event_info
   uint charset_database_number;
   uint thread_id;
   bool thread_id_printed;
-  uint32 server_id_from_fd_event;
 
   st_print_event_info();
 
@@ -827,47 +711,23 @@ typedef struct st_print_event_info
    */
   IO_CACHE head_cache;
   IO_CACHE body_cache;
-  /* Indicate if the body cache has unflushed events */
-  bool have_unflushed_events;
-
-  /*
-     True if an event was skipped while printing the events of
-     a transaction and no COMMIT statement or XID event was ever
-     output (ie, was filtered out as well). This can be triggered
-     by the --database option of mysqlbinlog.
-
-     False, otherwise.
-   */
-  bool skipped_event_in_transaction;
-
-  /* true if gtid_next is set with a value */
-  bool is_gtid_next_set;
-
-  /*
-    Determines if the current value of gtid_next needs to be restored
-    to AUTOMATIC if the binary log would end after the current event.
-
-    If the log ends after a transaction, then this should be false.
-    If the log ends in the middle of a transaction, then this should
-    be true; this can happen for relay logs where transactions are
-    split over multiple logs.
-
-    Set to true initially, and after a Gtid_log_event is processed.
-    Set to false if is_gtid_next_set is true.
-   */
-  bool is_gtid_next_valid;
 } PRINT_EVENT_INFO;
 #endif
 
-/*
-  A specific to the database-scheduled MTS type.
+/**
+  the struct aggregates two paramenters that identify an event
+  uniquely in scope of communication of a particular master and slave couple.
+  I.e there can not be 2 events from the same staying connected master which
+  have the same coordinates.
+  @note
+  Such identifier is not yet unique generally as the event originating master
+  is resetable. Also the crashed master can be replaced with some other.
 */
-typedef struct st_mts_db_names
+typedef struct event_coordinates
 {
-  const char *name[MAX_DBS_IN_EVENT_MTS];
-  int  num;
-} Mts_db_names;
-
+  char * file_name; // binlog file name (directories stripped)
+  my_off_t  pos;       // event's position in the binlog file
+} LOG_POS_COORD;
 
 /**
   @class Log_event
@@ -1028,10 +888,9 @@ public:
     EVENT_SKIP_COUNT
   };
 
-protected:
   enum enum_event_cache_type 
   {
-    EVENT_INVALID_CACHE= 0,
+    EVENT_INVALID_CACHE,
     /* 
       If possible the event should use a non-transactional cache before
       being flushed to the binary log. This means that it must be flushed
@@ -1046,35 +905,15 @@ protected:
     EVENT_TRANSACTIONAL_CACHE,
     /* 
       The event must be written directly to the binary log without going
-      through any cache.
+      through a cache.
     */
     EVENT_NO_CACHE,
-    /*
+    /**
        If there is a need for different types, introduce them before this.
     */
     EVENT_CACHE_COUNT
   };
 
-  enum enum_event_logging_type
-  {
-    EVENT_INVALID_LOGGING= 0,
-    /*
-      The event must be written to a cache and upon commit or rollback
-      written to the binary log.
-    */
-    EVENT_NORMAL_LOGGING,
-    /*
-      The event must be written to an empty cache and immediatly written
-      to the binary log without waiting for any other event.
-    */
-    EVENT_IMMEDIATE_LOGGING,
-    /*
-       If there is a need for different types, introduce them before this.
-    */
-    EVENT_CACHE_LOGGING_COUNT
-  };
-
-public:
   /*
     The following type definition is to be used whenever data is placed 
     and manipulated in a common buffer. Use this typedef for buffers
@@ -1106,7 +945,7 @@ public:
     execution time, which guarantees good replication (otherwise, we
     could have a query and its event with different timestamps).
   */
-  struct timeval when;
+  time_t when;
   /* The number of seconds the query took to run on the master. */
   ulong exec_time;
   /* Number of bytes written by write() function */
@@ -1118,13 +957,6 @@ public:
   */
   uint32 server_id;
 
-  /*
-    The server id read from the Binlog.  server_id above has
-    lowest bits of this only according to the value of
-    opt_server_id_bits
-  */
-  uint32 unmasked_server_id;
-
   /**
     Some 16 flags. See the definitions above for LOG_EVENT_TIME_F,
     LOG_EVENT_FORCED_ROTATE_F, LOG_EVENT_THREAD_SPECIFIC_F, and
@@ -1132,61 +964,23 @@ public:
   */
   uint16 flags;
   
+  /*
+    Defines the type of the cache, if any, where the event will be
+    stored before being flushed to disk.
+  */
+  uint16 cache_type;
+
   /**
     A storage to cache the global system variable's value.
     Handling of a separate event will be governed its member.
   */
   ulong slave_exec_mode;
 
-  /**
-    Defines the type of the cache, if any, where the event will be
-    stored before being flushed to disk.
-  */
-  enum_event_cache_type event_cache_type;
-
-  /**
-    Defines when information, i.e. event or cache, will be flushed
-    to disk.
-  */
-  enum_event_logging_type event_logging_type;
-
-  /**
-    Placeholder for event checksum while writing to binlog.
-  */
-  ha_checksum crc;
-
-  /**
-    Index in @c rli->gaq array to indicate a group that this event is
-    purging. The index is set by Coordinator to a group terminator
-    event is checked by Worker at the event execution. The indexed
-    data represent the Worker progress status.
-  */
-  ulong mts_group_idx;
-
-  /**
-    MTS: associating the event with either an assigned Worker or Coordinator.
-    Additionally the member serves to tag deferred (IRU) events to avoid
-    the event regular time destruction.
-  */
-  Relay_log_info *worker;
-
-  /** 
-    A copy of the main rli value stored into event to pass to MTS worker rli
-  */
-  ulonglong future_event_relay_log_pos;
-
 #ifdef MYSQL_SERVER
   THD* thd;
-  /**
-     Partition info associate with event to deliver to MTS event applier 
-  */
-  db_worker_hash_entry *mts_assigned_partitions[MAX_DBS_IN_EVENT_MTS];
 
-  Log_event(enum_event_cache_type cache_type_arg= EVENT_INVALID_CACHE,
-            enum_event_logging_type logging_type_arg= EVENT_INVALID_LOGGING);
-  Log_event(THD* thd_arg, uint16 flags_arg,
-            enum_event_cache_type cache_type_arg,
-            enum_event_logging_type logging_type_arg);
+  Log_event();
+  Log_event(THD* thd_arg, uint16 flags_arg, bool is_transactional);
   /*
     read_log_event() functions read an event from a binlog or relay
     log; used by SHOW BINLOG EVENTS, the binlog_dump thread on the
@@ -1201,8 +995,7 @@ public:
   static Log_event* read_log_event(IO_CACHE* file,
                                    mysql_mutex_t* log_lock,
                                    const Format_description_log_event
-                                   *description_event,
-                                   my_bool crc_check);
+                                   *description_event);
 
   /**
     Reads an event from a binlog or relay log. Used by the dump thread
@@ -1216,7 +1009,6 @@ public:
     @param[in]  file                log file to be read
     @param[out] packet              packet to hold the event
     @param[in]  lock                the lock to be used upon read
-    @param[in]  checksum_alg_arg    the checksum algorithm
     @param[in]  log_file_name_arg   the log's file name
     @param[out] is_binlog_active    is the current log still active
 
@@ -1230,7 +1022,6 @@ public:
    */
   static int read_log_event(IO_CACHE* file, String* packet,
                             mysql_mutex_t* log_lock,
-                            uint8 checksum_alg_arg,
                             const char *log_file_name_arg= NULL,
                             bool* is_binlog_active= NULL);
   /*
@@ -1242,47 +1033,32 @@ public:
 #ifdef HAVE_REPLICATION
   int net_send(Protocol *protocol, const char* log_name, my_off_t pos);
 
-  /**
-    Stores a string representation of this event in the Protocol.
-    This is used by SHOW BINLOG EVENTS.
-
-    @retval 0 success
-    @retval nonzero error
+  /*
+    pack_info() is used by SHOW BINLOG EVENTS; as print() it prepares and sends
+    a string to display to the user, so it resembles print().
   */
-  virtual int pack_info(Protocol *protocol);
+
+  virtual void pack_info(Protocol *protocol);
 
 #endif /* HAVE_REPLICATION */
   virtual const char* get_db()
   {
     return thd ? thd->db : 0;
   }
-#else // ifdef MYSQL_SERVER
-  Log_event(enum_event_cache_type cache_type_arg= EVENT_INVALID_CACHE,
-            enum_event_logging_type logging_type_arg= EVENT_INVALID_LOGGING)
-  : temp_buf(0), flags(0), event_cache_type(cache_type_arg),
-    event_logging_type(logging_type_arg)
-  { }
+#else
+  Log_event() : temp_buf(0), flags(0) {}
     /* avoid having to link mysqlbinlog against libpthread */
   static Log_event* read_log_event(IO_CACHE* file,
                                    const Format_description_log_event
-                                   *description_event, my_bool crc_check);
+                                   *description_event);
   /* print*() functions are used by mysqlbinlog */
   virtual void print(FILE* file, PRINT_EVENT_INFO* print_event_info) = 0;
-  void print_timestamp(IO_CACHE* file, time_t* ts);
+  void print_timestamp(IO_CACHE* file, time_t *ts = 0);
   void print_header(IO_CACHE* file, PRINT_EVENT_INFO* print_event_info,
                     bool is_more);
   void print_base64(IO_CACHE* file, PRINT_EVENT_INFO* print_event_info,
                     bool is_more);
-#endif // ifdef MYSQL_SERVER ... else
-  /* 
-     The value is set by caller of FD constructor and
-     Log_event::write_header() for the rest.
-     In the FD case it's propagated into the last byte 
-     of post_header_len[] at FD::write().
-     On the slave side the value is assigned from post_header_len[last] 
-     of the last seen FD event.
-  */
-  uint8 checksum_alg;
+#endif
 
   static void *operator new(size_t size)
   {
@@ -1297,35 +1073,29 @@ public:
   /* Placement version of the above operators */
   static void *operator new(size_t, void* ptr) { return ptr; }
   static void operator delete(void*, void*) { }
-  bool wrapper_my_b_safe_write(IO_CACHE* file, const uchar* buf, ulong data_length);
 
 #ifdef MYSQL_SERVER
   bool write_header(IO_CACHE* file, ulong data_length);
-  bool write_footer(IO_CACHE* file);
-  my_bool need_checksum();
-
   virtual bool write(IO_CACHE* file)
   {
-    return(write_header(file, get_data_size()) ||
-	   write_data_header(file) ||
-	   write_data_body(file) ||
-	   write_footer(file));
+    return (write_header(file, get_data_size()) ||
+            write_data_header(file) ||
+            write_data_body(file));
   }
   virtual bool write_data_header(IO_CACHE* file)
   { return 0; }
-  virtual bool write_data_body(IO_CACHE* file MY_ATTRIBUTE((unused)))
+  virtual bool write_data_body(IO_CACHE* file __attribute__((unused)))
   { return 0; }
   inline time_t get_time()
   {
-    if (!when.tv_sec && !when.tv_usec) /* Not previously initialized */
-    {
-      THD *tmp_thd= thd ? thd : current_thd;
-      if (tmp_thd)
-        when= tmp_thd->start_time;
-      else
-        my_micro_time_to_timeval(my_micro_time(), &when);
-    }
-    return (time_t) when.tv_sec;
+    THD *tmp_thd;
+    if (when)
+      return when;
+    if (thd)
+      return thd->start_time;
+    if ((tmp_thd= current_thd))
+      return tmp_thd->start_time;
+    return my_time(0);
   }
 #endif
   virtual Log_event_type get_type_code() = 0;
@@ -1334,19 +1104,17 @@ public:
   void set_relay_log_event() { flags |= LOG_EVENT_RELAY_LOG_F; }
   bool is_artificial_event() const { return flags & LOG_EVENT_ARTIFICIAL_F; }
   bool is_relay_log_event() const { return flags & LOG_EVENT_RELAY_LOG_F; }
-  bool is_ignorable_event() const { return flags & LOG_EVENT_IGNORABLE_F; }
-  bool is_no_filter_event() const { return flags & LOG_EVENT_NO_FILTER_F; }
-  inline bool is_using_trans_cache() const
-  {
-    return (event_cache_type == EVENT_TRANSACTIONAL_CACHE);
+  inline bool use_trans_cache() const
+  { 
+    return (cache_type == Log_event::EVENT_TRANSACTIONAL_CACHE);
   }
-  inline bool is_using_stmt_cache() const
+  inline void set_direct_logging()
   {
-    return(event_cache_type == EVENT_STMT_CACHE);
+    cache_type = Log_event::EVENT_NO_CACHE;
   }
-  inline bool is_using_immediate_logging() const
+  inline bool use_direct_logging()
   {
-    return(event_logging_type == EVENT_IMMEDIATE_LOGGING);
+    return (cache_type == Log_event::EVENT_NO_CACHE);
   }
   Log_event(const char* buf, const Format_description_log_event
             *description_event);
@@ -1368,7 +1136,7 @@ public:
   static Log_event* read_log_event(const char* buf, uint event_len,
 				   const char **error,
                                    const Format_description_log_event
-                                   *description_event, my_bool crc_check);
+                                   *description_event);
   /**
     Returns the human readable name of the given event type.
   */
@@ -1381,174 +1149,7 @@ public:
   /* Return start of query time or current time */
 
 #if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
-
-private:
-
-  /*
-    possible decisions by get_mts_execution_mode().
-    The execution mode can be PARALLEL or not (thereby sequential
-    unless impossible at all). When it's sequential it further  breaks into
-    ASYNChronous and SYNChronous.
-  */
-  enum enum_mts_event_exec_mode
-  {
-    /*
-      Event is run by a Worker.
-    */
-    EVENT_EXEC_PARALLEL,
-    /*
-      Event is run by Coordinator.
-    */
-    EVENT_EXEC_ASYNC,
-    /*
-      Event is run by Coordinator and requires synchronization with Workers.
-    */
-    EVENT_EXEC_SYNC,
-    /*
-      Event can't be executed neither by Workers nor Coordinator.
-    */
-    EVENT_EXEC_CAN_NOT
-  };
-
-  /**
-     Is called from get_mts_execution_mode() to
-
-     @return TRUE  if the event needs applying with synchronization
-                   agaist Workers, otherwise
-             FALSE
-
-     @note There are incompatile combinations such as referred further events
-           are wrapped with BEGIN/COMMIT. Such cases should be identified
-           by the caller and treats correspondingly.
-
-           todo: to mts-support Old master Load-data related events
-  */
-  bool is_mts_sequential_exec()
-  {
-    return
-      get_type_code() == START_EVENT_V3          ||
-      get_type_code() == STOP_EVENT              ||
-      get_type_code() == ROTATE_EVENT            ||
-      get_type_code() == LOAD_EVENT              ||
-      get_type_code() == SLAVE_EVENT             ||
-      get_type_code() == CREATE_FILE_EVENT       ||
-      get_type_code() == DELETE_FILE_EVENT       ||
-      get_type_code() == NEW_LOAD_EVENT          ||
-      get_type_code() == EXEC_LOAD_EVENT         ||
-      get_type_code() == FORMAT_DESCRIPTION_EVENT||
-
-      get_type_code() == INCIDENT_EVENT;
-  }
-
-  /**
-     MTS Coordinator finds out a way how to execute the current event.
-
-     Besides the parallelizable case, some events have to be applied by
-     Coordinator concurrently with Workers and some to require synchronization
-     with Workers (@c see wait_for_workers_to_finish) before to apply them.
-
-     @retval EVENT_EXEC_PARALLEL  if event is executed by a Worker
-     @retval EVENT_EXEC_ASYNC     if event is executed by Coordinator
-     @retval EVENT_EXEC_SYNC      if event is executed by Coordinator
-                                  with synchronization against the Workers
-  */
-  enum enum_mts_event_exec_mode get_mts_execution_mode(ulong slave_server_id,
-                                                   bool mts_in_group)
-  {
-    if ((get_type_code() == FORMAT_DESCRIPTION_EVENT &&
-         ((server_id == (uint32) ::server_id) || (log_pos == 0))) ||
-        (get_type_code() == ROTATE_EVENT &&
-         ((server_id == (uint32) ::server_id) ||
-          (log_pos == 0    /* very first fake Rotate (R_f) */
-           && mts_in_group /* ignored event turned into R_f at slave stop */))))
-      return EVENT_EXEC_ASYNC;
-    else if (is_mts_sequential_exec())
-      return EVENT_EXEC_SYNC;
-    else
-      return EVENT_EXEC_PARALLEL;
-  }
-
-  /**
-     @return index  in \in [0, M] range to indicate
-             to be assigned worker;
-             M is the max index of the worker pool.
-  */
-  Slave_worker *get_slave_worker(Relay_log_info *rli);
-
-  /**
-     The method fills in pointers to event's database name c-strings
-     to a supplied array.
-     In other than Query-log-event case the returned array contains
-     just one item.
-     @param[out] arg pointer to a struct containing char* array
-                     pointers to be filled in and the number
-                     of filled instances.
-
-     @return     number of the filled intances indicating how many
-                 databases the event accesses.
-  */
-  virtual uint8 get_mts_dbs(Mts_db_names *arg)
-  {
-    arg->name[0]= get_db();
-
-    return arg->num= mts_number_dbs();
-  }
-
-  /*
-    Group of events can be marked to force its execution
-    in isolation from any other Workers.
-    Typically that is done for a transaction that contains
-    a query accessing more than OVER_MAX_DBS_IN_EVENT_MTS databases.
-    Factually that's a sequential mode where a Worker remains to
-    be the applier.
-  */
-  virtual void set_mts_isolate_group()
-  {
-    DBUG_ASSERT(ends_group() ||
-                get_type_code() == QUERY_EVENT ||
-                get_type_code() == EXEC_LOAD_EVENT ||
-                get_type_code() == EXECUTE_LOAD_QUERY_EVENT);
-    flags |= LOG_EVENT_MTS_ISOLATE_F;
-  }
-
-
 public:
-
-  /**
-     @return TRUE  if events carries partitioning data (database names).
-  */
-  bool contains_partition_info(bool);
-
-  /*
-    @return  the number of updated by the event databases.
-
-    @note In other than Query-log-event case that's one.
-  */
-  virtual uint8 mts_number_dbs() { return 1; }
-
-  /**
-    @return TRUE  if the terminal event of a group is marked to
-                  execute in isolation from other Workers,
-            FASE  otherwise
-  */
-  bool is_mts_group_isolated() { return flags & LOG_EVENT_MTS_ISOLATE_F; }
-
-  /**
-     Events of a certain type can start or end a group of events treated
-     transactionally wrt binlog.
-
-     Public access is required by implementation of recovery + skip.
-
-     @return TRUE  if the event starts a group (transaction)
-             FASE  otherwise
-  */
-  virtual bool starts_group() { return FALSE; }
-
-  /**
-     @return TRUE  if the event ends a group (transaction)
-             FASE  otherwise
-  */
-  virtual bool ends_group()   { return FALSE; }
 
   /**
      Apply the event to the database.
@@ -1558,7 +1159,11 @@ public:
 
      @see do_apply_event
    */
-  int apply_event(Relay_log_info *rli);
+  int apply_event(Relay_log_info const *rli)
+  {
+    return do_apply_event(rli);
+  }
+
 
   /**
      Update the relay log position.
@@ -1584,28 +1189,6 @@ public:
     return do_shall_skip(rli);
   }
 
-  /**
-    Primitive to apply an event to the database.
-
-    This is where the change to the database is made.
-
-    @note The primitive is protected instead of private, since there
-    is a hierarchy of actions to be performed in some cases.
-
-    @see Format_description_log_event::do_apply_event()
-
-    @param rli Pointer to relay log info structure
-
-    @retval 0     Event applied successfully
-    @retval errno Error code if event application failed
-  */
-  virtual int do_apply_event(Relay_log_info const *rli)
-  {
-    return 0;                /* Default implementation does nothing */
-  }
-
-  virtual int do_apply_event_worker(Slave_worker *w);
-
 protected:
 
   /**
@@ -1626,6 +1209,27 @@ protected:
      @return Skip reason
    */
   enum_skip_reason continue_group(Relay_log_info *rli);
+
+  /**
+    Primitive to apply an event to the database.
+
+    This is where the change to the database is made.
+
+    @note The primitive is protected instead of private, since there
+    is a hierarchy of actions to be performed in some cases.
+
+    @see Format_description_log_event::do_apply_event()
+
+    @param rli Pointer to relay log info structure
+
+    @retval 0     Event applied successfully
+    @retval errno Error code if event application failed
+  */
+  virtual int do_apply_event(Relay_log_info const *rli)
+  {
+    return 0;                /* Default implementation does nothing */
+  }
+
 
   /**
      Advance relay log coordinates.
@@ -2111,7 +1715,7 @@ public:
 
   uint32 flags2;
   /* In connections sql_mode is 32 bits now but will be 64 bits soon */
-  sql_mode_t sql_mode;
+  ulong sql_mode;
   ulong auto_increment_increment, auto_increment_offset;
   char charset[6];
   uint time_zone_len; /* 0 means uninited */
@@ -2133,65 +1737,14 @@ public:
     Q_MASTER_DATA_WRITTEN_CODE to the slave's server binlog.
   */
   uint32 master_data_written;
-  /*
-    number of updated databases by the query and their names. This info
-    is requested by both Coordinator and Worker.
-  */
-  uchar mts_accessed_dbs;
-  char mts_accessed_db_names[MAX_DBS_IN_EVENT_MTS][NAME_LEN];
 
 #ifdef MYSQL_SERVER
 
   Query_log_event(THD* thd_arg, const char* query_arg, ulong query_length,
-                  bool using_trans, bool immediate, bool suppress_use,
-                  int error, bool ignore_command= FALSE);
+                  bool using_trans, bool direct, bool suppress_use, int error);
   const char* get_db() { return db; }
-
-  /**
-     @param[out] arg pointer to a struct containing char* array
-                     pointers be filled in and the number of
-                     filled instances.
-                     In case the number exceeds MAX_DBS_IN_EVENT_MTS,
-                     the overfill is indicated with assigning the number to
-                     OVER_MAX_DBS_IN_EVENT_MTS.
-
-     @return     number of databases in the array or OVER_MAX_DBS_IN_EVENT_MTS.
-  */
-  virtual uint8 get_mts_dbs(Mts_db_names* arg)
-  {
-    if (mts_accessed_dbs == OVER_MAX_DBS_IN_EVENT_MTS)
-    {
-      // the empty string db name is special to indicate sequential applying
-      mts_accessed_db_names[0][0]= 0;
-    }
-    else
-    {
-      for (uchar i= 0; i < mts_accessed_dbs; i++)
-      {
-        char *db_name= mts_accessed_db_names[i];
-
-        // Only default database is rewritten.
-        if (!rpl_filter->is_rewrite_empty() && !strcmp(get_db(), db_name))
-        {
-          size_t dummy_len;
-          const char *db_filtered= rpl_filter->get_rewrite_db(db_name, &dummy_len);
-          // db_name != db_filtered means that db_name is rewritten.
-          if (strcmp(db_name, db_filtered))
-            db_name= (char*)db_filtered;
-        }
-        arg->name[i]= db_name;
-      }
-    }
-    return arg->num= mts_accessed_dbs;
-  }
-
-  void attach_temp_tables_worker(THD*);
-  void detach_temp_tables_worker(THD*);
-
-  virtual uchar mts_number_dbs() { return mts_accessed_dbs; }
-
 #ifdef HAVE_REPLICATION
-  int pack_info(Protocol* protocol);
+  void pack_info(Protocol* protocol);
 #endif /* HAVE_REPLICATION */
 #else
   void print_query_header(IO_CACHE* file, PRINT_EVENT_INFO* print_event_info);
@@ -2253,20 +1806,97 @@ public:        /* !!! Public in this patch to allow old usage */
       !strncasecmp(query, "SAVEPOINT", 9) ||
       !strncasecmp(query, "ROLLBACK", 8);
   }
-  /**
-     Notice, DDL queries are logged without BEGIN/COMMIT parentheses
-     and identification of such single-query group
-     occures within logics of @c get_slave_worker().
-  */
-  bool starts_group() { return !strncmp(query, "BEGIN", q_len); }
-  virtual bool ends_group()
-  {  
-    return
-      !strncmp(query, "COMMIT", q_len) ||
-      (!strncasecmp(query, STRING_WITH_LEN("ROLLBACK"))
-       && strncasecmp(query, STRING_WITH_LEN("ROLLBACK TO ")));
-  }
 };
+
+
+#ifdef HAVE_REPLICATION
+
+/**
+  @class Slave_log_event
+
+  Note that this class is currently not used at all; no code writes a
+  @c Slave_log_event (though some code in @c repl_failsafe.cc reads @c
+  Slave_log_event).  So it's not a problem if this code is not
+  maintained.
+
+  @section Slave_log_event_binary_format Binary Format
+
+  This event type has no Post-Header. The Body has the following
+  four components.
+
+  <table>
+  <caption>Body for Slave_log_event</caption>
+
+  <tr>
+    <th>Name</th>
+    <th>Format</th>
+    <th>Description</th>
+  </tr>
+
+  <tr>
+    <td>master_pos</td>
+    <td>8 byte integer</td>
+    <td>???TODO
+    </td>
+  </tr>
+
+  <tr>
+    <td>master_port</td>
+    <td>2 byte integer</td>
+    <td>???TODO</td>
+  </tr>
+
+  <tr>
+    <td>master_host</td>
+    <td>null-terminated string</td>
+    <td>???TODO</td>
+  </tr>
+
+  <tr>
+    <td>master_log</td>
+    <td>null-terminated string</td>
+    <td>???TODO</td>
+  </tr>
+  </table>
+*/
+class Slave_log_event: public Log_event
+{
+protected:
+  char* mem_pool;
+  void init_from_mem_pool(int data_size);
+public:
+  my_off_t master_pos;
+  char* master_host;
+  char* master_log;
+  int master_host_len;
+  int master_log_len;
+  uint16 master_port;
+
+#ifdef MYSQL_SERVER
+  Slave_log_event(THD* thd_arg, Relay_log_info* rli);
+  void pack_info(Protocol* protocol);
+#else
+  void print(FILE* file, PRINT_EVENT_INFO* print_event_info);
+#endif
+
+  Slave_log_event(const char* buf,
+                  uint event_len,
+                  const Format_description_log_event *description_event);
+  ~Slave_log_event();
+  int get_data_size();
+  bool is_valid() const { return master_host != 0; }
+  Log_event_type get_type_code() { return SLAVE_EVENT; }
+#ifdef MYSQL_SERVER
+  bool write(IO_CACHE* file);
+#endif
+
+private:
+#if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
+  virtual int do_apply_event(Relay_log_info const* rli);
+#endif
+};
+
+#endif /* HAVE_REPLICATION */
 
 
 /**
@@ -2540,7 +2170,7 @@ public:
                   Name_resolution_context *context);
   const char* get_db() { return db; }
 #ifdef HAVE_REPLICATION
-  int pack_info(Protocol* protocol);
+  void pack_info(Protocol* protocol);
 #endif /* HAVE_REPLICATION */
 #else
   void print(FILE* file, PRINT_EVENT_INFO* print_event_info);
@@ -2639,7 +2269,7 @@ public:
 #ifdef MYSQL_SERVER
   Start_log_event_v3();
 #ifdef HAVE_REPLICATION
-  int pack_info(Protocol* protocol);
+  void pack_info(Protocol* protocol);
 #endif /* HAVE_REPLICATION */
 #else
   Start_log_event_v3() {}
@@ -2698,10 +2328,7 @@ public:
   */
   uint8 common_header_len;
   uint8 number_of_event_types;
-  /* 
-     The list of post-headers' lengths followed 
-     by the checksum alg decription byte
-  */
+  /* The list of post-headers' lengthes */
   uint8 *post_header_len;
   uchar server_version_split[3];
   const uint8 *event_type_permutation;
@@ -2749,8 +2376,7 @@ public:
   }
 
   void calc_server_version_split();
-  ulong get_version_product() const;
-  bool is_version_before_checksum() const;
+
 protected:
 #if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
   virtual int do_apply_event(Relay_log_info const *rli);
@@ -2805,13 +2431,11 @@ public:
   uchar type;
 
 #ifdef MYSQL_SERVER
-  Intvar_log_event(THD* thd_arg, uchar type_arg, ulonglong val_arg,
-                   enum_event_cache_type cache_type_arg,
-                   enum_event_logging_type logging_type_arg)
-    :Log_event(thd_arg, 0, cache_type_arg, logging_type_arg),
-    val(val_arg), type(type_arg) { }
+  Intvar_log_event(THD* thd_arg,uchar type_arg, ulonglong val_arg)
+    :Log_event(thd_arg,0,0),val(val_arg),type(type_arg)
+  {}
 #ifdef HAVE_REPLICATION
-  int pack_info(Protocol* protocol);
+  void pack_info(Protocol* protocol);
 #endif /* HAVE_REPLICATION */
 #else
   void print(FILE* file, PRINT_EVENT_INFO* print_event_info);
@@ -2883,13 +2507,11 @@ class Rand_log_event: public Log_event
   ulonglong seed2;
 
 #ifdef MYSQL_SERVER
-  Rand_log_event(THD* thd_arg, ulonglong seed1_arg, ulonglong seed2_arg,
-                 enum_event_cache_type cache_type_arg,
-                 enum_event_logging_type logging_type_arg)
-    :Log_event(thd_arg, 0, cache_type_arg, logging_type_arg),
-    seed1(seed1_arg), seed2(seed2_arg) { }
+  Rand_log_event(THD* thd_arg, ulonglong seed1_arg, ulonglong seed2_arg)
+    :Log_event(thd_arg,0,0),seed1(seed1_arg),seed2(seed2_arg)
+  {}
 #ifdef HAVE_REPLICATION
-  int pack_info(Protocol* protocol);
+  void pack_info(Protocol* protocol);
 #endif /* HAVE_REPLICATION */
 #else
   void print(FILE* file, PRINT_EVENT_INFO* print_event_info);
@@ -2931,14 +2553,9 @@ class Xid_log_event: public Log_event
    my_xid xid;
 
 #ifdef MYSQL_SERVER
-  Xid_log_event(THD* thd_arg, my_xid x)
-  : Log_event(thd_arg, 0, 
-              Log_event::EVENT_TRANSACTIONAL_CACHE,
-              Log_event::EVENT_NORMAL_LOGGING),
-  xid(x)
-  { }
+  Xid_log_event(THD* thd_arg, my_xid x): Log_event(thd_arg, 0, TRUE), xid(x) {}
 #ifdef HAVE_REPLICATION
-  int pack_info(Protocol* protocol);
+  void pack_info(Protocol* protocol);
 #endif /* HAVE_REPLICATION */
 #else
   void print(FILE* file, PRINT_EVENT_INFO* print_event_info);
@@ -2953,13 +2570,11 @@ class Xid_log_event: public Log_event
   bool write(IO_CACHE* file);
 #endif
   bool is_valid() const { return 1; }
-  virtual bool ends_group() { return TRUE; }
+
 private:
 #if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
   virtual int do_apply_event(Relay_log_info const *rli);
-  virtual int do_apply_event_worker(Slave_worker *rli);
   enum_skip_reason do_shall_skip(Relay_log_info *rli);
-  bool do_commit(THD *thd);
 #endif
 };
 
@@ -2979,7 +2594,7 @@ public:
     UNDEF_F= 0,
     UNSIGNED_F= 1
   };
-  const char *name;
+  char *name;
   uint name_len;
   char *val;
   ulong val_len;
@@ -2990,18 +2605,14 @@ public:
 #ifdef MYSQL_SERVER
   bool deferred;
   query_id_t query_id;
-  User_var_log_event(THD* thd_arg, const char *name_arg, uint name_len_arg,
+  User_var_log_event(THD* thd_arg, char *name_arg, uint name_len_arg,
                      char *val_arg, ulong val_len_arg, Item_result type_arg,
-		     uint charset_number_arg, uchar flags_arg,
-                     enum_event_cache_type cache_type_arg,
-                     enum_event_logging_type logging_type_arg)
-    :Log_event(thd_arg, 0, cache_type_arg, logging_type_arg), name(name_arg),
-     name_len(name_len_arg), val(val_arg), val_len(val_len_arg), type(type_arg),
-     charset_number(charset_number_arg), flags(flags_arg), deferred(false)
-    { 
-      is_null= !val;
-    }
-  int pack_info(Protocol* protocol);
+		     uint charset_number_arg, uchar flags_arg)
+    :Log_event(thd_arg,0,0), name(name_arg), name_len(name_len_arg), val(val_arg),
+    val_len(val_len_arg), type(type_arg), charset_number(charset_number_arg),
+    flags(flags_arg), deferred(false)
+    { is_null= !val; }
+  void pack_info(Protocol* protocol);
 #else
   void print(FILE* file, PRINT_EVENT_INFO* print_event_info);
 #endif
@@ -3143,7 +2754,7 @@ public:
 		   uint ident_len_arg,
 		   ulonglong pos_arg, uint flags);
 #ifdef HAVE_REPLICATION
-  int pack_info(Protocol* protocol);
+  void pack_info(Protocol* protocol);
 #endif /* HAVE_REPLICATION */
 #else
   void print(FILE* file, PRINT_EVENT_INFO* print_event_info);
@@ -3204,7 +2815,7 @@ public:
 			uchar* block_arg, uint block_len_arg,
 			bool using_trans);
 #ifdef HAVE_REPLICATION
-  int pack_info(Protocol* protocol);
+  void pack_info(Protocol* protocol);
 #endif /* HAVE_REPLICATION */
 #else
   void print(FILE* file, PRINT_EVENT_INFO* print_event_info);
@@ -3276,7 +2887,7 @@ public:
   Append_block_log_event(THD* thd, const char* db_arg, uchar* block_arg,
 			 uint block_len_arg, bool using_trans);
 #ifdef HAVE_REPLICATION
-  int pack_info(Protocol* protocol);
+  void pack_info(Protocol* protocol);
   virtual int get_create_or_append() const;
 #endif /* HAVE_REPLICATION */
 #else
@@ -3317,7 +2928,7 @@ public:
 #ifdef MYSQL_SERVER
   Delete_file_log_event(THD* thd, const char* db_arg, bool using_trans);
 #ifdef HAVE_REPLICATION
-  int pack_info(Protocol* protocol);
+  void pack_info(Protocol* protocol);
 #endif /* HAVE_REPLICATION */
 #else
   void print(FILE* file, PRINT_EVENT_INFO* print_event_info);
@@ -3358,7 +2969,7 @@ public:
 #ifdef MYSQL_SERVER
   Execute_load_log_event(THD* thd, const char* db_arg, bool using_trans);
 #ifdef HAVE_REPLICATION
-  int pack_info(Protocol* protocol);
+  void pack_info(Protocol* protocol);
 #endif /* HAVE_REPLICATION */
 #else
   void print(FILE* file, PRINT_EVENT_INFO* print_event_info);
@@ -3374,20 +2985,6 @@ public:
 #ifdef MYSQL_SERVER
   bool write(IO_CACHE* file);
   const char* get_db() { return db; }
-#endif
-#if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
-  virtual uint8 mts_number_dbs() { return OVER_MAX_DBS_IN_EVENT_MTS; }
-  /**
-     @param[out] arg pointer to a struct containing char* array
-                     pointers be filled in and the number of
-                     filled instances.
-
-     @return     number of databases in the array (must be one).
-  */
-  virtual uint8 get_mts_dbs(Mts_db_names *arg)
-  {
-    return arg->num= mts_number_dbs();
-  }
 #endif
 
 private:
@@ -3465,10 +3062,10 @@ public:
                                ulong query_length, uint fn_pos_start_arg,
                                uint fn_pos_end_arg,
                                enum_load_dup_handling dup_handling_arg,
-                               bool using_trans, bool immediate,
+                               bool using_trans, bool direct,
                                bool suppress_use, int errcode);
 #ifdef HAVE_REPLICATION
-  int pack_info(Protocol* protocol);
+  void pack_info(Protocol* protocol);
 #endif /* HAVE_REPLICATION */
 #else
   void print(FILE* file, PRINT_EVENT_INFO* print_event_info);
@@ -3875,15 +3472,13 @@ public:
   enum 
   {
     TM_NO_FLAGS = 0U,
-    TM_BIT_LEN_EXACT_F = (1U << 0),
-    TM_REFERRED_FK_DB_F = (1U << 1)
+    TM_BIT_LEN_EXACT_F = (1U << 0)
   };
 
   flag_set get_flags(flag_set flag) const { return m_flags & flag; }
 
 #ifdef MYSQL_SERVER
-  Table_map_log_event(THD *thd, TABLE *tbl, const Table_id& tid,
-                      bool is_transactional);
+  Table_map_log_event(THD *thd, TABLE *tbl, ulong tid, bool is_transactional);
 #endif
 #ifdef HAVE_REPLICATION
   Table_map_log_event(const char *buf, uint event_len, 
@@ -3899,54 +3494,23 @@ public:
                          m_field_metadata_size, m_null_bits, m_flags);
   }
 #endif
-  const Table_id& get_table_id() const { return m_table_id; }
+  ulong get_table_id() const        { return m_table_id; }
   const char *get_table_name() const { return m_tblnam; }
   const char *get_db_name() const    { return m_dbnam; }
 
   virtual Log_event_type get_type_code() { return TABLE_MAP_EVENT; }
   virtual bool is_valid() const { return m_memory != NULL; /* we check malloc */ }
 
-  virtual int get_data_size() { return (uint) m_data_size; }
+  virtual int get_data_size() { return (uint) m_data_size; } 
 #ifdef MYSQL_SERVER
   virtual int save_field_metadata();
   virtual bool write_data_header(IO_CACHE *file);
   virtual bool write_data_body(IO_CACHE *file);
   virtual const char *get_db() { return m_dbnam; }
-  virtual uint8 mts_number_dbs()
-  {
-    return get_flags(TM_REFERRED_FK_DB_F) ? OVER_MAX_DBS_IN_EVENT_MTS : 1;
-  }
-  /**
-     @param[out] arg pointer to a struct containing char* array
-                     pointers be filled in and the number of filled instances.
-
-     @return    number of databases in the array: either one or
-                OVER_MAX_DBS_IN_EVENT_MTS, when the Table map event reports
-                foreign keys constraint.
-  */
-  virtual uint8 get_mts_dbs(Mts_db_names *arg)
-  {
-    const char *db_name= get_db();
-
-    if (!rpl_filter->is_rewrite_empty() && !get_flags(TM_REFERRED_FK_DB_F))
-    {
-      size_t dummy_len;
-      const char *db_filtered= rpl_filter->get_rewrite_db(db_name, &dummy_len);
-      // db_name != db_filtered means that db_name is rewritten.
-      if (strcmp(db_name, db_filtered))
-        db_name= db_filtered;
-    }
-
-    if (!get_flags(TM_REFERRED_FK_DB_F))
-      arg->name[0]= db_name;
-
-    return arg->num= mts_number_dbs();
-  }
-
 #endif
 
 #if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
-  virtual int pack_info(Protocol *protocol);
+  virtual void pack_info(Protocol *protocol);
 #endif
 
 #ifdef MYSQL_CLIENT
@@ -3972,7 +3536,7 @@ private:
   uchar         *m_coltype;
 
   uchar         *m_memory;
-  Table_id       m_table_id;
+  ulong          m_table_id;
   flag_set       m_flags;
 
   size_t         m_data_size;
@@ -4005,14 +3569,6 @@ private:
 class Rows_log_event : public Log_event
 {
 public:
-  enum row_lookup_mode {
-       ROW_LOOKUP_UNDEFINED= 0,
-       ROW_LOOKUP_NOT_NEEDED= 1,
-       ROW_LOOKUP_INDEX_SCAN= 2,
-       ROW_LOOKUP_TABLE_SCAN= 3,
-       ROW_LOOKUP_HASH_SCAN= 4
-  };
-
   /**
      Enumeration of the errors that can be returned.
    */
@@ -4065,11 +3621,8 @@ public:
   void clear_flags(flag_set flags_arg) { m_flags &= ~flags_arg; }
   flag_set get_flags(flag_set flags_arg) const { return m_flags & flags_arg; }
 
-  Log_event_type get_type_code() { return m_type; } /* Specific type (_V1 etc) */
-  virtual Log_event_type get_general_type_code() = 0; /* General rows op type, no version */
-
 #if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
-  virtual int pack_info(Protocol *protocol);
+  virtual void pack_info(Protocol *protocol);
 #endif
 
 #ifdef MYSQL_CLIENT
@@ -4094,57 +3647,8 @@ public:
   virtual int get_data_size();
 
   MY_BITMAP const *get_cols() const { return &m_cols; }
-  MY_BITMAP const *get_cols_ai() const { return &m_cols_ai; }
   size_t get_width() const          { return m_width; }
-  const Table_id& get_table_id() const        { return m_table_id; }
-
-#if defined(MYSQL_SERVER)
-  /*
-    This member function compares the table's read/write_set
-    with this event's m_cols and m_cols_ai. Comparison takes 
-    into account what type of rows event is this: Delete, Write or
-    Update, therefore it uses the correct m_cols[_ai] according
-    to the event type code.
-
-    Note that this member function should only be called for the
-    following events:
-    - Delete_rows_log_event
-    - Write_rows_log_event
-    - Update_rows_log_event
-
-    @param[IN] table The table to compare this events bitmaps 
-                     against.
-
-    @return TRUE if sets match, FALSE otherwise. (following 
-                 bitmap_cmp return logic).
-
-   */
-  virtual bool read_write_bitmaps_cmp(TABLE *table)
-  {
-    bool res= FALSE;
-
-    switch (get_general_type_code())
-    {
-      case DELETE_ROWS_EVENT:
-        res= bitmap_cmp(get_cols(), table->read_set);
-        break;
-      case UPDATE_ROWS_EVENT:
-        res= (bitmap_cmp(get_cols(), table->read_set) &&
-              bitmap_cmp(get_cols_ai(), table->write_set));
-        break;
-      case WRITE_ROWS_EVENT:
-        res= bitmap_cmp(get_cols(), table->write_set);
-        break;
-      default:
-        /* 
-          We should just compare bitmaps for Delete, Write
-          or Update rows events.
-        */
-        DBUG_ASSERT(0);
-    }
-    return res;
-  }
-#endif
+  ulong get_table_id() const        { return m_table_id; }
 
 #ifdef MYSQL_SERVER
   virtual bool write_data_header(IO_CACHE *file);
@@ -4164,20 +3668,17 @@ public:
 
   uint     m_row_count;         /* The number of rows added to the event */
 
-  const uchar* get_extra_row_data() const   { return m_extra_row_data; }
-
 protected:
   /* 
      The constructors are protected since you're supposed to inherit
      this class, not create instances of this class.
   */
 #ifdef MYSQL_SERVER
-  Rows_log_event(THD*, TABLE*, const Table_id& table_id,
-		 MY_BITMAP const *cols, bool is_transactional,
-                 Log_event_type event_type,
-                 const uchar* extra_row_info);
+  Rows_log_event(THD*, TABLE*, ulong table_id, 
+		 MY_BITMAP const *cols, bool is_transactional);
 #endif
   Rows_log_event(const char *row_data, uint event_len, 
+		 Log_event_type event_type,
 		 const Format_description_log_event *description_event);
 
 #ifdef MYSQL_CLIENT
@@ -4191,22 +3692,9 @@ protected:
 #ifdef MYSQL_SERVER
   TABLE *m_table;		/* The table the rows belong to */
 #endif
-  Table_id    m_table_id;	/* Table ID */
+  ulong       m_table_id;	/* Table ID */
   MY_BITMAP   m_cols;		/* Bitmap denoting columns available */
   ulong       m_width;          /* The width of the columns bitmap */
-#ifndef MYSQL_CLIENT
-  /**
-     Hash table that will hold the entries for while using HASH_SCAN
-     algorithm to search and update/delete rows.
-   */
-  Hash_slave_rows m_hash;
-
-  /**
-     The algorithm to use while searching for rows using the before
-     image.
-  */
-  uint            m_rows_lookup_algorithm;  
-#endif
   /*
     Bitmap for columns available in the after image, if present. These
     fields are only available for Update_rows events. Observe that the
@@ -4228,82 +3716,25 @@ protected:
 
   flag_set m_flags;		/* Flags for row-level events */
 
-  Log_event_type m_type;        /* Actual event type */
-
-  uchar    *m_extra_row_data;   /* Pointer to extra row data if any */
-                                /* If non null, first byte is length */
-
   /* helper functions */
 
 #if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
   const uchar *m_curr_row;     /* Start of the row being processed */
   const uchar *m_curr_row_end; /* One-after the end of the current row */
   uchar    *m_key;      /* Buffer to keep key value during searches */
-  uint     m_key_index;
-  KEY      *m_key_info; /* Points to description of index #m_key_index */
-  class Key_compare
-  {
-public:
-    /**
-       @param  ki  Where to find KEY description
-       @note m_distinct_keys is instantiated when Rows_log_event is constructed; it
-       stores a Key_compare object internally. However at that moment, the
-       index (KEY*) to use for comparisons, is not yet known. So, at
-       instantiation, we indicate the Key_compare the place where it can
-       find the KEY* when needed (this place is Rows_log_event::m_key_info),
-       Key_compare remembers the place in member m_key_info.
-       Before we need to do comparisons - i.e. before we need to insert
-       elements, we update Rows_log_event::m_key_info once for all.
-    */
-    Key_compare(KEY **ki= NULL) : m_key_info(ki) {}
-    bool operator()(uchar *k1, uchar *k2) const
-    {
-      return key_cmp2((*m_key_info)->key_part,
-                      k1, (*m_key_info)->key_length,
-                      k2, (*m_key_info)->key_length) < 0 ;
-    }
-private:
-    KEY **m_key_info;
-  };
-  std::set<uchar *, Key_compare> m_distinct_keys;
-  std::set<uchar *, Key_compare>::iterator m_itr;
-  /**
-    A spare buffer which will be used when saving the distinct keys
-    for doing an index scan with HASH_SCAN search algorithm.
-  */
-  uchar *m_distinct_key_spare_buf;
+
+  int find_row(const Relay_log_info *const);
+  int write_row(const Relay_log_info *const, const bool);
 
   // Unpack the current row into m_table->record[0]
-  int unpack_current_row(const Relay_log_info *const rli,
-                         MY_BITMAP const *cols)
-  { 
+  int unpack_current_row(const Relay_log_info *const rli)
+  {
     DBUG_ASSERT(m_table);
 
-    ASSERT_OR_RETURN_ERROR(m_curr_row <= m_rows_end, HA_ERR_CORRUPT_EVENT);
-    return ::unpack_row(rli, m_table, m_width, m_curr_row, cols,
+    ASSERT_OR_RETURN_ERROR(m_curr_row < m_rows_end, HA_ERR_CORRUPT_EVENT);
+    return ::unpack_row(rli, m_table, m_width, m_curr_row, &m_cols,
                                    &m_curr_row_end, &m_master_reclength, m_rows_end);
   }
-
-  /*
-    This member function is called when deciding the algorithm to be used to
-    find the rows to be updated on the slave during row based replication.
-    This this functions sets the m_rows_lookup_algorithm and also the
-    m_key_index with the key index to be used if the algorithm is dependent on
-    an index.
-   */
-  void decide_row_lookup_algorithm_and_key();
-
-  /*
-    Encapsulates the  operations to be done before applying
-    row event for update and delete.
-   */
-  int row_operations_scan_and_key_setup();
-
-  /*
-   Encapsulates the  operations to be done after applying
-   row event for update and delete.
-  */
-  int row_operations_scan_and_key_teardown(int error);
 
   /**
     Helper function to check whether there is an auto increment
@@ -4377,115 +3808,6 @@ private:
       
   */
   virtual int do_exec_row(const Relay_log_info *const rli) = 0;
-
-  /**
-    Private member function called while handling idempotent errors.
-
-    @param err[IN/OUT] the error to handle. If it is listed as
-                       idempotent/ignored related error, then it is cleared.
-    @returns true if the slave should stop executing rows.
-   */
-  int handle_idempotent_and_ignored_errors(Relay_log_info const *rli, int *err);
-
-  /**
-     Private member function called after updating/deleting a row. It
-     performs some assertions and more importantly, it updates
-     m_curr_row so that the next row is processed during the row
-     execution main loop (@c Rows_log_event::do_apply_event()).
-
-     @param err[IN] the current error code.
-   */
-  void do_post_row_operations(Relay_log_info const *rli, int err);
-
-  /**
-     Commodity wrapper around do_exec_row(), that deals with resetting
-     the thd reference in the table.
-   */
-  int do_apply_row(Relay_log_info const *rli);
-
-  /**
-     Implementation of the index scan and update algorithm. It uses
-     PK, UK or regular Key to search for the record to update. When
-     found it updates it.
-   */
-  int do_index_scan_and_update(Relay_log_info const *rli);
-  
-  /**
-     Implementation of the hash_scan and update algorithm. It collects
-     rows positions in a hashtable until the last row is
-     unpacked. Then it scans the table to update and when a record in
-     the table matches the one in the hashtable, the update/delete is
-     performed.
-   */
-  int do_hash_scan_and_update(Relay_log_info const *rli);
-
-  /**
-     Implementation of the legacy table_scan and update algorithm. For
-     each unpacked row it scans the storage engine table for a
-     match. When a match is found, the update/delete operations are
-     performed.
-   */
-  int do_table_scan_and_update(Relay_log_info const *rli);
-
-  /**
-    Initializes scanning of rows. Opens an index and initailizes an iterator
-    over a list of distinct keys (m_distinct_keys) if it is a HASH_SCAN
-    over an index or the table if its a HASH_SCAN over the table.
-  */
-  int open_record_scan();
-
-  /**
-    Does the cleanup
-    - closes the index if opened by open_record_scan
-    - closes the table if opened for scanning.
-  */
-  int close_record_scan();
-
-  /**
-    Fetches next row. If it is a HASH_SCAN over an index, it populates
-    table->record[0] with the next row corresponding to the index. If
-    the indexes are in non-contigous ranges it fetches record corresponding
-    to the key value in the next range.
-
-    @parms: bool first_read : signifying if this is the first time we are reading a row
-            over an index.
-    @return_value: -  error code when there are no more reeords to be fetched or some other
-                      error occured,
-                   -  0 otherwise.
-  */
-  int next_record_scan(bool first_read);
-
-  /**
-    Populates the m_distinct_keys with unique keys to be modified
-    during HASH_SCAN over keys.
-    @return_value -0 success
-                  -Err_code
-  */
-  int add_key_to_distinct_keyset();
-
-  /**
-    Populates the m_hash when using HASH_SCAN. Thence, it:
-    - unpacks the before image (BI)
-    - saves the positions
-    - saves the positions into the hash map, using the
-      BI checksum as key
-    - unpacks the after image (AI) if needed, so that
-      m_curr_row_end gets updated correctly.
-
-    @param rli The reference to the relay log info object.
-    @returns 0 on success. Otherwise, the error code.
-  */
-  int do_hash_row(Relay_log_info const *rli);
-
-  /**
-    This member function scans the table and applies the changes
-    that had been previously hashed. As such, m_hash MUST be filled
-    by do_hash_row before calling this member function.
-
-    @param rli The reference to the relay log info object.
-    @returns 0 on success. Otherwise, the error code.
-  */
-  int do_scan_and_update(Relay_log_info const *rli);
 #endif /* defined(MYSQL_SERVER) && defined(HAVE_REPLICATION) */
 
   friend class Old_rows_log_event;
@@ -4510,9 +3832,8 @@ public:
   };
 
 #if defined(MYSQL_SERVER)
-  Write_rows_log_event(THD*, TABLE*, const Table_id& table_id,
-		       bool is_transactional,
-                       const uchar* extra_row_info);
+  Write_rows_log_event(THD*, TABLE*, ulong table_id, 
+		       MY_BITMAP const *cols, bool is_transactional);
 #endif
 #ifdef HAVE_REPLICATION
   Write_rows_log_event(const char *buf, uint event_len, 
@@ -4521,20 +3842,19 @@ public:
 #if defined(MYSQL_SERVER) 
   static bool binlog_row_logging_function(THD *thd, TABLE *table,
                                           bool is_transactional,
+                                          MY_BITMAP *cols,
+                                          uint fields,
                                           const uchar *before_record
-                                          MY_ATTRIBUTE((unused)),
+                                          __attribute__((unused)),
                                           const uchar *after_record)
   {
     return thd->binlog_write_row(table, is_transactional,
-                                 after_record, NULL);
+                                 cols, fields, after_record);
   }
 #endif
 
-protected:
-  int write_row(const Relay_log_info *const, const bool);
-
 private:
-  virtual Log_event_type get_general_type_code() { return (Log_event_type)TYPE_CODE; }
+  virtual Log_event_type get_type_code() { return (Log_event_type)TYPE_CODE; }
 
 #ifdef MYSQL_CLIENT
   void print(FILE *file, PRINT_EVENT_INFO *print_event_info);
@@ -4570,15 +3890,14 @@ public:
   };
 
 #ifdef MYSQL_SERVER
-  Update_rows_log_event(THD*, TABLE*, const Table_id& table_id,
+  Update_rows_log_event(THD*, TABLE*, ulong table_id,
 			MY_BITMAP const *cols_bi,
 			MY_BITMAP const *cols_ai,
-                        bool is_transactional,
-                        const uchar* extra_row_info);
+                        bool is_transactional);
 
-  Update_rows_log_event(THD*, TABLE*, const Table_id& table_id,
-                        bool is_transactional,
-                        const uchar* extra_row_info);
+  Update_rows_log_event(THD*, TABLE*, ulong table_id,
+			MY_BITMAP const *cols,
+                        bool is_transactional);
 
   void init(MY_BITMAP const *cols);
 #endif
@@ -4593,11 +3912,13 @@ public:
 #ifdef MYSQL_SERVER
   static bool binlog_row_logging_function(THD *thd, TABLE *table,
                                           bool is_transactional,
+                                          MY_BITMAP *cols,
+                                          uint fields,
                                           const uchar *before_record,
                                           const uchar *after_record)
   {
     return thd->binlog_update_row(table, is_transactional,
-                                  before_record, after_record, NULL);
+                                  cols, fields, before_record, after_record);
   }
 #endif
 
@@ -4607,7 +3928,7 @@ public:
   }
 
 protected:
-  virtual Log_event_type get_general_type_code() { return (Log_event_type)TYPE_CODE; }
+  virtual Log_event_type get_type_code() { return (Log_event_type)TYPE_CODE; }
 
 #ifdef MYSQL_CLIENT
   void print(FILE *file, PRINT_EVENT_INFO *print_event_info);
@@ -4650,8 +3971,8 @@ public:
   };
 
 #ifdef MYSQL_SERVER
-  Delete_rows_log_event(THD*, TABLE*, const Table_id&,
-			bool is_transactional, const uchar* extra_row_info);
+  Delete_rows_log_event(THD*, TABLE*, ulong, 
+			MY_BITMAP const *cols, bool is_transactional);
 #endif
 #ifdef HAVE_REPLICATION
   Delete_rows_log_event(const char *buf, uint event_len, 
@@ -4660,17 +3981,19 @@ public:
 #ifdef MYSQL_SERVER
   static bool binlog_row_logging_function(THD *thd, TABLE *table,
                                           bool is_transactional,
+                                          MY_BITMAP *cols,
+                                          uint fields,
                                           const uchar *before_record,
                                           const uchar *after_record
-                                          MY_ATTRIBUTE((unused)))
+                                          __attribute__((unused)))
   {
     return thd->binlog_delete_row(table, is_transactional,
-                                  before_record, NULL);
+                                  cols, fields, before_record);
   }
 #endif
   
 protected:
-  virtual Log_event_type get_general_type_code() { return (Log_event_type)TYPE_CODE; }
+  virtual Log_event_type get_type_code() { return (Log_event_type)TYPE_CODE; }
 
 #ifdef MYSQL_CLIENT
   void print(FILE *file, PRINT_EVENT_INFO *print_event_info);
@@ -4726,39 +4049,29 @@ class Incident_log_event : public Log_event {
 public:
 #ifdef MYSQL_SERVER
   Incident_log_event(THD *thd_arg, Incident incident)
-    : Log_event(thd_arg, LOG_EVENT_NO_FILTER_F, Log_event::EVENT_NO_CACHE,
-                Log_event::EVENT_IMMEDIATE_LOGGING), m_incident(incident)
+    : Log_event(thd_arg, 0, FALSE), m_incident(incident)
   {
     DBUG_ENTER("Incident_log_event::Incident_log_event");
     DBUG_PRINT("enter", ("m_incident: %d", m_incident));
     m_message.str= NULL;                    /* Just as a precaution */
     m_message.length= 0;
+    set_direct_logging();
     DBUG_VOID_RETURN;
   }
 
   Incident_log_event(THD *thd_arg, Incident incident, LEX_STRING const msg)
-    : Log_event(thd_arg, LOG_EVENT_NO_FILTER_F,
-                Log_event::EVENT_NO_CACHE,
-                Log_event::EVENT_IMMEDIATE_LOGGING), m_incident(incident)
+    : Log_event(thd_arg, 0, FALSE), m_incident(incident)
   {
     DBUG_ENTER("Incident_log_event::Incident_log_event");
     DBUG_PRINT("enter", ("m_incident: %d", m_incident));
-    m_message.str= NULL;
-    m_message.length= 0;
-    if (!(m_message.str= (char*) my_malloc(msg.length+1, MYF(MY_WME))))
-    {
-      /* Mark this event invalid */
-      m_incident= INCIDENT_NONE;
-      DBUG_VOID_RETURN;
-    }
-    strmake(m_message.str, msg.str, msg.length);
-    m_message.length= msg.length;
+    m_message= msg;
+    set_direct_logging();
     DBUG_VOID_RETURN;
   }
 #endif
 
 #ifdef MYSQL_SERVER
-  int pack_info(Protocol*);
+  void pack_info(Protocol*);
 #endif
 
   Incident_log_event(const char *buf, uint event_len,
@@ -4794,110 +4107,11 @@ private:
   LEX_STRING m_message;
 };
 
-
-/**
-  @class Ignorable_log_event
-
-  Base class for ignorable log events. Events deriving from
-  this class can be safely ignored by slaves that cannot
-  recognize them. Newer slaves, will be able to read and
-  handle them. This has been designed to be an open-ended
-  architecture, so adding new derived events shall not harm
-  the old slaves that support ignorable log event mechanism
-  (they will just ignore unrecognized ignorable events).
-
-  @note The only thing that makes an event ignorable is that it has
-  the LOG_EVENT_IGNORABLE_F flag set.  It is not strictly necessary
-  that ignorable event types derive from Ignorable_log_event; they may
-  just as well derive from Log_event and pass LOG_EVENT_IGNORABLE_F as
-  argument to the Log_event constructor.
-**/
-class Ignorable_log_event : public Log_event {
-public:
-#ifndef MYSQL_CLIENT
-  Ignorable_log_event(THD *thd_arg)
-      : Log_event(thd_arg, LOG_EVENT_IGNORABLE_F, 
-                  Log_event::EVENT_STMT_CACHE,
-                  Log_event::EVENT_NORMAL_LOGGING)
-  {
-    DBUG_ENTER("Ignorable_log_event::Ignorable_log_event");
-    DBUG_VOID_RETURN;
-  }
-#endif
-
-  Ignorable_log_event(const char *buf,
-                      const Format_description_log_event *descr_event);
-  virtual ~Ignorable_log_event();
-
-#ifndef MYSQL_CLIENT
-  int pack_info(Protocol*);
-#endif
-
-#ifdef MYSQL_CLIENT
-  virtual void print(FILE *file, PRINT_EVENT_INFO *print_event_info);
-#endif
-
-  virtual Log_event_type get_type_code() { return IGNORABLE_LOG_EVENT; }
-
-  virtual bool is_valid() const { return 1; }
-
-  virtual int get_data_size() { return IGNORABLE_HEADER_LEN; }
-};
-
-
-class Rows_query_log_event : public Ignorable_log_event {
-public:
-#ifndef MYSQL_CLIENT
-  Rows_query_log_event(THD *thd_arg, const char * query, ulong query_len)
-    : Ignorable_log_event(thd_arg)
-  {
-    DBUG_ENTER("Rows_query_log_event::Rows_query_log_event");
-    if (!(m_rows_query= (char*) my_malloc(query_len + 1, MYF(MY_WME))))
-      return;
-    my_snprintf(m_rows_query, query_len + 1, "%s", query);
-    DBUG_PRINT("enter", ("%s", m_rows_query));
-    DBUG_VOID_RETURN;
-  }
-#endif
-
-#ifndef MYSQL_CLIENT
-  int pack_info(Protocol*);
-#endif
-
-  Rows_query_log_event(const char *buf, uint event_len,
-                     const Format_description_log_event *descr_event);
-
-  virtual ~Rows_query_log_event();
-
-#ifdef MYSQL_CLIENT
-  virtual void print(FILE *file, PRINT_EVENT_INFO *print_event_info);
-#endif
-  virtual bool write_data_body(IO_CACHE *file);
-
-  virtual Log_event_type get_type_code() { return ROWS_QUERY_LOG_EVENT; }
-
-  virtual int get_data_size()
-  {
-    return IGNORABLE_HEADER_LEN + 1 + (uint) strlen(m_rows_query);
-  }
-#if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
-  virtual int do_apply_event(Relay_log_info const *rli);
-#endif
-
-private:
-
-  char * m_rows_query;
-};
-
-
-
 static inline bool copy_event_cache_to_file_and_reinit(IO_CACHE *cache,
-                                                       FILE *file,
-                                                       bool flush_stream)
+                                                       FILE *file)
 {
   return         
     my_b_copy_to_file(cache, file) ||
-    (flush_stream ? (fflush(file) || ferror(file)) : 0) ||
     reinit_io_cache(cache, WRITE_CACHE, 0, FALSE, TRUE);
 }
 
@@ -4945,281 +4159,8 @@ private:
 bool slave_execute_deferred_events(THD *thd);
 #endif
 
-int append_query_string(THD *thd, const CHARSET_INFO *csinfo,
+int append_query_string(THD *thd, CHARSET_INFO *csinfo,
                         String const *from, String *to);
-bool event_checksum_test(uchar *buf, ulong event_len, uint8 alg);
-uint8 get_checksum_alg(const char* buf, ulong len);
-extern TYPELIB binlog_checksum_typelib;
-
-class Gtid_log_event : public Log_event
-{
-public:
-#ifndef MYSQL_CLIENT
-  /**
-    Create a new event using the GTID from the given Gtid_specification,
-    or from @@SESSION.GTID_NEXT if spec==NULL.
-  */
-  Gtid_log_event(THD *thd_arg, bool using_trans,
-                 const Gtid_specification *spec= NULL);
-#endif
-
-#ifndef MYSQL_CLIENT
-  int pack_info(Protocol*);
-#endif
-
-  Gtid_log_event(const char *buffer, uint event_len,
-                 const Format_description_log_event *descr_event);
-
-  virtual ~Gtid_log_event() {}
-
-  Log_event_type get_type_code()
-  {
-    DBUG_ENTER("Gtid_log_event::get_type_code()");
-    Log_event_type ret= (spec.type == ANONYMOUS_GROUP ?
-                         ANONYMOUS_GTID_LOG_EVENT : GTID_LOG_EVENT);
-    DBUG_PRINT("info", ("code=%d=%s", ret, get_type_str(ret)));
-    DBUG_RETURN(ret);
-  }
-
-  int get_data_size() { return POST_HEADER_LENGTH; }
-
-private:
-  /// Used internally by both print() and pack_info().
-  size_t to_string(char *buf) const;
-
-public:
-#ifdef MYSQL_CLIENT
-  void print(FILE *file, PRINT_EVENT_INFO *print_event_info);
-#endif
-#ifdef MYSQL_SERVER
-  bool write_data_header(IO_CACHE *file);
-#endif
-
-#if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
-  int do_apply_event(Relay_log_info const *rli);
-  int do_update_pos(Relay_log_info *rli);
-#endif
-
-  /**
-    Return the group type for this Gtid_log_event: this can be
-    either ANONYMOUS_GROUP, AUTOMATIC_GROUP, or GTID_GROUP.
-  */
-  enum_group_type get_type() const { return spec.type; }
-  bool is_valid() const { return true; }
-
-  /**
-    Return the SID for this GTID.  The SID is shared with the
-    Log_event so it should not be modified.
-  */
-  const rpl_sid* get_sid() const { return &sid; }
-  /**
-    Return the SIDNO relative to the global sid_map for this GTID.
-
-    This requires a lookup and possibly even update of global_sid_map,
-    hence global_sid_lock must be held.  If global_sid_lock is not
-    held, the caller must pass need_lock=true.  If there is an error
-    (e.g. out of memory) while updating global_sid_map, this function
-    returns a negative number.
-
-    @param need_lock If true, the read lock on global_sid_lock is
-    acquired and released inside this function; if false, the read
-    lock or write lock must be held prior to calling this function.
-    @retval SIDNO if successful
-    @retval negative if adding SID to global_sid_map causes an error.
-  */
-  rpl_sidno get_sidno(bool need_lock)
-  {
-    if (spec.gtid.sidno < 0)
-    {
-      if (need_lock)
-        global_sid_lock->rdlock();
-      else
-        global_sid_lock->assert_some_lock();
-      spec.gtid.sidno= global_sid_map->add_sid(sid);
-      if (need_lock)
-        global_sid_lock->unlock();
-    }
-    return spec.gtid.sidno;
-  }
-  /**
-    Return the SIDNO relative to the given Sid_map for this GTID.
-
-    This assumes that the Sid_map is local to the thread, and thus
-    does not use locks.
-
-    @param sid_map The sid_map to use.
-    @retval SIDNO if successful.
-    @negative if adding SID to sid_map causes an error.
-  */
-  rpl_sidno get_sidno(Sid_map *sid_map)
-  {
-    return sid_map->add_sid(sid);
-  }
-  /// Return the GNO for this GTID.
-  rpl_gno get_gno() const { return spec.gtid.gno; }
-  /// Return true if this is the last group of the transaction, else false.
-  bool get_commit_flag() const { return commit_flag; }
-
-  /// string holding the text "SET @@GLOBAL.GTID_NEXT = '"
-  static const char *SET_STRING_PREFIX;
-private:
-  /// Length of SET_STRING_PREFIX
-  static const size_t SET_STRING_PREFIX_LENGTH= 26;
-  /// The maximal length of the entire "SET ..." query.
-  static const size_t MAX_SET_STRING_LENGTH= SET_STRING_PREFIX_LENGTH +
-    rpl_sid::TEXT_LENGTH + 1 + MAX_GNO_TEXT_LENGTH + 1;
-
-  /// Length of the commit_flag in event encoding
-  static const int ENCODED_FLAG_LENGTH= 1;
-  /// Length of SID in event encoding
-  static const int ENCODED_SID_LENGTH= rpl_sid::BYTE_LENGTH;
-  /// Length of GNO in event encoding
-  static const int ENCODED_GNO_LENGTH= 8;
-
-public:
-  /// Total length of post header
-  static const int POST_HEADER_LENGTH=
-    ENCODED_FLAG_LENGTH + ENCODED_SID_LENGTH + ENCODED_GNO_LENGTH;
-
-private:
-  /**
-    Internal representation of the GTID.  The SIDNO will be
-    uninitialized (value -1) until the first call to get_sidno(bool).
-  */
-  Gtid_specification spec;
-  /// SID for this GTID.
-  rpl_sid sid;
-  /// True if this is the last group of the transaction, false otherwise.
-  bool commit_flag;
-};
-
-
-class Previous_gtids_log_event : public Log_event
-{
-public:
-#ifndef MYSQL_CLIENT
-  Previous_gtids_log_event(const Gtid_set *set);
-#endif
-
-#ifndef MYSQL_CLIENT
-  int pack_info(Protocol*);
-#endif
-
-  Previous_gtids_log_event(const char *buffer, uint event_len,
-                           const Format_description_log_event *descr_event);
-  virtual ~Previous_gtids_log_event() {}
-
-  Log_event_type get_type_code() { return PREVIOUS_GTIDS_LOG_EVENT; }
-
-  bool is_valid() const { return buf != NULL; }
-  int get_data_size() { return buf_size; }
-
-#ifdef MYSQL_CLIENT
-  void print(FILE *file, PRINT_EVENT_INFO *print_event_info);
-#endif
-#ifdef MYSQL_SERVER
-  bool write(IO_CACHE* file)
-  {
-    if (DBUG_EVALUATE_IF("skip_writing_previous_gtids_log_event", 1, 0))
-    {
-      DBUG_PRINT("info", ("skip writing Previous_gtids_log_event because of debug option 'skip_writing_previous_gtids_log_event'"));
-      return false;
-    }
-
-    if (DBUG_EVALUATE_IF("write_partial_previous_gtids_log_event", 1, 0))
-    {
-      DBUG_PRINT("info", ("writing partial Previous_gtids_log_event because of debug option 'write_partial_previous_gtids_log_event'"));
-      return (Log_event::write_header(file, get_data_size()) ||
-              Log_event::write_data_header(file));
-    }
-  
-    return (Log_event::write_header(file, get_data_size()) ||
-            Log_event::write_data_header(file) ||
-            write_data_body(file) ||
-            Log_event::write_footer(file));
-  }
-  bool write_data_body(IO_CACHE *file);
-#endif
-
-  /// Return the encoded buffer, or NULL on error.
-  const uchar *get_buf() { return buf; }
-  /**
-    Return the formatted string, or NULL on error.
-
-    The string is allocated using my_malloc and it is the
-    responsibility of the caller to free it.
-  */
-  char *get_str(size_t *length,
-                const Gtid_set::String_format *string_format) const;
-  /// Add all GTIDs from this event to the given Gtid_set.
-  int add_to_set(Gtid_set *gtid_set) const;
-  /*
-    Previous Gtid Log events should always be skipped
-    there is nothing to apply there, whether it is
-    relay log's (generated on Slave) or it is binary log's
-    (generated on Master, copied to slave as relay log).
-    Also, we should not increment slave_skip_counter
-    for this event, hence return EVENT_SKIP_IGNORE.
-   */
-  enum_skip_reason do_shall_skip(Relay_log_info *rli)
-  {
-    return EVENT_SKIP_IGNORE;
-  }
-
-#if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
-  int do_apply_event(Relay_log_info const *rli) { return 0; }
-  int do_update_pos(Relay_log_info *rli);
-#endif
-
-private:
-  int buf_size;
-  const uchar *buf;
-};
-
-inline bool is_gtid_event(Log_event* evt)
-{
-  return (evt->get_type_code() == GTID_LOG_EVENT ||
-          evt->get_type_code() == ANONYMOUS_GTID_LOG_EVENT);
-}
-
-inline ulong version_product(const uchar* version_split)
-{
-  return ((version_split[0] * 256 + version_split[1]) * 256
-          + version_split[2]);
-}
-
-/**
-   Splits server 'version' string into three numeric pieces stored
-   into 'split_versions':
-   X.Y.Zabc (X,Y,Z numbers, a not a digit) -> {X,Y,Z}
-   X.Yabc -> {X,Y,0}
-*/
-inline void do_server_version_split(char* version, uchar split_versions[3])
-{
-  char *p= version, *r;
-  ulong number;
-  for (uint i= 0; i<=2; i++)
-  {
-    number= strtoul(p, &r, 10);
-    /*
-      It is an invalid version if any version number greater than 255 or
-      first number is not followed by '.'.
-    */
-    if (number < 256 && (*r == '.' || i != 0))
-      split_versions[i]= (uchar)number;
-    else
-    {
-      split_versions[0]= 0;
-      split_versions[1]= 0;
-      split_versions[2]= 0;
-      break;
-    }
-
-    p= r;
-    if (*r == '.')
-      p++; // skip the dot
-  }
-}
 
 #ifdef MYSQL_SERVER
 /*
@@ -5235,6 +4176,7 @@ size_t my_strmov_quoted_identifier(char *buffer, const char* identifier);
 size_t my_strmov_quoted_identifier_helper(int q, char *buffer,
                                           const char* identifier,
                                           uint length);
+
 
 /**
   @} (end of group Replication)

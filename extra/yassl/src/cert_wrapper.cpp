@@ -90,7 +90,7 @@ opaque* x509::use_buffer()
 
 //CertManager
 CertManager::CertManager()
-    : peerX509_(0), selfX509_(0), verifyPeer_(false), verifyNone_(false), failNoCert_(false),
+    : peerX509_(0), verifyPeer_(false), verifyNone_(false), failNoCert_(false),
       sendVerify_(false), sendBlankCert_(false), verifyCallback_(0)
 {}
 
@@ -98,7 +98,6 @@ CertManager::CertManager()
 CertManager::~CertManager()
 {
     ysDelete(peerX509_);
-    ysDelete(selfX509_);
 
     STL::for_each(signers_.begin(), signers_.end(), del_ptr_zero()) ;
 
@@ -220,12 +219,6 @@ X509* CertManager::get_peerX509() const
 }
 
 
-X509* CertManager::get_selfX509() const
-{
-    return selfX509_;
-}
-
-
 SignatureAlgorithm CertManager::get_peerKeyType() const
 {
     return peerKeyType_;
@@ -296,18 +289,14 @@ int CertManager::Validate()
 
         size_t iSz = strlen(cert.GetIssuer()) + 1;
         size_t sSz = strlen(cert.GetCommonName()) + 1;
-        ASN1_STRING beforeDate, afterDate;
-        beforeDate.data= (unsigned char *) cert.GetBeforeDate();
-        beforeDate.type= cert.GetBeforeDateType();
-        beforeDate.length= strlen((char *) beforeDate.data) + 1;
-        afterDate.data= (unsigned char *) cert.GetAfterDate();
-        afterDate.type= cert.GetAfterDateType();
-        afterDate.length= strlen((char *) afterDate.data) + 1;
+        int bSz = (int)strlen(cert.GetBeforeDate()) + 1;
+        int aSz = (int)strlen(cert.GetAfterDate()) + 1;
         peerX509_ = NEW_YS X509(cert.GetIssuer(), iSz, cert.GetCommonName(),
-                                sSz, &beforeDate, &afterDate,
-                                cert.GetIssuerCnStart(), cert.GetIssuerCnLength(),
-                                cert.GetSubjectCnStart(), cert.GetSubjectCnLength()
-                                );
+                                sSz, cert.GetBeforeDate(), bSz,
+                             cert.GetAfterDate(), aSz,
+                             cert.GetIssuerCnStart(), cert.GetIssuerCnLength(),
+                             cert.GetSubjectCnStart(), cert.GetSubjectCnLength()
+                            );
 
         if (err == TaoCrypt::SIG_OTHER_E && verifyCallback_) {
             X509_STORE_CTX store;
@@ -342,20 +331,6 @@ int CertManager::SetPrivateKey(const x509& key)
             keyType_ = rsa_sa_algo;
         else
             keyType_ = dsa_sa_algo;
-
-        size_t iSz = strlen(cd.GetIssuer()) + 1;
-        size_t sSz = strlen(cd.GetCommonName()) + 1;
-        ASN1_STRING beforeDate, afterDate;
-        beforeDate.data= (unsigned char *) cd.GetBeforeDate();
-        beforeDate.type= cd.GetBeforeDateType();
-        beforeDate.length= strlen((char *) beforeDate.data) + 1;
-        afterDate.data= (unsigned char *) cd.GetAfterDate();
-        afterDate.type= cd.GetAfterDateType();
-        afterDate.length= strlen((char *) afterDate.data) + 1;
-        selfX509_ = NEW_YS X509(cd.GetIssuer(), iSz, cd.GetCommonName(),
-                                sSz, &beforeDate, &afterDate,
-                                cd.GetIssuerCnStart(), cd.GetIssuerCnLength(),
-                                cd.GetSubjectCnStart(), cd.GetSubjectCnLength());
     }
     return 0;
 }
@@ -372,7 +347,8 @@ void CertManager::setPeerX509(X509* x)
     ASN1_STRING* after  = x->GetAfter();
 
     peerX509_ = NEW_YS X509(issuer->GetName(), issuer->GetLength(),
-        subject->GetName(), subject->GetLength(), before, after,
+        subject->GetName(), subject->GetLength(), (const char*) before->data,
+        before->length, (const char*) after->data, after->length,
         issuer->GetCnPosition(), issuer->GetCnLength(),
         subject->GetCnPosition(), subject->GetCnLength());
 }

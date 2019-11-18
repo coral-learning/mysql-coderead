@@ -14,14 +14,9 @@
 # source include/binlog_inject_error.inc;
 #
 
---disable_query_log
-SET @old_debug = @@global.debug;
-SET GLOBAL debug=CONCAT(IF(LENGTH(@old_debug) > 9, CONCAT(@old_debug, ':'), ''), 'd,injecting_fault_writing');
---enable_query_log
+SET GLOBAL debug='d,injecting_fault_writing';
 --echo $query;
 --replace_regex /(errno: .*)/(errno: #)/
 --error ER_ERROR_ON_WRITE
 --eval $query
---disable_query_log
-SET GLOBAL debug=@old_debug;
---enable_query_log
+SET GLOBAL debug='';

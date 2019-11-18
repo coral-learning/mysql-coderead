@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2012, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -48,11 +48,6 @@
 #define HA_OPEN_COPY			256     /* Open copy (for repair) */
 /* Internal temp table, used for temporary results */
 #define HA_OPEN_INTERNAL_TABLE          512
-/**
-  Don't connect any share_psi to the handler, since it is a partition.
-  It would not be used, since partitions don't call unbind_psi()/rebind_psi().
-*/
-#define HA_OPEN_NO_PSI_CALL             1024    /* Don't call/connect PSI */
 
 /* The following is parameter to ha_rkey() how to use key */
 
@@ -84,11 +79,11 @@ enum ha_rkey_function {
   HA_READ_PREFIX,                 /* Key which as same prefix */
   HA_READ_PREFIX_LAST,            /* Last key with the same prefix */
   HA_READ_PREFIX_LAST_OR_PREV,    /* Last or prev key with the same prefix */
-  HA_READ_MBR_CONTAIN,            /* Minimum Bounding Rectangle contains */
-  HA_READ_MBR_INTERSECT,          /* Minimum Bounding Rectangle intersect */
-  HA_READ_MBR_WITHIN,             /* Minimum Bounding Rectangle within */
-  HA_READ_MBR_DISJOINT,           /* Minimum Bounding Rectangle disjoint */
-  HA_READ_MBR_EQUAL               /* Minimum Bounding Rectangle equal */
+  HA_READ_MBR_CONTAIN,
+  HA_READ_MBR_INTERSECT,
+  HA_READ_MBR_WITHIN,
+  HA_READ_MBR_DISJOINT,
+  HA_READ_MBR_EQUAL
 };
 
 	/* Key algorithm types */
@@ -199,14 +194,7 @@ enum ha_extra_function {
   HA_EXTRA_ADD_CHILDREN_LIST,
   HA_EXTRA_ATTACH_CHILDREN,
   HA_EXTRA_IS_ATTACHED_CHILDREN,
-  HA_EXTRA_DETACH_CHILDREN,
-  /*
-    Prepare table for export
-    (e.g. quiesce the table and write table metadata).
-  */
-  HA_EXTRA_EXPORT,
-  /** Do secondary sort by handler::ref (rowid) after key sort. */
-  HA_EXTRA_SECONDARY_SORT_ROWID
+  HA_EXTRA_DETACH_CHILDREN
 };
 
 /* Compatible option, to be deleted in 6.0 */
@@ -318,18 +306,6 @@ enum ha_base_keytype {
 #define HA_OPTION_RELIES_ON_SQL_LAYER   512
 #define HA_OPTION_NULL_FIELDS		1024
 #define HA_OPTION_PAGE_CHECKSUM		2048
-/** STATS_PERSISTENT=1 has been specified in the SQL command (either CREATE
-or ALTER TABLE). Table and index statistics that are collected by the
-storage engine and used by the optimizer for query optimization will be
-stored on disk and will not change after a server restart. */
-#define HA_OPTION_STATS_PERSISTENT	4096
-/** STATS_PERSISTENT=0 has been specified in CREATE/ALTER TABLE. Statistics
-for the table will be wiped away on server shutdown and new ones recalculated
-after the server is started again. If none of HA_OPTION_STATS_PERSISTENT or
-HA_OPTION_NO_STATS_PERSISTENT is set, this means that the setting is not
-explicitly set at table level and the corresponding table will use whatever
-is the global server default. */
-#define HA_OPTION_NO_STATS_PERSISTENT	8192
 #define HA_OPTION_TEMP_COMPRESS_RECORD	((uint) 16384)	/* set by isamchk */
 #define HA_OPTION_READ_ONLY_DATA	((uint) 32768)	/* Set by isamchk */
 
@@ -343,7 +319,6 @@ is the global server default. */
 #define HA_CREATE_PAGE_CHECKSUM	32
 #define HA_CREATE_DELAY_KEY_WRITE 64
 #define HA_CREATE_RELIES_ON_SQL_LAYER 128
-#define HA_CREATE_INTERNAL_TABLE 256
 
 /*
   The following flags (OR-ed) are passed to handler::info() method.
@@ -400,11 +375,11 @@ is the global server default. */
   Do not add error numbers before HA_ERR_FIRST.
   If necessary to add lower numbers, change HA_ERR_FIRST accordingly.
 */
-#define HA_ERR_FIRST            120	/* Copy of first error nr.*/
+#define HA_ERR_FIRST            120     /* Copy of first error nr.*/
 
 #define HA_ERR_KEY_NOT_FOUND	120	/* Didn't find key on read or update */
 #define HA_ERR_FOUND_DUPP_KEY	121	/* Dupplicate key on write */
-#define HA_ERR_INTERNAL_ERROR   122	/* Internal error */
+#define HA_ERR_INTERNAL_ERROR   122     /* Internal error */
 #define HA_ERR_RECORD_CHANGED	123	/* Uppdate with is recoverable */
 #define HA_ERR_WRONG_INDEX	124	/* Wrong index given to function */
 #define HA_ERR_CRASHED		126	/* Indexfile is crashed */
@@ -423,7 +398,7 @@ is the global server default. */
 #define HA_WRONG_CREATE_OPTION	140	/* Wrong create option */
 #define HA_ERR_FOUND_DUPP_UNIQUE 141	/* Dupplicate unique on write */
 #define HA_ERR_UNKNOWN_CHARSET	 142	/* Can't open charset */
-#define HA_ERR_WRONG_MRG_TABLE_DEF 143	/* conflicting tables in MERGE */
+#define HA_ERR_WRONG_MRG_TABLE_DEF 143  /* conflicting tables in MERGE */
 #define HA_ERR_CRASHED_ON_REPAIR 144	/* Last (automatic?) repair failed */
 #define HA_ERR_CRASHED_ON_USAGE  145	/* Table must be repaired */
 #define HA_ERR_LOCK_WAIT_TIMEOUT 146
@@ -435,16 +410,16 @@ is the global server default. */
 #define HA_ERR_ROW_IS_REFERENCED 152     /* Cannot delete a parent row */
 #define HA_ERR_NO_SAVEPOINT	 153     /* No savepoint with that name */
 #define HA_ERR_NON_UNIQUE_BLOCK_SIZE 154 /* Non unique key block size */
-#define HA_ERR_NO_SUCH_TABLE     155     /* The table does not exist in engine */
-#define HA_ERR_TABLE_EXIST       156     /* The table existed in storage engine */
-#define HA_ERR_NO_CONNECTION     157     /* Could not connect to storage engine */
+#define HA_ERR_NO_SUCH_TABLE     155  /* The table does not exist in engine */
+#define HA_ERR_TABLE_EXIST       156  /* The table existed in storage engine */
+#define HA_ERR_NO_CONNECTION     157  /* Could not connect to storage engine */
 /* NULLs are not supported in spatial index */
 #define HA_ERR_NULL_IN_SPATIAL   158
-#define HA_ERR_TABLE_DEF_CHANGED 159     /* The table changed in storage engine */
+#define HA_ERR_TABLE_DEF_CHANGED 159  /* The table changed in storage engine */
 /* There's no partition in table for given value */
 #define HA_ERR_NO_PARTITION_FOUND 160
-#define HA_ERR_RBR_LOGGING_FAILED 161    /* Row-based binlogging of row failed */
-#define HA_ERR_DROP_INDEX_FK      162    /* Index needed in foreign key constr */
+#define HA_ERR_RBR_LOGGING_FAILED 161  /* Row-based binlogging of row failed */
+#define HA_ERR_DROP_INDEX_FK      162  /* Index needed in foreign key constr */
 /*
   Upholding foreign key constraints would lead to a duplicate key error
   in some other table.
@@ -464,29 +439,18 @@ is the global server default. */
                                             statement */
 #define HA_ERR_CORRUPT_EVENT      171    /* The event was corrupt, leading to
                                             illegal data being read */
-#define HA_ERR_NEW_FILE	          172    /* New file format */
+#define HA_ERR_NEW_FILE	          172	 /* New file format */
 #define HA_ERR_ROWS_EVENT_APPLY   173    /* The event could not be processed
                                             no other hanlder error happened */
 #define HA_ERR_INITIALIZATION     174    /* Error during initialization */
-#define HA_ERR_FILE_TOO_SHORT	  175    /* File too short */
-#define HA_ERR_WRONG_CRC	  176    /* Wrong CRC on page */
+#define HA_ERR_FILE_TOO_SHORT	  175	 /* File too short */
+#define HA_ERR_WRONG_CRC	  176	 /* Wrong CRC on page */
 #define HA_ERR_TOO_MANY_CONCURRENT_TRXS 177 /*Too many active concurrent transactions */
-/* There's no explicitly listed partition in table for the given value */
-#define HA_ERR_NOT_IN_LOCK_PARTITIONS 178
-#define HA_ERR_INDEX_COL_TOO_LONG 179    /* Index column length exceeds limit */
-#define HA_ERR_INDEX_CORRUPT      180    /* InnoDB index corrupted */
-#define HA_ERR_UNDO_REC_TOO_BIG   181    /* Undo log record too big */
-#define HA_FTS_INVALID_DOCID      182    /* Invalid InnoDB Doc ID */
-#define HA_ERR_TABLE_IN_FK_CHECK  183    /* Table being used in foreign key check */
-#define HA_ERR_TABLESPACE_EXISTS  184    /* The tablespace existed in storage engine */
-#define HA_ERR_TOO_MANY_FIELDS    185    /* Table has too many columns */
-#define HA_ERR_ROW_IN_WRONG_PARTITION 186 /* Row in wrong partition */
-#define HA_ERR_INNODB_READ_ONLY   187    /* InnoDB is in read only mode. */
-#define HA_ERR_FTS_EXCEED_RESULT_CACHE_LIMIT  188 /* FTS query exceeds result cache limit */
-#define HA_ERR_TEMP_FILE_WRITE_FAILURE	189	/* Temporary file write failure */
-#define HA_ERR_INNODB_FORCED_RECOVERY 190	/* Innodb is in force recovery mode */
-#define HA_ERR_FTS_TOO_MANY_WORDS_IN_PHRASE	191 /* Too many words in a phrase */
-#define HA_ERR_LAST               191    /* Copy of last error nr */
+#define HA_ERR_INDEX_COL_TOO_LONG 178	 /* Index column length exceeds limit */
+#define HA_ERR_INDEX_CORRUPT      179	 /* Index corrupted */
+#define HA_ERR_UNDO_REC_TOO_BIG   180    /* Undo log record too big */
+#define HA_ERR_TABLE_IN_FK_CHECK  181    /* Table being used in foreign key check */
+#define HA_ERR_LAST               181    /* Copy of last error nr */
 
 /* Number of different errors */
 #define HA_ERR_ERRORS            (HA_ERR_LAST - HA_ERR_FIRST + 1)
@@ -541,6 +505,7 @@ typedef ulong key_part_map;
 #define HA_STATE_BUFF_SAVED	512	/* If current keybuff is info->buff */
 #define HA_STATE_ROW_CHANGED	1024	/* To invalide ROW cache */
 #define HA_STATE_EXTEND_BLOCK	2048
+#define HA_STATE_RNEXT_SAME	4096	/* rnext_same occupied lastkey2 */
 
 /* myisampack expects no more than 32 field types. */
 enum en_fieldtype {
@@ -556,40 +521,15 @@ enum data_file_type {
 
 /* For key ranges */
 
-enum key_range_flag {
-  NO_MIN_RANGE=      1 << 0,                    ///< from -inf
-  NO_MAX_RANGE=      1 << 1,                    ///< to +inf
-  /*  X < key, i.e. not including the left endpoint */
-  NEAR_MIN=          1 << 2,
-  /* X > key, i.e. not including the right endpoint */
-  NEAR_MAX=          1 << 3,
-  /*
-    This flag means that index is a unique index, and the interval is
-    equivalent to "AND(keypart_i = const_i)", where all of const_i are
-    not NULLs.
-  */
-  UNIQUE_RANGE=      1 << 4,
-  /*
-    This flag means that the interval is equivalent to 
-    "AND(keypart_i = const_i)", where not all key parts may be used 
-    but all of const_i are not NULLs.
-  */
-  EQ_RANGE=          1 << 5,
-  /*
-    This flag has the same meaning as UNIQUE_RANGE, except that for at
-    least one keypart the condition is "keypart IS NULL".
-  */
-  NULL_RANGE=        1 << 6,
-  GEOM_FLAG=         1 << 7,                     ///< GIS
-  /* Deprecated, currently used only by NDB at row retrieval */
-  SKIP_RANGE=        1 << 8,
-  /* 
-    Used together with EQ_RANGE to indicate that index statistics
-    should be used instead of sampling the index.
-  */
-  USE_INDEX_STATISTICS= 1 << 9
-};
-
+#define NO_MIN_RANGE	1
+#define NO_MAX_RANGE	2
+#define NEAR_MIN	4
+#define NEAR_MAX	8
+#define UNIQUE_RANGE	16
+#define EQ_RANGE	32
+#define NULL_RANGE	64
+#define GEOM_FLAG      128
+#define SKIP_RANGE     256
 
 typedef struct st_key_range
 {

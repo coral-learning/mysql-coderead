@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,16 +12,16 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include <ndb_global.h>
+
+#include <NdbOut.hpp>
 
 #include "Filename.hpp"
 #include "ErrorHandlingMacros.hpp"
 #include "RefConvert.hpp"
 #include "DebuggerNames.hpp"
-#include "Ndbfs.hpp"
 
 #include <signaldata/FsOpenReq.hpp>
 
@@ -47,10 +47,9 @@ Filename::~Filename(){
 }
 
 void 
-Filename::set(Ndbfs* fs,
-              BlockReference blockReference,
-              const Uint32 filenumber[4], bool dir,
-              SegmentedSectionPtr ptr)
+Filename::set(Filename::NameSpec& spec,
+	      BlockReference blockReference, 
+	      const Uint32 filenumber[4], bool dir) 
 {
   char buf[PATH_MAX];
 
@@ -61,14 +60,14 @@ Filename::set(Ndbfs* fs,
   if (version == 2)
   {
     sz = BaseString::snprintf(theName, sizeof(theName), "%s", 
-                              fs->get_base_path(FsOpenReq::BP_BACKUP).c_str());
-    m_base_name = theName + fs->get_base_path(FsOpenReq::BP_BACKUP).length();
+         spec.backup_path.c_str());
+    m_base_name = theName + spec.backup_path.length();
   }
   else
   {
     sz = BaseString::snprintf(theName, sizeof(theName), "%s", 
-                              fs->get_base_path(FsOpenReq::BP_FS).c_str());
-    m_base_name = theName + fs->get_base_path(FsOpenReq::BP_FS).length();
+         spec.fs_path.c_str());
+    m_base_name = theName + spec.fs_path.length();
   }
   
   switch(version){
@@ -85,7 +84,7 @@ Filename::set(Ndbfs* fs,
     }
     
     {
-      const char* blockName = getBlockName( refToMain(blockReference) );
+      const char* blockName = getBlockName( refToBlock(blockReference) );
       if (blockName == NULL){
 	ERROR_SET(ecError, NDBD_EXIT_AFS_PARAMETER,"","No Block Name");
 	return;
@@ -122,14 +121,14 @@ Filename::set(Ndbfs* fs,
     const Uint32 nodeId = FsOpenReq::v2_getNodeId(filenumber);
     const Uint32 count = FsOpenReq::v2_getCount(filenumber);
     
-    BaseString::snprintf(buf, sizeof(buf), "BACKUP%sBACKUP-%u%s",
+    BaseString::snprintf(buf, sizeof(buf), "BACKUP%sBACKUP-%d%s",
 	     DIR_SEPARATOR, seq, DIR_SEPARATOR); 
     strcat(theName, buf);
     if(count == 0xffffffff) {
-      BaseString::snprintf(buf, sizeof(buf), "BACKUP-%u.%d",
+      BaseString::snprintf(buf, sizeof(buf), "BACKUP-%d.%d",
 	       seq, nodeId); strcat(theName, buf);
     } else {
-      BaseString::snprintf(buf, sizeof(buf), "BACKUP-%u-%d.%d",
+      BaseString::snprintf(buf, sizeof(buf), "BACKUP-%d-%d.%d",
 	       seq, count, nodeId); strcat(theName, buf);
     }
     break;
@@ -146,45 +145,13 @@ Filename::set(Ndbfs* fs,
     strcat(theName, buf);
   }
     break;
-  case 4:
-  {
-    char buf[PATH_MAX];
-    copy((Uint32*)&buf[0], ptr);
-    if(buf[0] == DIR_SEPARATOR[0])
-    {
-      strncpy(theName, buf, PATH_MAX);
-      m_base_name = theName;
-    }
-    else
-    {
-#ifdef NDB_WIN32
-      char* b= buf;
-      while((b= strchr(b, '/')) && b)
-      {
-        *b= '\\';
-      }
-#endif
-      Uint32 bp = FsOpenReq::v4_getBasePath(filenumber);
-      BaseString::snprintf(theName, sizeof(theName), "%s%s",
-               fs->get_base_path(bp).c_str(), buf);
-      m_base_name = theName + fs->get_base_path(bp).length();
-    }
-    return; // No extension
-  }
   case 5:
   {
     Uint32 tableId = FsOpenReq::v5_getTableId(filenumber);
     Uint32 lcpNo = FsOpenReq::v5_getLcpNo(filenumber);
     Uint32 fragId = FsOpenReq::v5_getFragmentId(filenumber);
-    BaseString::snprintf(buf, sizeof(buf), "LCP%s%d%sT%dF%d", DIR_SEPARATOR, lcpNo, DIR_SEPARATOR, tableId, fragId);
+    BaseString::snprintf(buf, sizeof(buf), "LCP/%d/T%dF%d", lcpNo, tableId, fragId);
     strcat(theName, buf);
-    break;
-  }
-  case 6:
-  {
-    Uint32 bp = FsOpenReq::v5_getLcpNo(filenumber);
-    sz = BaseString::snprintf(theName, sizeof(theName), "%s",
-                              fs->get_base_path(bp).c_str());
     break;
   }
   default:
@@ -203,5 +170,23 @@ Filename::set(Ndbfs* fs,
 	break;
       }
     }
+  }
+}
+
+void 
+Filename::set(Filename::NameSpec& spec,
+	      SegmentedSectionPtr ptr, class SectionSegmentPool& pool)
+{
+  char buf[PATH_MAX];
+  copy((Uint32*)&buf[0], ptr);
+  if(buf[0] == DIR_SEPARATOR[0])
+  {
+    strncpy(theName, buf, PATH_MAX);
+    m_base_name = theName;
+  }
+  else 
+  {
+    snprintf(theName, sizeof(theName), "%s%s", spec.fs_path.c_str(), buf);
+    m_base_name = theName + spec.fs_path.length();
   }
 }

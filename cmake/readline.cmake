@@ -1,4 +1,5 @@
-# Copyright (c) 2009, 2013, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2009, 2010 Sun Microsystems, Inc.
+# Use is subject to license terms.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -12,9 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA 
-
-# cmake -DWITH_EDITLINE=system|bundled
-# bundled is the default
 
 MACRO (MYSQL_CHECK_MULTIBYTE)
   CHECK_INCLUDE_FILE(wctype.h HAVE_WCTYPE_H)
@@ -97,15 +95,6 @@ MACRO (FIND_CURSES)
    SET(CURSES_LIBRARY "curses" CACHE INTERNAL "" FORCE)
    SET(CURSES_CURSES_LIBRARY "curses" CACHE INTERNAL "" FORCE)
  ENDIF()
- IF(CMAKE_SYSTEM_NAME MATCHES "SunOS")
-   # CMake generates /lib/64/libcurses.so -R/lib/64
-   # The result is we cannot find
-   # /opt/studio12u2/lib/stlport4/v9/libstlport.so.1
-   # at runtime
-   SET(CURSES_LIBRARY "curses" CACHE INTERNAL "" FORCE)
-   SET(CURSES_CURSES_LIBRARY "curses" CACHE INTERNAL "" FORCE)
-   MESSAGE(STATUS "CURSES_LIBRARY ${CURSES_LIBRARY}")
- ENDIF()
 
  IF(CMAKE_SYSTEM_NAME MATCHES "Linux")
    # -Wl,--as-needed breaks linking with -lcurses, e.g on Fedora 
@@ -120,93 +109,122 @@ MACRO (FIND_CURSES)
  ENDIF()
 ENDMACRO()
 
-MACRO (MYSQL_USE_BUNDLED_EDITLINE)
+MACRO (MYSQL_USE_BUNDLED_READLINE)
+  SET(USE_NEW_READLINE_INTERFACE 1)
+  SET(HAVE_HIST_ENTRY)
+  SET(USE_LIBEDIT_INTERFACE)
+  SET(READLINE_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/cmd-line-utils)
+  SET(READLINE_LIBRARY readline)
+  FIND_CURSES()
+  ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/cmd-line-utils/readline)
+ENDMACRO()
+
+MACRO (MYSQL_USE_BUNDLED_LIBEDIT)
   SET(USE_LIBEDIT_INTERFACE 1)
   SET(HAVE_HIST_ENTRY 1)
-  SET(EDITLINE_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/cmd-line-utils/libedit/editline)
-  SET(EDITLINE_LIBRARY edit)
+  SET(READLINE_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/cmd-line-utils/libedit)
+  SET(READLINE_LIBRARY edit)
   FIND_CURSES()
   ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/cmd-line-utils/libedit)
 ENDMACRO()
 
-MACRO (FIND_SYSTEM_EDITLINE)
-  FIND_PATH(FOUND_EDITLINE_READLINE
-    NAMES editline/readline.h
-  )
-  IF(FOUND_EDITLINE_READLINE)
-    SET(EDITLINE_INCLUDE_DIR "${FOUND_EDITLINE_READLINE}/editline")
-  ELSE()
-    # Different path on FreeBSD
-    FIND_PATH(FOUND_EDIT_READLINE_READLINE
-      NAMES edit/readline/readline.h
-    )
-    IF(FOUND_EDIT_READLINE_READLINE)
-      SET(EDITLINE_INCLUDE_DIR "${FOUND_EDIT_READLINE_READLINE}/edit/readline")
-    ENDIF()
-  ENDIF()
 
-  FIND_LIBRARY(EDITLINE_LIBRARY
-    NAMES
-    edit
-  )
-  MARK_AS_ADVANCED(EDITLINE_INCLUDE_DIR EDITLINE_LIBRARY)
-
-  MESSAGE(STATUS "EDITLINE_INCLUDE_DIR ${EDITLINE_INCLUDE_DIR}")
-  MESSAGE(STATUS "EDITLINE_LIBRARY ${EDITLINE_LIBRARY}")
+MACRO (MYSQL_FIND_SYSTEM_READLINE name)
+  
+  FIND_PATH(${name}_INCLUDE_DIR readline/readline.h )
+  FIND_LIBRARY(${name}_LIBRARY NAMES ${name})
+  MARK_AS_ADVANCED(${name}_INCLUDE_DIR  ${name}_LIBRARY)
 
   INCLUDE(CheckCXXSourceCompiles)
-  IF(EDITLINE_LIBRARY AND EDITLINE_INCLUDE_DIR)
-    SET(CMAKE_REQUIRED_INCLUDES ${EDITLINE_INCLUDE_DIR})
-    SET(CMAKE_REQUIRED_LIBRARIES ${EDITLINE_LIBRARY})
+  SET(CMAKE_REQUIRES_LIBRARIES ${${name}_LIBRARY})
+
+  IF(${name}_LIBRARY AND ${name}_INCLUDE_DIR)
+    SET(SYSTEM_READLINE_FOUND 1)
+    SET(CMAKE_REQUIRED_LIBRARIES ${${name}_LIBRARY})
     CHECK_CXX_SOURCE_COMPILES("
     #include <stdio.h>
-    #include <readline.h>
+    #include <readline/readline.h>
     int main(int argc, char **argv)
     {
        HIST_ENTRY entry;
        return 0;
     }"
-    EDITLINE_HAVE_HIST_ENTRY)
+    ${name}_HAVE_HIST_ENTRY)
+    
+    CHECK_CXX_SOURCE_COMPILES("
+    #include <stdio.h>
+    #include <readline/readline.h>
+    int main(int argc, char **argv)
+    {
+      char res= *(*rl_completion_entry_function)(0,0);
+      completion_matches(0,0);
+    }"
+    ${name}_USE_LIBEDIT_INTERFACE)
+
 
     CHECK_CXX_SOURCE_COMPILES("
     #include <stdio.h>
-    #include <readline.h>
+    #include <readline/readline.h>
     int main(int argc, char **argv)
     {
-      typedef int MYFunction(const char*, int);
-      MYFunction* myf= rl_completion_entry_function;
-      int res= (myf)(NULL, 0);
-      completion_matches(0,0);
-      return res;
+      rl_completion_func_t *func1= (rl_completion_func_t*)0;
+      rl_compentry_func_t *func2= (rl_compentry_func_t*)0;
     }"
-    EDITLINE_HAVE_COMPLETION)
-
-    IF(EDITLINE_HAVE_COMPLETION)
-      SET(HAVE_HIST_ENTRY ${EDITLINE_HAVE_HIST_ENTRY})
-      SET(USE_LIBEDIT_INTERFACE 1)
-      SET(EDITLINE_FOUND 1)
+    ${name}_USE_NEW_READLINE_INTERFACE)
+    
+    IF(${name}_USE_LIBEDIT_INTERFACE  OR ${name}_USE_NEW_READLINE_INTERFACE)
+      SET(READLINE_LIBRARY ${${name}_LIBRARY})
+      SET(READLINE_INCLUDE_DIR ${${name}_INCLUDE_DIR})
+      SET(HAVE_HIST_ENTRY ${${name}_HAVE_HIST_ENTRY})
+      SET(USE_LIBEDIT_INTERFACE ${${name}_USE_LIBEDIT_INTERFACE})
+      SET(USE_NEW_READLINE_INTERFACE ${${name}_USE_NEW_READLINE_INTERFACE})
+      SET(READLINE_FOUND 1)
     ENDIF()
   ENDIF()
 ENDMACRO()
 
 
-IF (NOT WITH_EDITLINE AND NOT WIN32)
-  SET(WITH_EDITLINE "bundled" CACHE STRING "By default use bundled editline")
-ENDIF()
-
-MACRO (MYSQL_CHECK_EDITLINE)
+MACRO (MYSQL_CHECK_READLINE)
   IF (NOT WIN32)
     MYSQL_CHECK_MULTIBYTE()
-
-    IF(WITH_EDITLINE STREQUAL "bundled") 
-      MYSQL_USE_BUNDLED_EDITLINE()
-    ELSEIF(WITH_EDITLINE STREQUAL "system")
-      FIND_SYSTEM_EDITLINE()
-      IF(NOT EDITLINE_FOUND)
-        MESSAGE(FATAL_ERROR "Cannot find system editline libraries.") 
-      ENDIF()
+    IF(NOT CYGWIN)	
+      SET(WITH_LIBEDIT  ON CACHE BOOL  "Use bundled libedit")
+      SET(WITH_READLINE OFF CACHE BOOL "Use bundled readline")
     ELSE()
-      MESSAGE(FATAL_ERROR "WITH_EDITLINE must be bundled or system")
+      # Bundled libedit does not compile on cygwin, only readline
+      SET(WITH_READLINE OFF CACHE BOOL "Use bundled readline")
+    ENDIF()
+
+    # Handle mutual exclusion of WITH_READLINE/WITH_LIBEDIT variables
+    # We save current setting to recognize when user switched between
+    # WITH_READLINE and WITH_LIBEDIT 
+    IF(WITH_READLINE)
+      IF(NOT SAVE_READLINE_SETTING OR SAVE_READLINE_SETTING MATCHES 
+         "WITH_LIBEDIT")
+        SET(WITH_LIBEDIT OFF CACHE BOOL "Use bundled libedit" FORCE)
+      ENDIF()
+    ELSEIF(WITH_LIBEDIT) 
+      IF(NOT SAVE_READLINE_SETTING OR SAVE_READLINE_SETTING MATCHES 
+         "WITH_READLINE")
+        SET(WITH_READLINE OFF CACHE BOOL "Use bundled readline" FORCE)
+      ENDIF()
+    ENDIF()
+
+    IF(WITH_READLINE)
+     MYSQL_USE_BUNDLED_READLINE()
+     SET(SAVE_READLINE_SETTING WITH_READLINE CACHE INTERNAL "" FORCE)
+    ELSEIF(WITH_LIBEDIT)
+     MYSQL_USE_BUNDLED_LIBEDIT()
+     SET(SAVE_READLINE_SETTING WITH_LIBEDIT CACHE INTERNAL "" FORCE)
+    ELSE()
+      MYSQL_FIND_SYSTEM_READLINE(readline)
+      IF(NOT READLINE_FOUND)
+        MYSQL_FIND_SYSTEM_READLINE(edit)
+        IF(NOT READLINE_FOUND)
+          MESSAGE(FATAL_ERROR "Cannot find system readline or libedit libraries.Use WITH_READLINE or WITH_LIBEDIT")
+        ENDIF()
+      ENDIF()
     ENDIF()
   ENDIF(NOT WIN32)
 ENDMACRO()
+

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002, 2014, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2002, 2013, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -28,8 +28,6 @@
 #include "keycaches.h"
 #include "strfunc.h"
 #include "tztime.h"     // my_tz_find, my_tz_SYSTEM, struct Time_zone
-#include "rpl_gtid.h"
-#include <ctype.h>
 
 /*
   a set of mostly trivial (as in f(X)=X) defines below to make system variable
@@ -53,7 +51,6 @@
 #define ON_CHECK(X) X
 #define ON_UPDATE(X) X
 #define READ_ONLY sys_var::READONLY+
-#define NOT_VISIBLE sys_var::INVISIBLE+
 // this means that Sys_var_charptr initial value was malloc()ed
 #define PREALLOCATED sys_var::ALLOCATED+
 /*
@@ -90,24 +87,21 @@ struct CMD_LINE
 };
 
 /**
-  Sys_var_integer template is used to generate Sys_var_* classes
-  for variables that represent the value as a signed or unsigned integer.
-  They are Sys_var_uint, Sys_var_ulong, Sys_var_harows, Sys_var_ulonglong,
-  and Sys_var_long.
+  Sys_var_unsigned template is used to generate Sys_var_* classes
+  for variables that represent the value as an unsigned integer.
+  They are Sys_var_uint, Sys_var_ulong, Sys_var_harows, Sys_var_ulonglong.
 
   An integer variable has a minimal and maximal values, and a "block_size"
   (any valid value of the variable must be divisible by the block_size).
 
   Class specific constructor arguments: min, max, block_size
-  Backing store: uint, ulong, ha_rows, ulonglong, long, depending on the
-  Sys_var_*
+  Backing store: uint, ulong, ha_rows, ulonglong, depending on the Sys_var_*
 */
-template
-  <typename T, ulong ARGT, enum enum_mysql_show_type SHOWT, bool SIGNED>
-class Sys_var_integer: public sys_var
+template <typename T, ulong ARGT, enum enum_mysql_show_type SHOWT>
+class Sys_var_unsigned: public sys_var
 {
 public:
-  Sys_var_integer(const char *name_arg,
+  Sys_var_unsigned(const char *name_arg,
           const char *comment, int flag_args, ptrdiff_t off, size_t size,
           CMD_LINE getopt,
           T min_val, T max_val, T def_val, uint block_size, PolyLock *lock=0,
@@ -143,80 +137,23 @@ public:
   bool do_check(THD *thd, set_var *var)
   {
     my_bool fixed= FALSE;
-    longlong v;
     ulonglong uv;
+    longlong v;
 
     v= var->value->val_int();
-    if (SIGNED) /* target variable has signed type */
-    {
-      if (var->value->unsigned_flag)
-      {
-        /*
-          Input value is such a large positive number that MySQL used an
-          unsigned item to hold it. When cast to a signed longlong, if the
-          result is negative there is "cycling" and this is incorrect (large
-          positive input value should not end up as a large negative value in
-          the session signed variable to be set); instead, we need to pick the
-          allowed number closest to the positive input value, i.e. pick the
-          biggest allowed positive integer.
-        */
-        if (v < 0)
-          uv= max_of_int_range(ARGT);
-        else /* no cycling, longlong can hold true value */
-          uv= (ulonglong) v;
-      }
-      else
-        uv= v;
-      /* This will further restrict with VALID_RANGE, BLOCK_SIZE */
-      var->save_result.ulonglong_value=
-        getopt_ll_limit_value(uv, &option, &fixed);
-    }
+    if (var->value->unsigned_flag)
+      uv= (ulonglong) v;
     else
-    {
-      if (var->value->unsigned_flag)
-      {
-        /* Guaranteed positive input value, ulonglong can hold it */
-        uv= (ulonglong) v;
-      }
-      else
-      {
-        /*
-          Maybe negative input value; in this case, cast to ulonglong makes it
-          positive, which is wrong. Pick the closest allowed value i.e. 0.
-        */
-        uv= (ulonglong) (v < 0 ? 0 : v);
-      }
-      var->save_result.ulonglong_value=
-        getopt_ull_limit_value(uv, &option, &fixed);
-    }
+      uv= (ulonglong) (v < 0 ? 0 : v);
 
-    if (max_var_ptr())
-    {
-      /* check constraint set with --maximum-...=X */
-      if (SIGNED)
-      {
-        longlong max_val= *max_var_ptr();
-        if (((longlong)(var->save_result.ulonglong_value)) > max_val)
-          var->save_result.ulonglong_value= max_val;
-        /*
-          Signed variable probably has some kind of symmetry. Then it's good
-          to limit negative values just as we limit positive values.
-        */
-        max_val= -max_val;
-        if (((longlong)(var->save_result.ulonglong_value)) < max_val)
-          var->save_result.ulonglong_value= max_val;
-      }
-      else
-      {
-        ulonglong max_val= *max_var_ptr();
-        if (var->save_result.ulonglong_value > max_val)
-          var->save_result.ulonglong_value= max_val;
-      }
-    }
+    var->save_result.ulonglong_value=
+      getopt_ull_limit_value(uv, &option, &fixed);
+
+    if (max_var_ptr() && var->save_result.ulonglong_value > *max_var_ptr())
+      var->save_result.ulonglong_value= *max_var_ptr();
 
     return throw_bounds_warning(thd, name.str,
-                                var->save_result.ulonglong_value !=
-                                (ulonglong)v,
+                                var->save_result.ulonglong_value != uv,
                                 var->value->unsigned_flag, v);
   }
   bool session_update(THD *thd, set_var *var)
@@ -243,14 +180,10 @@ public:
   }
 };
 
-typedef Sys_var_integer<int32, GET_UINT, SHOW_INT, FALSE> Sys_var_int32;
-typedef Sys_var_integer<uint, GET_UINT, SHOW_INT, FALSE> Sys_var_uint;
-typedef Sys_var_integer<ulong, GET_ULONG, SHOW_LONG, FALSE> Sys_var_ulong;
-typedef Sys_var_integer<ha_rows, GET_HA_ROWS, SHOW_HA_ROWS, FALSE>
-  Sys_var_harows;
-typedef Sys_var_integer<ulonglong, GET_ULL, SHOW_LONGLONG, FALSE>
-  Sys_var_ulonglong;
-typedef Sys_var_integer<long, GET_LONG, SHOW_SIGNED_LONG, TRUE> Sys_var_long;
+typedef Sys_var_unsigned<uint, GET_UINT, SHOW_INT> Sys_var_uint;
+typedef Sys_var_unsigned<ulong, GET_ULONG, SHOW_LONG> Sys_var_ulong;
+typedef Sys_var_unsigned<ha_rows, GET_HA_ROWS, SHOW_HA_ROWS> Sys_var_harows;
+typedef Sys_var_unsigned<ulonglong, GET_ULL, SHOW_LONGLONG> Sys_var_ulonglong;
 
 /**
   Helper class for variables that take values from a TYPELIB
@@ -312,7 +245,7 @@ public:
 
 /**
   The class for ENUM variables - variables that take one value from a fixed
-  list of values.
+  list of values. 
 
   Class specific constructor arguments:
     char* values[]    - 0-terminated list of strings of valid values
@@ -568,8 +501,8 @@ protected:
 class Sys_var_external_user : public Sys_var_proxy_user
 {
 public:
-  Sys_var_external_user(const char *name_arg, const char *comment_arg,
-          enum charset_enum is_os_charset_arg)
+  Sys_var_external_user(const char *name_arg, const char *comment_arg, 
+          enum charset_enum is_os_charset_arg) 
     : Sys_var_proxy_user (name_arg, comment_arg, is_os_charset_arg)
   {}
 
@@ -812,7 +745,7 @@ public:
     option.min_value= (longlong) getopt_double2ulonglong(min_val);
     option.max_value= (longlong) getopt_double2ulonglong(max_val);
     global_var(double)= (double)option.def_value;
-    DBUG_ASSERT(min_val <= max_val);
+    DBUG_ASSERT(min_val < max_val);
     DBUG_ASSERT(min_val <= def_val);
     DBUG_ASSERT(max_val >= def_val);
     DBUG_ASSERT(size == sizeof(double));
@@ -843,35 +776,6 @@ public:
   { var->save_result.double_value= global_var(double); }
   void global_save_default(THD *thd, set_var *var)
   { var->save_result.double_value= getopt_ulonglong2double(option.def_value); }
-};
-
-/**
-  The class for @test_flags (core_file for now).
-  It's derived from Sys_var_mybool.
-
-  Class specific constructor arguments:
-    Caller need not pass in a variable as we make up the value on the
-    fly, that is, we derive it from the global test_flags bit vector.
-
-  Backing store: my_bool
-*/
-class Sys_var_test_flag: public Sys_var_mybool
-{
-private:
-  my_bool test_flag_value;
-  uint    test_flag_mask;
-public:
-  Sys_var_test_flag(const char *name_arg, const char *comment, uint mask)
-  : Sys_var_mybool(name_arg, comment, READ_ONLY GLOBAL_VAR(test_flag_value),
-          NO_CMD_LINE, DEFAULT(FALSE))
-  {
-    test_flag_mask= mask;
-  }
-  uchar *global_value_ptr(THD *thd, LEX_STRING *base)
-  {
-    test_flag_value= ((test_flags & test_flag_mask) > 0);
-    return (uchar*) &test_flag_value;
-  }
 };
 
 /**
@@ -1179,7 +1083,7 @@ public:
 
       // special code for storage engines (e.g. to handle historical aliases)
       if (plugin_type == MYSQL_STORAGE_ENGINE_PLUGIN)
-        plugin= ha_resolve_by_name(thd, &pname, FALSE);
+        plugin= ha_resolve_by_name(thd, &pname);
       else
         plugin= my_plugin_lock_by_name(thd, &pname, plugin_type);
       if (!plugin)
@@ -1231,7 +1135,7 @@ public:
 
     plugin_ref plugin;
     if (plugin_type == MYSQL_STORAGE_ENGINE_PLUGIN)
-      plugin= ha_resolve_by_name(thd, &pname, FALSE);
+      plugin= ha_resolve_by_name(thd, &pname);
     else
       plugin= my_plugin_lock_by_name(thd, &pname, plugin_type);
     DBUG_ASSERT(plugin);
@@ -1467,61 +1371,6 @@ public:
   }
 };
 
-
-/**
-  Similar to Sys_var_session_special, but with double storage.
-*/
-class Sys_var_session_special_double: public Sys_var_double
-{
-  typedef bool (*session_special_update_function)(THD *thd, set_var *var);
-  typedef double (*session_special_read_double_function)(THD *thd);
-
-  session_special_read_double_function read_func;
-  session_special_update_function update_func;
-public:
-  Sys_var_session_special_double(const char *name_arg,
-               const char *comment, int flag_args,
-               CMD_LINE getopt,
-               ulonglong min_val, ulonglong max_val, ulonglong block_size,
-               PolyLock *lock, enum binlog_status_enum binlog_status_arg,
-               on_check_function on_check_func,
-               session_special_update_function update_func_arg,
-               session_special_read_double_function read_func_arg,
-               const char *substitute=0)
-    : Sys_var_double(name_arg, comment, flag_args, 0,
-              sizeof(double), getopt,
-              min_val, max_val, 0,
-              lock, binlog_status_arg, on_check_func, 0,
-              substitute),
-      read_func(read_func_arg), update_func(update_func_arg)
-  {
-    DBUG_ASSERT(scope() == ONLY_SESSION);
-    DBUG_ASSERT(getopt.id == -1); // NO_CMD_LINE, because the offset is fake
-  }
-  bool session_update(THD *thd, set_var *var)
-  { return update_func(thd, var); }
-  bool global_update(THD *thd, set_var *var)
-  {
-    DBUG_ASSERT(FALSE);
-    return true;
-  }
-  void session_save_default(THD *thd, set_var *var)
-  { var->value= 0; }
-  void global_save_default(THD *thd, set_var *var)
-  { DBUG_ASSERT(FALSE); }
-  uchar *session_value_ptr(THD *thd, LEX_STRING *base)
-  {
-    thd->sys_var_tmp.double_value= read_func(thd);
-    return (uchar *) &thd->sys_var_tmp.double_value;
-  }
-  uchar *global_value_ptr(THD *thd, LEX_STRING *base)
-  {
-    DBUG_ASSERT(FALSE);
-    return 0;
-  }
-};
-
-
 /**
   The class for read-only variables that show whether a particular
   feature is supported by the server. Example: have_compression
@@ -1635,12 +1484,12 @@ public:
   { return false; }
   bool session_update(THD *thd, set_var *var)
   {
-    session_var(thd, const void*)= var->save_result.ptr;
+    session_var(thd, void*)= var->save_result.ptr;
     return false;
   }
   bool global_update(THD *thd, set_var *var)
   {
-    global_var(const void*)= var->save_result.ptr;
+    global_var(void*)= var->save_result.ptr;
     return false;
   }
   void session_save_default(THD *thd, set_var *var)
@@ -1765,561 +1614,4 @@ public:
                   values, def_val, lock, binlog_status_arg, on_check_func)
   {}
   virtual bool session_update(THD *thd, set_var *var);
-};
-
-
-/**
-  Class representing the tx_read_only system variable for setting
-  default transaction access mode.
-
-  Note that there is a special syntax - SET TRANSACTION READ ONLY
-  (or READ WRITE) that sets the access mode for the next transaction
-  only.
-*/
-
-class Sys_var_tx_read_only: public Sys_var_mybool
-{
-public:
-  Sys_var_tx_read_only(const char *name_arg, const char *comment, int flag_args,
-                       ptrdiff_t off, size_t size, CMD_LINE getopt,
-                       my_bool def_val, PolyLock *lock,
-                       enum binlog_status_enum binlog_status_arg,
-                       on_check_function on_check_func)
-    :Sys_var_mybool(name_arg, comment, flag_args, off, size, getopt,
-                    def_val, lock, binlog_status_arg, on_check_func)
-  {}
-  virtual bool session_update(THD *thd, set_var *var);
-};
-
-
-/**
-   A class for @@global.binlog_checksum that has
-   a specialized update method.
-*/
-class Sys_var_enum_binlog_checksum: public Sys_var_enum
-{
-public:
-  Sys_var_enum_binlog_checksum(const char *name_arg,
-          const char *comment, int flag_args, ptrdiff_t off, size_t size,
-          CMD_LINE getopt,
-          const char *values[], uint def_val, PolyLock *lock,
-          enum binlog_status_enum binlog_status_arg)
-    :Sys_var_enum(name_arg, comment, flag_args, off, size, getopt,
-                  values, def_val, lock, binlog_status_arg, NULL)
-  {}
-  virtual bool global_update(THD *thd, set_var *var);
-};
-
-
-/**
-  Class for variables that store values of type Gtid_specification.
-*/
-class Sys_var_gtid_specification: public sys_var
-{
-public:
-  Sys_var_gtid_specification(const char *name_arg,
-          const char *comment, int flag_args, ptrdiff_t off, size_t size,
-          CMD_LINE getopt,
-          const char *def_val,
-          PolyLock *lock= 0,
-          enum binlog_status_enum binlog_status_arg=VARIABLE_NOT_IN_BINLOG,
-          on_check_function on_check_func=0,
-          on_update_function on_update_func=0,
-          const char *substitute=0,
-          int parse_flag= PARSE_NORMAL)
-    : sys_var(&all_sys_vars, name_arg, comment, flag_args, off, getopt.id,
-              getopt.arg_type, SHOW_CHAR, (intptr)def_val,
-              lock, binlog_status_arg, on_check_func, on_update_func,
-              substitute, parse_flag)
-  {
-    DBUG_ASSERT(size == sizeof(Gtid_specification));
-  }
-  bool session_update(THD *thd, set_var *var)
-  {
-    DBUG_ENTER("Sys_var_gtid::session_update");
-    global_sid_lock->rdlock();
-    bool ret= (((Gtid_specification *)session_var_ptr(thd))->
-               parse(global_sid_map,
-                     var->save_result.string_value.str) != 0);
-    global_sid_lock->unlock();
-    DBUG_RETURN(ret);
-  }
-  bool global_update(THD *thd, set_var *var)
-  { DBUG_ASSERT(FALSE); return true; }
-  void session_save_default(THD *thd, set_var *var)
-  {
-    DBUG_ENTER("Sys_var_gtid::session_save_default");
-    char *ptr= (char*)(intptr)option.def_value;
-    var->save_result.string_value.str= ptr;
-    var->save_result.string_value.length= ptr ? strlen(ptr) : 0;
-    DBUG_VOID_RETURN;
-  }
-  void global_save_default(THD *thd, set_var *var)
-  { DBUG_ASSERT(FALSE); }
-  bool do_check(THD *thd, set_var *var)
-  {
-    DBUG_ENTER("Sys_var_gtid::do_check");
-    char buf[Gtid_specification::MAX_TEXT_LENGTH + 1];
-    String str(buf, sizeof(buf), &my_charset_latin1);
-    String *res= var->value->val_str(&str);
-    if (!res)
-      DBUG_RETURN(true);
-    var->save_result.string_value.str= thd->strmake(res->c_ptr_safe(), res->length());
-    if (!var->save_result.string_value.str)
-    {
-      my_error(ER_OUT_OF_RESOURCES, MYF(0)); // thd->strmake failed
-      DBUG_RETURN(true);
-    }
-    var->save_result.string_value.length= res->length();
-    bool ret= Gtid_specification::is_valid(res->c_ptr_safe()) ? false : true;
-    DBUG_PRINT("info", ("ret=%d", ret));
-    DBUG_RETURN(ret);
-  }
-  bool check_update_type(Item_result type)
-  { return type != STRING_RESULT; }
-  uchar *session_value_ptr(THD *thd, LEX_STRING *base)
-  {
-    DBUG_ENTER("Sys_var_gtid::session_value_ptr");
-    char buf[Gtid_specification::MAX_TEXT_LENGTH + 1];
-    global_sid_lock->rdlock();
-    ((Gtid_specification *)session_var_ptr(thd))->
-      to_string(global_sid_map, buf);
-    global_sid_lock->unlock();
-    char *ret= thd->strdup(buf);
-    DBUG_RETURN((uchar *)ret);
-  }
-  uchar *global_value_ptr(THD *thd, LEX_STRING *base)
-  { DBUG_ASSERT(FALSE); return NULL; }
-};
-
-#ifdef HAVE_GTID_NEXT_LIST
-/**
-  Class for variables that store values of type Gtid_set.
-
-  The back-end storage should be a Gtid_set_or_null, and it should be
-  set to null by default.  When the variable is set for the first
-  time, the Gtid_set* will be allocated.
-*/
-class Sys_var_gtid_set: public sys_var
-{
-public:
-  Sys_var_gtid_set(const char *name_arg,
-          const char *comment, int flag_args, ptrdiff_t off, size_t size,
-          CMD_LINE getopt,
-          const char *def_val,
-          PolyLock *lock= 0,
-          enum binlog_status_enum binlog_status_arg=VARIABLE_NOT_IN_BINLOG,
-          on_check_function on_check_func=0,
-          on_update_function on_update_func=0,
-          const char *substitute=0,
-          int parse_flag= PARSE_NORMAL)
-    : sys_var(&all_sys_vars, name_arg, comment, flag_args, off, getopt.id,
-              getopt.arg_type, SHOW_CHAR, (intptr)def_val,
-              lock, binlog_status_arg, on_check_func, on_update_func,
-              substitute, parse_flag)
-  {
-    DBUG_ASSERT(size == sizeof(Gtid_set_or_null));
-  }
-  bool session_update(THD *thd, set_var *var)
-  {
-    DBUG_ENTER("Sys_var_gtid_set::session_update");
-    Gtid_set_or_null *gsn=
-      (Gtid_set_or_null *)session_var_ptr(thd);
-    char *value= var->save_result.string_value.str;
-    if (value == NULL)
-      gsn->set_null();
-    else
-    {
-      Gtid_set *gs= gsn->set_non_null(global_sid_map);
-      if (gs == NULL)
-      {
-        my_error(ER_OUT_OF_RESOURCES, MYF(0)); // allocation failed
-        DBUG_RETURN(true);
-      }
-      /*
-        If string begins with '+', add to the existing set, otherwise
-        replace existing set.
-      */
-      while (isspace(*value))
-        value++;
-      if (*value == '+')
-        value++;
-      else
-        gs->clear();
-      // Add specified set of groups to Gtid_set.
-      global_sid_lock->rdlock();
-      enum_return_status ret= gs->add_gtid_text(value);
-      global_sid_lock->unlock();
-      if (ret != RETURN_STATUS_OK)
-      {
-        gsn->set_null();
-        DBUG_RETURN(true);
-      }
-    }
-    DBUG_RETURN(false);
-  }
-  bool global_update(THD *thd, set_var *var)
-  { DBUG_ASSERT(FALSE); return true; }
-  void session_save_default(THD *thd, set_var *var)
-  {
-    DBUG_ENTER("Sys_var_gtid_set::session_save_default");
-    char *ptr= (char*)(intptr)option.def_value;
-    var->save_result.string_value.str= ptr;
-    var->save_result.string_value.length= ptr ? strlen(ptr) : 0;
-    DBUG_VOID_RETURN;
-  }
-  void global_save_default(THD *thd, set_var *var)
-  { DBUG_ASSERT(FALSE); }
-  bool do_check(THD *thd, set_var *var)
-  {
-    DBUG_ENTER("Sys_var_gtid_set::do_check");
-    String str;
-    String *res= var->value->val_str(&str);
-    if (res == NULL)
-    {
-      var->save_result.string_value.str= NULL;
-      DBUG_RETURN(FALSE);
-    }
-    DBUG_ASSERT(res->ptr() != NULL);
-    var->save_result.string_value.str= thd->strmake(res->ptr(), res->length());
-    if (var->save_result.string_value.str == NULL)
-    {
-      my_error(ER_OUT_OF_RESOURCES, MYF(0)); // thd->strmake failed
-      DBUG_RETURN(1);
-    }
-    var->save_result.string_value.length= res->length();
-    bool ret= !Gtid_set::is_valid(res->ptr());
-    DBUG_RETURN(ret);
-  }
-  bool check_update_type(Item_result type)
-  { return type != STRING_RESULT; }
-  uchar *session_value_ptr(THD *thd, LEX_STRING *base)
-  {
-    DBUG_ENTER("Sys_var_gtid_set::session_value_ptr");
-    Gtid_set_or_null *gsn= (Gtid_set_or_null *)session_var_ptr(thd);
-    Gtid_set *gs= gsn->get_gtid_set();
-    if (gs == NULL)
-      DBUG_RETURN(NULL);
-    char *buf;
-    global_sid_lock->rdlock();
-    buf= (char *)thd->alloc(gs->get_string_length() + 1);
-    if (buf)
-      gs->to_string(buf);
-    else
-      my_error(ER_OUT_OF_RESOURCES, MYF(0)); // thd->alloc faile
-    global_sid_lock->unlock();
-    DBUG_RETURN((uchar *)buf);
-  }
-  uchar *global_value_ptr(THD *thd, LEX_STRING *base)
-  { DBUG_ASSERT(FALSE); return NULL; }
-};
-#endif
-
-
-/**
-  Abstract base class for read-only variables (global or session) of
-  string type where the value is generated by some function.  This
-  needs to be subclassed; the session_value_ptr or global_value_ptr
-  function should be overridden.
-*/
-class Sys_var_charptr_func: public sys_var
-{
-public:
-  Sys_var_charptr_func(const char *name_arg, const char *comment,
-                       flag_enum flag_arg)
-    : sys_var(&all_sys_vars, name_arg, comment, READ_ONLY flag_arg,
-              0/*off*/, NO_CMD_LINE.id, NO_CMD_LINE.arg_type,
-              SHOW_CHAR, (intptr)0/*def_val*/,
-              NULL/*polylock*/, VARIABLE_NOT_IN_BINLOG,
-              NULL/*on_check_func*/, NULL/*on_update_func*/,
-              NULL/*substitute*/, PARSE_NORMAL/*parse_flag*/)
-  {
-    DBUG_ASSERT(flag_arg == sys_var::GLOBAL || flag_arg == sys_var::SESSION ||
-                flag_arg == sys_var::ONLY_SESSION);
-  }
-  bool session_update(THD *thd, set_var *var)
-  { DBUG_ASSERT(FALSE); return true; }
-  bool global_update(THD *thd, set_var *var)
-  { DBUG_ASSERT(FALSE); return true; }
-  void session_save_default(THD *thd, set_var *var) { DBUG_ASSERT(FALSE); }
-  void global_save_default(THD *thd, set_var *var) { DBUG_ASSERT(FALSE); }
-  bool do_check(THD *thd, set_var *var) { DBUG_ASSERT(FALSE); return true; }
-  bool check_update_type(Item_result type) { DBUG_ASSERT(FALSE); return true; }
-  virtual uchar *session_value_ptr(THD *thd, LEX_STRING *base)
-  { DBUG_ASSERT(FALSE); return NULL; }
-  virtual uchar *global_value_ptr(THD *thd, LEX_STRING *base)
-  { DBUG_ASSERT(FALSE); return NULL; }
-};
-
-
-/**
-  Abstract base class for read-only variables (global or session) of
-  string type where the value is the string representation of a
-  Gtid_set generated by some function.  This needs to be subclassed;
-  the session_value_ptr or global_value_ptr should be overwritten.
-*/
-class Sys_var_gtid_set_func: public Sys_var_charptr_func
-{
-public:
-  Sys_var_gtid_set_func(const char *name_arg, const char *comment,
-                        flag_enum flag_arg)
-    : Sys_var_charptr_func(name_arg, comment, flag_arg) {}
-
-  typedef enum_return_status (*Gtid_set_getter)(THD *, Gtid_set *);
-
-  static uchar *get_string_from_gtid_set(THD *thd,
-                                         Gtid_set_getter get_gtid_set)
-  {
-    DBUG_ENTER("Sys_var_gtid_ended_groups::session_value_ptr");
-    Gtid_set gs(global_sid_map);
-    char *buf;
-    // As an optimization, add 10 Intervals that do not need to be
-    // allocated.
-    Gtid_set::Interval ivs[10];
-    gs.add_interval_memory(10, ivs);
-    global_sid_lock->wrlock();
-    if (get_gtid_set(thd, &gs) != RETURN_STATUS_OK)
-      goto error;
-    // allocate string and print to it
-    buf= (char *)thd->alloc(gs.get_string_length() + 1);
-    if (buf == NULL)
-    {
-      my_error(ER_OUT_OF_RESOURCES, MYF(0));
-      goto error;
-    }
-    gs.to_string(buf);
-    global_sid_lock->unlock();
-    DBUG_RETURN((uchar *)buf);
-  error:
-    global_sid_lock->unlock();
-    DBUG_RETURN(NULL);
-  }
-};
-
-
-/**
-  Class for @@session.gtid_executed and @@global.gtid_executed.
-*/
-class Sys_var_gtid_executed : Sys_var_gtid_set_func
-{
-public:
-  Sys_var_gtid_executed(const char *name_arg, const char *comment_arg)
-    : Sys_var_gtid_set_func(name_arg, comment_arg, SESSION) {}
-
-  uchar *global_value_ptr(THD *thd, LEX_STRING *base)
-  {
-    DBUG_ENTER("Sys_var_gtid_executed::global_value_ptr");
-    global_sid_lock->wrlock();
-    const Gtid_set *gs= gtid_state->get_logged_gtids();
-    char *buf= (char *)thd->alloc(gs->get_string_length() + 1);
-    if (buf == NULL)
-      my_error(ER_OUT_OF_RESOURCES, MYF(0));
-    else
-      gs->to_string(buf);
-    global_sid_lock->unlock();
-    DBUG_RETURN((uchar *)buf);
-  }
-
-private:
-  static enum_return_status get_groups_from_trx_cache(THD *thd, Gtid_set *gs)
-  {
-    DBUG_ENTER("Sys_var_gtid_executed::get_groups_from_trx_cache");
-    if (opt_bin_log)
-    {
-      thd->binlog_setup_trx_data();
-      PROPAGATE_REPORTED_ERROR(thd->get_group_cache(true)->get_gtids(gs));
-    }
-    RETURN_OK;
-  }
-
-public:
-  uchar *session_value_ptr(THD *thd, LEX_STRING *base)
-  {
-    return get_string_from_gtid_set(thd, get_groups_from_trx_cache);
-  }
-};
-
-
-/**
-  Class for @@session.gtid_purged.
-*/
-class Sys_var_gtid_purged : public sys_var
-{
-public:
-  Sys_var_gtid_purged(const char *name_arg,
-          const char *comment, int flag_args, ptrdiff_t off, size_t size,
-          CMD_LINE getopt,
-          const char *def_val,
-          PolyLock *lock= 0,
-          enum binlog_status_enum binlog_status_arg=VARIABLE_NOT_IN_BINLOG,
-          on_check_function on_check_func=0,
-          on_update_function on_update_func=0,
-          const char *substitute=0,
-          int parse_flag= PARSE_NORMAL)
-    : sys_var(&all_sys_vars, name_arg, comment, flag_args, off, getopt.id,
-              getopt.arg_type, SHOW_CHAR, (intptr)def_val,
-              lock, binlog_status_arg, on_check_func, on_update_func,
-              substitute, parse_flag)
-  {}
-
-  bool session_update(THD *thd, set_var *var)
-  {
-    DBUG_ASSERT(FALSE);
-    return true;
-  }
-
-  void session_save_default(THD *thd, set_var *var)
-  { DBUG_ASSERT(FALSE); }
-
-  bool global_update(THD *thd, set_var *var)
-  {
-    DBUG_ENTER("Sys_var_gtid_purged::global_update");
-#ifdef HAVE_REPLICATION
-    bool error= false;
-    int rotate_res= 0;
-
-    global_sid_lock->wrlock();
-    char *previous_gtid_logged= gtid_state->get_logged_gtids()->to_string();
-    char *previous_gtid_lost= gtid_state->get_lost_gtids()->to_string();
-    enum_return_status ret= gtid_state->add_lost_gtids(var->save_result.string_value.str);
-    char *current_gtid_logged= gtid_state->get_logged_gtids()->to_string();
-    char *current_gtid_lost= gtid_state->get_lost_gtids()->to_string();
-    global_sid_lock->unlock();
-    if (RETURN_STATUS_OK != ret)
-    {
-      error= true;
-      goto end;
-    }
-
-    // Log messages saying that GTID_PURGED and GTID_EXECUTED were changed.
-    sql_print_information(ER(ER_GTID_PURGED_WAS_CHANGED),
-                          previous_gtid_lost, current_gtid_lost);
-    sql_print_information(ER(ER_GTID_EXECUTED_WAS_CHANGED),
-                          previous_gtid_logged, current_gtid_logged);
-
-    // Rotate logs to have Previous_gtid_event on last binlog.
-    rotate_res= mysql_bin_log.rotate_and_purge(thd, true);
-    if (rotate_res)
-    {
-      error= true;
-      goto end;
-    }
-
-end:
-    my_free(previous_gtid_logged);
-    my_free(previous_gtid_lost);
-    my_free(current_gtid_logged);
-    my_free(current_gtid_lost);
-    DBUG_RETURN(error);
-#else
-    DBUG_RETURN(true);
-#endif /* HAVE_REPLICATION */
-  }
-
-  void global_save_default(THD *thd, set_var *var)
-  {
-    /* gtid_purged does not have default value */
-    my_error(ER_NO_DEFAULT, MYF(0), var->var->name.str);
-  }
-
-  bool do_check(THD *thd, set_var *var)
-  {
-    DBUG_ENTER("Sys_var_gtid_purged::do_check");
-    char buf[1024];
-    String str(buf, sizeof(buf), system_charset_info);
-    String *res= var->value->val_str(&str);
-    if (!res)
-      DBUG_RETURN(true);
-    var->save_result.string_value.str= thd->strmake(res->c_ptr_safe(),
-                                                    res->length());
-    if (!var->save_result.string_value.str)
-    {
-      my_error(ER_OUT_OF_RESOURCES, MYF(0)); // thd->strmake failed
-      DBUG_RETURN(true);
-    }
-    var->save_result.string_value.length= res->length();
-    bool ret= Gtid_set::is_valid(res->c_ptr_safe()) ? false : true;
-    DBUG_PRINT("info", ("ret=%d", ret));
-    DBUG_RETURN(ret);
-  }
-
-  bool check_update_type(Item_result type)
-  { return type != STRING_RESULT; }
-
-  uchar *global_value_ptr(THD *thd, LEX_STRING *base)
-  {
-    DBUG_ENTER("Sys_var_gtid_purged::global_value_ptr");
-    global_sid_lock->wrlock();
-    const Gtid_set *gs= gtid_state->get_lost_gtids();
-    char *buf= (char *)thd->alloc(gs->get_string_length() + 1);
-    if (buf == NULL)
-      my_error(ER_OUT_OF_RESOURCES, MYF(0));
-    else
-      gs->to_string(buf);
-    global_sid_lock->unlock();
-    DBUG_RETURN((uchar *)buf);
-  }
-
-  uchar *session_value_ptr(THD *thd, LEX_STRING *base)
-  { DBUG_ASSERT(0); return NULL; }
-};
-
-
-class Sys_var_gtid_owned : Sys_var_gtid_set_func
-{
-public:
-  Sys_var_gtid_owned(const char *name_arg, const char *comment_arg)
-    : Sys_var_gtid_set_func(name_arg, comment_arg, SESSION) {}
-
-public:
-  uchar *session_value_ptr(THD *thd, LEX_STRING *base)
-  {
-    DBUG_ENTER("Sys_var_gtid_owned::session_value_ptr");
-    char *buf= NULL;
-    if (thd->owned_gtid.sidno == 0)
-      DBUG_RETURN((uchar *)thd->strdup(""));
-    if (thd->owned_gtid.sidno == -1)
-    {
-#ifdef HAVE_GTID_NEXT_LIST
-      buf= (char *)thd->alloc(thd->owned_gtid_set.get_string_length() + 1);
-      if (buf)
-      {
-        global_sid_lock->rdlock();
-        thd->owned_gtid_set.to_string(buf);
-        global_sid_lock->unlock();
-      }
-      else
-        my_error(ER_OUT_OF_RESOURCES, MYF(0));
-#else
-     DBUG_ASSERT(0); 
-#endif
-    }
-    else
-    {
-      buf= (char *)thd->alloc(Gtid::MAX_TEXT_LENGTH + 1);
-      if (buf)
-      {
-        global_sid_lock->rdlock();
-        thd->owned_gtid.to_string(global_sid_map, buf);
-        global_sid_lock->unlock();
-      }
-      else
-        my_error(ER_OUT_OF_RESOURCES, MYF(0));
-    }
-    DBUG_RETURN((uchar *)buf);
-  }
-
-  uchar *global_value_ptr(THD *thd, LEX_STRING *base)
-  {
-    DBUG_ENTER("Sys_var_gtid_owned::global_value_ptr");
-    const Owned_gtids *owned_gtids= gtid_state->get_owned_gtids();
-    global_sid_lock->wrlock();
-    char *buf= (char *)thd->alloc(owned_gtids->get_max_string_length());
-    if (buf)
-      owned_gtids->to_string(buf);
-    else
-      my_error(ER_OUT_OF_RESOURCES, MYF(0)); // thd->alloc faile
-    global_sid_lock->unlock();
-    DBUG_RETURN((uchar *)buf);
-  }
 };

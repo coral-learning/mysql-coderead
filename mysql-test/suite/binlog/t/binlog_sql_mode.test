@@ -56,7 +56,7 @@ let $MYSQLD_DATADIR= `select @@datadir`;
 --replace_result $MYSQLTEST_VARDIR MYSQLTEST_VARDIR
 eval select
 (@a:=load_file("$MYSQLTEST_VARDIR/tmp/mysqlbinlog_bug39526.binlog"))
-is not null AS Loaded;
+is not null;
 let $s_mode_unsigned= `select @a like "%@@session.sql_mode=0%" /* must return 0 */`;
 echo *** String sql_mode=0 is found: $s_mode_unsigned ***;
 
@@ -153,10 +153,6 @@ let $MYSQLD_DATADIR= `select @@datadir`;
 
 --echo "Dropping table test_table"
 DROP TABLE test_table;
-# We need to reset master (and purge GTID_EXECUTED) to avoid
-# transactions skip when we replay mysqlbinlog_bug12601974.binlog
-# with gtid-mode=ON.
-RESET MASTER;
 
 --exec $MYSQL -e "source $MYSQLTEST_VARDIR/tmp/mysqlbinlog_bug12601974.binlog"
 

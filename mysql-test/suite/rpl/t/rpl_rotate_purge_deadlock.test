@@ -1,5 +1,3 @@
-#Want to skip this test from daily Valgrind execution
---source include/no_valgrind_without_big.inc
 #
 # Bug#11763573 - 56299: MUTEX DEADLOCK WITH COM_BINLOG_DUMP, BINLOG PURGE, AND PROCESSLIST/KILL
 #
@@ -40,8 +38,6 @@ insert into t1 set f=repeat('b', 4096);
 source include/show_binary_logs.inc;
 
 SET DEBUG_SYNC = 'now SIGNAL rotated';
---let $wait_condition= SELECT COUNT(*)=0 FROM information_schema.processlist WHERE state LIKE 'debug sync point: at_purge_logs_before_date%'
---source include/wait_condition.inc
 SET DEBUG_SYNC = 'RESET';
 
 # the first connection finally completes its INSERT
@@ -49,7 +45,7 @@ connection master;
 reap;
 SET DEBUG_SYNC = 'RESET';
 
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 
 
 #
@@ -69,7 +65,7 @@ let $wait_condition=
 --source include/wait_condition.inc
 
 # find and kill DUMP thread
-let $_tid= `select id from information_schema.processlist where command like 'Binlog Dump%' limit 1`;
+let $_tid= `select id from information_schema.processlist where command = 'Binlog Dump' limit 1`;
 --disable_query_log
 eval kill query $_tid;
 --enable_query_log
@@ -80,12 +76,10 @@ eval kill query $_tid;
 #
 let $wait_condition=
   SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.PROCESSLIST
-    WHERE command like 'Binlog Dump%' and STATE like "Master has sent all binlog to slave%";
+    WHERE command = 'Binlog Dump' and STATE like "Master has sent all binlog to slave%";
 --source include/wait_condition.inc
 
 SET DEBUG_SYNC = 'now SIGNAL rotated';
---let $wait_condition= SELECT COUNT(*)=0 FROM information_schema.processlist WHERE state LIKE 'debug sync point: at_purge_logs_before_date%'
---source include/wait_condition.inc
 SET DEBUG_SYNC = 'RESET';
 
 connection master;
@@ -93,6 +87,6 @@ reap;
 SET DEBUG_SYNC = 'RESET';
 drop table t1;
 
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 
 --source include/rpl_end.inc

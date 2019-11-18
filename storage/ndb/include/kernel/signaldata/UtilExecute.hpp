@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003, 2005, 2006, 2008 MySQL AB, 2008 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2005, 2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef UTIL_EXECUTE_HPP
 #define UTIL_EXECUTE_HPP
@@ -43,7 +41,7 @@ class UtilExecuteReq {
   friend bool printUTIL_EXECUTE_REQ(FILE * output, const Uint32 * theData, 
 				    Uint32 len, Uint16 receiverBlockNo);
 public:
-  STATIC_CONST( SignalLength = 4 );
+  STATIC_CONST( SignalLength = 3 );
   STATIC_CONST( HEADER_SECTION = 0 );
   STATIC_CONST( DATA_SECTION = 1 );
   STATIC_CONST( NoOfSections = 2 );
@@ -54,11 +52,10 @@ public:
   Uint32 getPrepareId() const { return prepareId & 0xFF; };
   void setReleaseFlag() { prepareId |= 0x100; };
   bool getReleaseFlag() const { return (prepareId & 0x100) != 0; };
-
+private:
   Uint32 senderData; // MUST be no 1!
   Uint32 senderRef;
   Uint32 prepareId;     // Which prepared transaction to execute
-  Uint32 scanTakeOver;
 };
 
 /**
@@ -83,13 +80,11 @@ class UtilExecuteConf {
 				     Uint32 len, 
 				     Uint16 receiverBlockNo);
 public:
-  STATIC_CONST( SignalLength = 3 );
+  STATIC_CONST( SignalLength = 1 );
 
   GET_SET_SENDERDATA
 private:
   Uint32 senderData; // MUST be no 1!
-  Uint32 gci_hi;
-  Uint32 gci_lo;
 };
 
 

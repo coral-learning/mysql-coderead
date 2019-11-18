@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003-2006, 2008 MySQL AB, 2008 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,14 +12,11 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include <SimpleProperties.hpp>
 #include <TransporterDefinitions.hpp>
 #include "LongSignal.hpp"
-#include "LongSignalImpl.hpp"
-#include "SimulatedBlock.hpp"
 
 SimplePropertiesSectionReader::SimplePropertiesSectionReader
 (struct SegmentedSectionPtr & ptr, class SectionSegmentPool & pool)
@@ -123,71 +119,18 @@ SimplePropertiesSectionReader::getWords(Uint32 * dst, Uint32 len){
   return false;
 }
 
-SimplePropertiesSectionWriter::SimplePropertiesSectionWriter(class SimulatedBlock & block)
-  : m_pool(block.getSectionSegmentPool()), m_block(block)
+SimplePropertiesSectionWriter::SimplePropertiesSectionWriter(class SectionSegmentPool & pool)
+  : m_pool(pool)
 {
-  m_pos = -1;
-  m_head = 0;
-  m_currentSegment = 0;
-  m_prevPtrI = RNIL;
-  reset();
-}
-
-SimplePropertiesSectionWriter::~SimplePropertiesSectionWriter()
-{
-  release();
-}
-
-#ifdef NDBD_MULTITHREADED
-#define SP_POOL_ARG f_section_lock, *m_block.m_sectionPoolCache,
-#else
-#define SP_POOL_ARG
-#endif
-
-void
-SimplePropertiesSectionWriter::release()
-{
-  if (m_head)
-  {
-    if (m_sz)
-    {
-      SegmentedSectionPtr ptr;
-      ptr.p = m_head;
-      ptr.i = m_head->m_lastSegment;
-      ptr.sz = m_sz;
-      m_head->m_sz = m_sz;
-      m_head->m_lastSegment = m_currentSegment->m_lastSegment;
-
-      if((m_pos % SectionSegment::DataLength) == 0){
-        m_pool.release(SP_POOL_ARG m_currentSegment->m_lastSegment);
-        m_head->m_lastSegment = m_prevPtrI;
-      }
-      m_block.release(ptr);
-    }
-    else
-    {
-      m_pool.release(SP_POOL_ARG m_head->m_lastSegment);
-    }
-  }
-  m_pos = -1;
-  m_head = 0;
-  m_currentSegment = 0;
-  m_prevPtrI = RNIL;
-}
-
-bool
-SimplePropertiesSectionWriter::reset()
-{
-  release();
   Ptr<SectionSegment> first;
-  if(m_pool.seize(SP_POOL_ARG first)){
+  if(m_pool.seize(first)){
     ;
   } else {
     m_pos = -1;
     m_head = 0;
     m_currentSegment = 0;
     m_prevPtrI = RNIL;
-    return false;
+    return;
   }
   m_sz = 0;
   m_pos = 0;
@@ -195,6 +138,14 @@ SimplePropertiesSectionWriter::reset()
   m_head->m_lastSegment = first.i;
   m_currentSegment = first.p;
   m_prevPtrI = RNIL;
+}
+  
+bool
+SimplePropertiesSectionWriter::reset(){
+  if(m_pos >= 0){
+    m_pos = 0;
+    return true;
+  }
   return false;
 }
 
@@ -210,7 +161,7 @@ SimplePropertiesSectionWriter::putWords(const Uint32 * src, Uint32 len){
   while(len >= left){
     memcpy(&m_currentSegment->theData[m_pos], src, 4 * left);
     Ptr<SectionSegment> next;    
-    if(m_pool.seize(SP_POOL_ARG next)){
+    if(m_pool.seize(next)){
 
       m_prevPtrI = m_currentSegment->m_lastSegment;
       m_currentSegment->m_nextSegment = next.i;
@@ -238,11 +189,6 @@ SimplePropertiesSectionWriter::putWords(const Uint32 * src, Uint32 len){
   return true;
 }
 
-Uint32 SimplePropertiesSectionWriter::getWordsUsed() const
-{
-  return m_sz;
-}
-
 void
 SimplePropertiesSectionWriter::getPtr(struct SegmentedSectionPtr & dst){
   // Set last ptr and size
@@ -254,7 +200,7 @@ SimplePropertiesSectionWriter::getPtr(struct SegmentedSectionPtr & dst){
     m_head->m_lastSegment = m_currentSegment->m_lastSegment;
 
     if((m_pos % SectionSegment::DataLength) == 0){
-      m_pool.release(SP_POOL_ARG m_currentSegment->m_lastSegment);
+      m_pool.release(m_currentSegment->m_lastSegment);
       m_head->m_lastSegment = m_prevPtrI;
     }
 
@@ -268,11 +214,8 @@ SimplePropertiesSectionWriter::getPtr(struct SegmentedSectionPtr & dst){
   dst.sz = 0;
   dst.i = RNIL;
 
-  if (m_head)
-  {
-    m_pool.release(SP_POOL_ARG m_head->m_lastSegment);
-  }
-
+  m_pool.release(m_head->m_lastSegment);
+  
   m_sz = 0;
   m_pos = -1;
   m_head = m_currentSegment = 0;

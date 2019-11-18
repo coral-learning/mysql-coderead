@@ -61,13 +61,12 @@ static int qa_auth_interface (MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *inf
        err= CR_ERROR;
     if (info->auth_string_length != 14)
        err= CR_ERROR;
-/*
-  To be set by the plugin
-    if (strcmp(info->authenticated_as, "qa_test_1_user"))
-         err= CR_ERROR;
-    if (strcmp(info->external_user, ""))
-         err= CR_ERROR;
-*/
+/* To be set by the plugin */
+//    if (strcmp(info->authenticated_as, "qa_test_1_user"))
+//       err= CR_ERROR;
+/* To be set by the plugin */
+//    if (strcmp(info->external_user, ""))
+//       err= CR_ERROR;
     if (info->password_used != PASSWORD_USED_YES)
        err= CR_ERROR;
     if (strcmp(info->host_or_ip, "localhost"))
@@ -88,11 +87,9 @@ static int qa_auth_interface (MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *inf
      strcpy(info->authenticated_as, "authenticated_as");
     /* Assign with an external account, effect on @@local.EXTERNAL_USER */
      strcpy(info->external_user, "externaluser");
-    /*
-      Overwriting will cause a core dump
-      strcpy(info->host_or_ip, "host_or_ip");
-      info->host_or_ip_length= 10;
-    */
+    /* Overwriting will cause a core dump */
+//     strcpy(info->host_or_ip, "host_or_ip");
+//     info->host_or_ip_length= 10;
   }
 /* Invalid, means too high values for length */
   else if (strcmp(info->user_name, "qa_test_3_user")== 0)
@@ -129,11 +126,9 @@ static int qa_auth_interface (MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *inf
      strcpy(info->authenticated_as, "");
 /* This assignment has no effect.*/
      strcpy(info->external_user, "");
-    /*
-      Overwriting will cause a core dump
-      strcpy(info->host_or_ip, "");
-      info->host_or_ip_length= 0;
-    */
+    /* Overwriting will cause a core dump */
+//     strcpy(info->host_or_ip, "");
+//     info->host_or_ip_length= 0;
   }
 /* Set to 'root' */
   else if (strcmp(info->user_name, "qa_test_6_user")== 0)

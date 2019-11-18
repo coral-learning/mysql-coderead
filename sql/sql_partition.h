@@ -1,26 +1,29 @@
 #ifndef SQL_PARTITION_INCLUDED
 #define SQL_PARTITION_INCLUDED
 
-/* Copyright (c) 2006, 2015, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2006, 2017, Oracle and/or its affiliates. All rights reserved.
 
-   This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; version 2 of the License.
 
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
+
+#ifdef __GNUC__
+#pragma interface				/* gcc class implementation */
+#endif
 
 #include "sql_list.h"                           /* List */
 #include "table.h"                              /* TABLE_LIST */
 
 class Alter_info;
-class Alter_table_ctx;
 class Field;
 class String;
 class handler;
@@ -36,7 +39,6 @@ typedef struct st_key_range key_range;
 #define HA_CAN_PARTITION       (1 << 0) /* Partition support */
 #define HA_CAN_UPDATE_PARTITION_KEY (1 << 1)
 #define HA_CAN_PARTITION_UNIQUE (1 << 2)
-/* If the engine will use auto partitioning even when not defined. */
 #define HA_USE_AUTO_PARTITION (1 << 3)
 
 #define NORMAL_PART_NAME 0
@@ -52,6 +54,7 @@ typedef struct st_lock_param_type
   HA_CREATE_INFO *create_info;
   Alter_info *alter_info;
   TABLE *table;
+  TABLE *old_table;
   KEY *key_info_buffer;
   const char *db;
   const char *table_name;
@@ -73,11 +76,14 @@ typedef struct {
 } part_id_range;
 
 struct st_partition_iter;
-#define NOT_A_PARTITION_ID UINT_MAX32
+#define NOT_A_PARTITION_ID ((uint32)-1)
 
 bool is_partition_in_list(char *part_name, List<char> list_part_names);
 char *are_partitions_in_table(partition_info *new_part_info,
                               partition_info *old_part_info);
+bool check_reorganise_list(partition_info *new_part_info,
+                           partition_info *old_part_info,
+                           List<char> list_part_names);
 handler *get_ha_partition(partition_info *part_info);
 int get_parts_for_update(const uchar *old_data, uchar *new_data,
                          const uchar *rec0, partition_info *part_info,
@@ -99,7 +105,7 @@ int get_cs_converted_part_value_from_string(THD *thd,
                                             Item *item,
                                             String *input_str,
                                             String *output_str,
-                                            const CHARSET_INFO *cs,
+                                            CHARSET_INFO *cs,
                                             bool use_hex);
 void get_full_part_id_from_key(const TABLE *table, uchar *buf,
                                KEY *key_info,
@@ -110,8 +116,7 @@ bool mysql_unpack_partition(THD *thd, char *part_buf,
                             TABLE *table, bool is_create_table_ind,
                             handlerton *default_db_type,
                             bool *work_part_info_used);
-bool make_used_partitions_str(partition_info *part_info,
-                              List<const char> *parts);
+void make_used_partitions_str(partition_info *part_info, String *parts_str);
 uint32 get_list_array_idx_for_endpoint(partition_info *part_info,
                                        bool left_endpoint,
                                        bool include_endpoint);
@@ -120,9 +125,8 @@ uint32 get_partition_id_range_for_endpoint(partition_info *part_info,
                                            bool include_endpoint);
 bool check_part_func_fields(Field **ptr, bool ok_with_charsets);
 bool field_is_partition_charset(Field *field);
-Item* convert_charset_partition_constant(Item *item, const CHARSET_INFO *cs);
+Item* convert_charset_partition_constant(Item *item, CHARSET_INFO *cs);
 void mem_alloc_error(size_t size);
-void truncate_partition_filename(char *path);
 
 /*
   A "Get next" function for partition iterator.
@@ -249,32 +253,29 @@ uint fast_alter_partition_table(THD *thd, TABLE *table,
                                 TABLE_LIST *table_list,
                                 char *db,
                                 const char *table_name,
-                                partition_info *new_part_info);
-void set_all_part_state(partition_info *tab_part_info,
-                        enum partition_state part_state);
+                                TABLE  *fast_alter_table);
 bool set_part_state(Alter_info *alter_info, partition_info *tab_part_info,
                     enum partition_state part_state);
 uint prep_alter_part_table(THD *thd, TABLE *table, Alter_info *alter_info,
                            HA_CREATE_INFO *create_info,
-                           Alter_table_ctx *alter_ctx,
+                           handlerton *old_db_type,
                            bool *partition_changed,
-                           partition_info **new_part_info);
+                           char *db,
+                           const char *table_name,
+                           const char *path,
+                           TABLE **fast_alter_table);
 char *generate_partition_syntax(partition_info *part_info,
                                 uint *buf_length, bool use_sql_alloc,
                                 bool show_partition_options,
                                 HA_CREATE_INFO *create_info,
                                 Alter_info *alter_info,
                                 const char *current_comment_start);
-bool verify_data_with_partition(TABLE *table, TABLE *part_table,
-                                uint32 part_id);
-bool compare_partition_options(HA_CREATE_INFO *table_create_info,
-                               partition_element *part_elem);
 #endif
 
-void create_partition_name(char *out, const char *in1,
+bool create_partition_name(char *out, const char *in1,
                            const char *in2, uint name_variant,
                            bool translate);
-void create_subpartition_name(char *out, const char *in1,
+bool create_subpartition_name(char *out, const char *in1,
                               const char *in2, const char *in3,
                               uint name_variant);
 

@@ -174,11 +174,14 @@ drop table t1, t2;
 
 --echo End of 5.0 tests
 
-#
-# Bug #11764313 57135: CRASH IN ITEM_FUNC_CASE::FIND_ITEM WITH CASE WHEN
-# ELSE CLAUSE
-#
+--echo #
+--echo # Bug#19875294 ASSERTION `SRC' FAILED IN MY_STRNXFRM_UNICODE
+--echo #              (SIG 6 -STRINGS/CTYPE-UTF8.C:5151)
+--echo #
 
-CREATE TABLE t1(a YEAR);
-SELECT 1 FROM t1 WHERE a=1 AND CASE 1 WHEN a THEN 1 ELSE 1 END;
+set @@sql_mode='';
+CREATE TABLE t1(c1 SET('','')CHARACTER SET ucs2) engine=innodb;
+INSERT INTO t1 VALUES(990101.102);
+SELECT COALESCE(c1)FROM t1 ORDER BY 1;
 DROP TABLE t1;
+set @@sql_mode=default;

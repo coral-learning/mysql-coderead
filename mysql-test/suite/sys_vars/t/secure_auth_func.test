@@ -65,14 +65,10 @@ connection default;
 #
 # Setting password in OLD format
 #
---error ER_PASSWD_LENGTH
 SET PASSWORD FOR 'testUser'@'localhost' = OLD_PASSWORD('newpass');
-DROP USER 'testUser'@'localhost';
-CREATE USER 'testUser'@'localhost' identified with 'mysql_old_password';
-SET PASSWORD FOR 'testUser'@'localhost'= OLD_PASSWORD('newpass');
 
 --echo ** Connecting con_user2 using testUser **
-connect (con_user2,localhost,testUser,newpass,,,,SKIPSECUREAUTH);
+connect (con_user2,localhost,testUser,newpass,);
 
 --echo ** Connection default**
 connection default;
@@ -86,9 +82,6 @@ SET GLOBAL secure_auth = ON;
 #
 # Setting password in NEW format
 #
-UPDATE mysql.user SET plugin='mysql_native_password' WHERE user='testUser' AND
-  host='localhost';
-FLUSH PRIVILEGES;
 SET PASSWORD FOR 'testUser'@'localhost' = PASSWORD('newpass');
 
 --echo ** Connecting con_user3 using testUser **
@@ -99,15 +92,12 @@ connection default;
 #
 # Setting password in OLD format
 #
-UPDATE mysql.user SET plugin='mysql_old_password' WHERE user='testUser' AND
-  host='localhost';
-FLUSH PRIVILEGES;
 SET PASSWORD FOR 'testUser'@'localhost' = OLD_PASSWORD('newpass');
 
 --echo ** Connecting con_user4 using testUser **
 --disable_query_log
 --error ER_SERVER_IS_IN_SECURE_AUTH_MODE
-connect (con_user4,localhost,testUser,newpass,,,,SKIPSECUREAUTH);
+connect (con_user4,localhost,testUser,newpass,);
 --enable_query_log
 --echo Expected error "Server is in secure auth mode"
 
@@ -117,9 +107,6 @@ connection default;
 #
 # Setting password back in NEW format
 #
-UPDATE mysql.user SET plugin='mysql_native_password' WHERE user='testUser' AND
-  host='localhost';
-FLUSH PRIVILEGES;
 SET PASSWORD FOR 'testUser'@'localhost' = PASSWORD('newpass');
 
 --echo ** Connecting con_user4 using testUser **

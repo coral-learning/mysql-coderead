@@ -356,7 +356,7 @@ int pthread_attr_setstacksize(pthread_attr_t *connect_att,DWORD stack)
 
 int pthread_attr_destroy(pthread_attr_t *connect_att)
 {
-  memset(connect_att, 0, sizeof(*connect_att));
+  bzero((uchar*) connect_att,sizeof(*connect_att));
   return 0;
 }
 

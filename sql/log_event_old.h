@@ -1,4 +1,4 @@
-/* Copyright (c) 2007, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2007, 2013, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef LOG_EVENT_OLD_H
 #define LOG_EVENT_OLD_H
@@ -41,8 +41,6 @@
   but we keep them this way for now.  /Sven
 */
 
-/* These classes are based on the v1 RowsHeaderLen */
-#define ROWS_HEADER_LEN ROWS_HEADER_LEN_V1
 
 /**
   @class Old_rows_log_event
@@ -110,7 +108,7 @@ public:
   flag_set get_flags(flag_set flags_arg) const { return m_flags & flags_arg; }
 
 #if !defined(MYSQL_CLIENT) && defined(HAVE_REPLICATION)
-  virtual int pack_info(Protocol *protocol);
+  virtual void pack_info(Protocol *protocol);
 #endif
 
 #ifdef MYSQL_CLIENT
@@ -130,7 +128,7 @@ public:
 
   MY_BITMAP const *get_cols() const { return &m_cols; }
   size_t get_width() const          { return m_width; }
-  const Table_id& get_table_id() const { return m_table_id; }
+  ulong get_table_id() const        { return m_table_id; }
 
 #ifndef MYSQL_CLIENT
   virtual bool write_data_header(IO_CACHE *file);
@@ -174,7 +172,7 @@ protected:
 #ifndef MYSQL_CLIENT
   TABLE *m_table;		/* The table the rows belong to */
 #endif
-  Table_id    m_table_id;	/* Table ID */
+  ulong       m_table_id;	/* Table ID */
   MY_BITMAP   m_cols;		/* Bitmap denoting columns available */
   ulong       m_width;          /* The width of the columns bitmap */
 
@@ -358,8 +356,7 @@ class Write_rows_log_event_old : public Old_rows_log_event
 public:
 #if !defined(MYSQL_CLIENT)
   Write_rows_log_event_old(THD*, TABLE*, ulong table_id,
-                           MY_BITMAP const *cols,
-                           bool is_transactional);
+                           MY_BITMAP const *cols, bool is_transactional);
 #endif
 #ifdef HAVE_REPLICATION
   Write_rows_log_event_old(const char *buf, uint event_len,
@@ -368,12 +365,14 @@ public:
 #if !defined(MYSQL_CLIENT) 
   static bool binlog_row_logging_function(THD *thd, TABLE *table,
                                           bool is_transactional,
+                                          MY_BITMAP *cols,
+                                          uint fields,
                                           const uchar *before_record
-                                          MY_ATTRIBUTE((unused)),
+                                          __attribute__((unused)),
                                           const uchar *after_record)
   {
     return thd->binlog_write_row(table, is_transactional,
-                                 after_record, NULL);
+                                 cols, fields, after_record);
   }
 #endif
 
@@ -443,11 +442,13 @@ public:
 #if !defined(MYSQL_CLIENT) 
   static bool binlog_row_logging_function(THD *thd, TABLE *table,
                                           bool is_transactional,
+                                          MY_BITMAP *cols,
+                                          uint fields,
                                           const uchar *before_record,
                                           const uchar *after_record)
   {
     return thd->binlog_update_row(table, is_transactional,
-                                  before_record, after_record, NULL);
+                                  cols, fields, before_record, after_record);
   }
 #endif
 
@@ -506,8 +507,7 @@ class Delete_rows_log_event_old : public Old_rows_log_event
 public:
 #ifndef MYSQL_CLIENT
   Delete_rows_log_event_old(THD*, TABLE*, ulong,
-                            MY_BITMAP const *cols,
-                            bool is_transactional);
+                            MY_BITMAP const *cols, bool is_transactional);
 #endif
 #ifdef HAVE_REPLICATION
   Delete_rows_log_event_old(const char *buf, uint event_len,
@@ -516,12 +516,14 @@ public:
 #if !defined(MYSQL_CLIENT) 
   static bool binlog_row_logging_function(THD *thd, TABLE *table,
                                           bool is_transactional,
+                                          MY_BITMAP *cols,
+                                          uint fields,
                                           const uchar *before_record,
                                           const uchar *after_record
-                                          MY_ATTRIBUTE((unused)))
+                                          __attribute__((unused)))
   {
     return thd->binlog_delete_row(table, is_transactional,
-                                  before_record, NULL);
+                                  cols, fields, before_record);
   }
 #endif
   

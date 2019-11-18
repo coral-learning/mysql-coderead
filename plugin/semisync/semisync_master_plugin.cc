@@ -25,7 +25,7 @@ C_MODE_START
 
 int repl_semi_report_binlog_update(Binlog_storage_param *param,
 				   const char *log_file,
-				   my_off_t log_pos)
+				   my_off_t log_pos, uint32 flags)
 {
   int  error= 0;
 
@@ -76,18 +76,13 @@ int repl_semi_binlog_dump_start(Binlog_transmit_param *param,
   {
     /* One more semi-sync slave */
     repl_semisync.add_slave();
-    /* Tell server it will observe the transmission.*/
-    param->set_observe_flag();
-
+    
     /*
       Let's assume this semi-sync slave has already received all
       binlog events before the filename and position it requests.
     */
     repl_semisync.reportReplyBinlog(param->server_id, log_file, log_pos);
   }
-  else
-    param->set_dont_observe_flag();
-
   sql_print_information("Start %s binlog_dump to slave (server_id: %d), pos(%s, %lu)",
 			semi_sync_slave ? "semi-sync" : "asynchronous",
 			param->server_id, log_file, (unsigned long)log_pos);
@@ -129,27 +124,19 @@ int repl_semi_before_send_event(Binlog_transmit_param *param,
 }
 
 int repl_semi_after_send_event(Binlog_transmit_param *param,
-                               const char *event_buf, unsigned long len,
-                               const char * skipped_log_file,
-                               my_off_t skipped_log_pos)
+                               const char *event_buf, unsigned long len)
 {
   if (repl_semisync.is_semi_sync_slave())
   {
-    if(skipped_log_pos>0)
-      repl_semisync.skipSlaveReply(event_buf, param->server_id,
-                                   skipped_log_file, skipped_log_pos);
-    else
-    {
-      THD *thd= current_thd;
-      /*
-        Possible errors in reading slave reply are ignored deliberately
-        because we do not want dump thread to quit on this. Error
-        messages are already reported.
-      */
-      (void) repl_semisync.readSlaveReply(&thd->net,
-                                          param->server_id, event_buf);
-      thd->clear_error();
-    }
+    THD *thd= current_thd;
+    /*
+      Possible errors in reading slave reply are ignored deliberately
+      because we do not want dump thread to quit on this. Error
+      messages are already reported.
+    */
+    (void) repl_semisync.readSlaveReply(&thd->net,
+                                        param->server_id, event_buf);
+    thd->clear_error();
   }
   return 0;
 }
@@ -367,30 +354,20 @@ static PSI_cond_info all_semisync_conds[]=
 {
   { &key_ss_cond_COND_binlog_send_, "COND_binlog_send_", 0}
 };
-#endif /* HAVE_PSI_INTERFACE */
-
-PSI_stage_info stage_waiting_for_semi_sync_ack_from_slave=
-{ 0, "Waiting for semi-sync ACK from slave", 0};
-
-#ifdef HAVE_PSI_INTERFACE
-PSI_stage_info *all_semisync_stages[]=
-{
-  & stage_waiting_for_semi_sync_ack_from_slave
-};
 
 static void init_semisync_psi_keys(void)
 {
   const char* category= "semisync";
   int count;
 
+  if (PSI_server == NULL)
+    return;
+
   count= array_elements(all_semisync_mutexes);
-  mysql_mutex_register(category, all_semisync_mutexes, count);
+  PSI_server->register_mutex(category, all_semisync_mutexes, count);
 
   count= array_elements(all_semisync_conds);
-  mysql_cond_register(category, all_semisync_conds, count);
-
-  count= array_elements(all_semisync_stages);
-  mysql_stage_register(category, all_semisync_stages, count);
+  PSI_server->register_cond(category, all_semisync_conds, count);
 }
 #endif /* HAVE_PSI_INTERFACE */
 

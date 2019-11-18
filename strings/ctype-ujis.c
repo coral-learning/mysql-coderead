@@ -1,5 +1,5 @@
 /* Copyright (c) 2002 MySQL AB & tommy@valley.ne.jp
-   Copyright (c) 2002, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2002, 2014, Oracle and/or its affiliates. All rights reserved.
    
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public
@@ -12,8 +12,9 @@
    Library General Public License for more details.
    
    You should have received a copy of the GNU Library General Public
-   License along with this library; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
+   License along with this library; if not, write to the Free
+   Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+   MA 02110-1301, USA */
 
 /* This file is for Japanese EUC charset, and created by tommy@valley.ne.jp.
  */
@@ -184,7 +185,7 @@ static uchar sort_order_ujis[]=
 #define isujis_ss3(c) (((c)&0xff) == 0x8f)
 
 
-static uint ismbchar_ujis(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+static uint ismbchar_ujis(CHARSET_INFO *cs __attribute__((unused)),
 		  const char* p, const char *e)
 {
   return ((*(uchar*)(p)<0x80)? 0:\
@@ -194,8 +195,7 @@ static uint ismbchar_ujis(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
     0);
 }
 
-static uint mbcharlen_ujis(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
-                           uint c)
+static uint mbcharlen_ujis(CHARSET_INFO *cs __attribute__((unused)),uint c)
 {
   return (isujis(c)? 2: isujis_ss2(c)? 2: isujis_ss3(c)? 3: 1);
 }
@@ -210,7 +210,7 @@ static uint mbcharlen_ujis(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
 */
 
 static
-size_t my_well_formed_len_ujis(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+size_t my_well_formed_len_ujis(CHARSET_INFO *cs __attribute__((unused)),
                                const char *beg, const char *end,
                                size_t pos, int *error)
 {
@@ -260,7 +260,7 @@ size_t my_well_formed_len_ujis(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
 
 
 static
-size_t my_numcells_eucjp(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+size_t my_numcells_eucjp(CHARSET_INFO *cs __attribute__((unused)),
                        const char *str, const char *str_end)
 {
   size_t clen;
@@ -65880,7 +65880,7 @@ static uint16 unicode_to_jisx0212_eucjp[65536]=
   @retval   MY_CS_ILSEQ    If a wrong byte sequence was found
 */
 static int
-my_mb_wc_euc_jp(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+my_mb_wc_euc_jp(CHARSET_INFO *cs __attribute__((unused)),
                 my_wc_t *pwc, const uchar *s, const uchar *e)
 {
   int hi;
@@ -65940,7 +65940,7 @@ my_mb_wc_euc_jp(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
   @retval   MY_CS_ILUNI    If the Unicode character does not exist in UJIS
 */
 static int
-my_wc_mb_euc_jp(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+my_wc_mb_euc_jp(CHARSET_INFO *cs __attribute__((unused)),
                 my_wc_t wc, uchar *s, uchar *e)
 {
   int jp;
@@ -65988,7 +65988,7 @@ my_wc_mb_euc_jp(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
 
 
 /* Case info pages for JIS-X-0208 range */
-static MY_UNICASE_CHARACTER cA2[256]=
+static MY_UNICASE_INFO cA2[256]=
 {
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0}, /* xx00 */
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
@@ -66109,7 +66109,7 @@ static MY_UNICASE_CHARACTER cA2[256]=
 };
 
 
-static MY_UNICASE_CHARACTER cA3[256]=
+static MY_UNICASE_INFO cA3[256]=
 {
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0}, /* xx00 */
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
@@ -66230,7 +66230,7 @@ static MY_UNICASE_CHARACTER cA3[256]=
 };
 
 
-static MY_UNICASE_CHARACTER cA6[256]=
+static MY_UNICASE_INFO cA6[256]=
 {
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0}, /* xx00 */
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
@@ -66351,7 +66351,7 @@ static MY_UNICASE_CHARACTER cA6[256]=
 };
 
 
-static MY_UNICASE_CHARACTER cA7[256]=
+static MY_UNICASE_INFO cA7[256]=
 {
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0}, /* xx00 */
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
@@ -66473,7 +66473,7 @@ static MY_UNICASE_CHARACTER cA7[256]=
 
 
 /* Case info pages for JIS-X-0212 range */
-static MY_UNICASE_CHARACTER c8FA6[]=
+static MY_UNICASE_INFO c8FA6[]=
 {
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0}, /* xx00 */
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
@@ -66594,7 +66594,7 @@ static MY_UNICASE_CHARACTER c8FA6[]=
 };
 
 
-static MY_UNICASE_CHARACTER c8FA7[]=
+static MY_UNICASE_INFO c8FA7[]=
 {
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0}, /* xx00 */
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
@@ -66715,7 +66715,7 @@ static MY_UNICASE_CHARACTER c8FA7[]=
 };
 
 
-static MY_UNICASE_CHARACTER c8FA9[]=
+static MY_UNICASE_INFO c8FA9[]=
 {
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0}, /* xx00 */
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
@@ -66836,7 +66836,7 @@ static MY_UNICASE_CHARACTER c8FA9[]=
 };
 
 
-static MY_UNICASE_CHARACTER c8FAA[]=
+static MY_UNICASE_INFO c8FAA[]=
 {
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0}, /* xx00 */
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
@@ -66957,7 +66957,7 @@ static MY_UNICASE_CHARACTER c8FAA[]=
 };
 
 
-static MY_UNICASE_CHARACTER c8FAB[]=
+static MY_UNICASE_INFO c8FAB[]=
 {
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0}, /* xx00 */
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
@@ -67078,7 +67078,7 @@ static MY_UNICASE_CHARACTER c8FAB[]=
 };
 
 
-static MY_UNICASE_CHARACTER *my_caseinfo_pages_ujis[512]=
+static MY_UNICASE_INFO *my_caseinfo_ujis[512]=
 {
   /* JIS-X-0208 */
   NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, /* 0 */
@@ -67148,15 +67148,6 @@ static MY_UNICASE_CHARACTER *my_caseinfo_pages_ujis[512]=
   NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, /* F */
   NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
-
-static MY_UNICASE_INFO my_caseinfo_ujis=
-{
-  0x0FFFF,
-  my_caseinfo_pages_ujis
-};
-
-
-
 #endif /* HAVE_CHARSET_ujis */
 
 
@@ -67167,11 +67158,11 @@ static MY_UNICASE_INFO my_caseinfo_ujis=
   UJIS and EUCJPMS share the same UPPER/LOWER functions.
 */
 
-static MY_UNICASE_CHARACTER*
-get_case_info_for_ch(const CHARSET_INFO *cs, uint plane, uint page, uint offs)
+static MY_UNICASE_INFO*
+get_case_info_for_ch(CHARSET_INFO *cs, uint plane, uint page, uint offs)
 {
-  MY_UNICASE_CHARACTER *p;
-  return (p= cs->caseinfo->page[page + plane * 256]) ? &p[offs & 0xFF] : NULL;
+  MY_UNICASE_INFO *p;
+  return (p= cs->caseinfo[page + plane * 256]) ? &p[offs & 0xFF] : NULL;
 }
 
 
@@ -67179,9 +67170,9 @@ get_case_info_for_ch(const CHARSET_INFO *cs, uint plane, uint page, uint offs)
   Generic function to handle UPPER and LOWER translation
 */
 static size_t
-my_casefold_ujis(const CHARSET_INFO *cs,
+my_casefold_ujis(CHARSET_INFO *cs,
                  char *src, size_t srclen,
-                 char *dst, size_t dstlen MY_ATTRIBUTE((unused)),
+                 char *dst, size_t dstlen __attribute__((unused)),
                  uchar *map,
                  size_t is_upper)
 {
@@ -67192,7 +67183,7 @@ my_casefold_ujis(const CHARSET_INFO *cs,
     size_t mblen= my_ismbchar(cs, src, srcend);
     if (mblen)
     {
-      MY_UNICASE_CHARACTER *ch;
+      MY_UNICASE_INFO *ch;
       ch= (mblen == 2) ?
         get_case_info_for_ch(cs, 0, (uchar) src[0], (uchar) src[1]) :
         get_case_info_for_ch(cs, 1, (uchar) src[1], (uchar) src[2]);
@@ -67227,7 +67218,7 @@ my_casefold_ujis(const CHARSET_INFO *cs,
   LOWER()
 */
 size_t
-my_casedn_ujis(const CHARSET_INFO *cs, char *src, size_t srclen,
+my_casedn_ujis(CHARSET_INFO * cs, char *src, size_t srclen,
                char *dst, size_t dstlen)
 {
   DBUG_ASSERT(dstlen >= srclen * cs->casedn_multiply); 
@@ -67240,7 +67231,7 @@ my_casedn_ujis(const CHARSET_INFO *cs, char *src, size_t srclen,
   UPPER()
 */
 size_t
-my_caseup_ujis(const CHARSET_INFO *cs, char *src, size_t srclen,
+my_caseup_ujis(CHARSET_INFO * cs, char *src, size_t srclen,
                char *dst, size_t dstlen)
 {
   DBUG_ASSERT(dstlen >= srclen * cs->caseup_multiply);
@@ -67258,7 +67249,7 @@ static MY_COLLATION_HANDLER my_collation_ci_handler =
     NULL,		/* init */
     my_strnncoll_simple,/* strnncoll    */
     my_strnncollsp_simple,
-    my_strnxfrm_mb,	/* strnxfrm     */
+    my_strnxfrm_simple,	/* strnxfrm     */
     my_strnxfrmlen_simple,
     my_like_range_mb,   /* like_range   */
     my_wildcmp_mb,	/* wildcmp      */
@@ -67313,10 +67304,11 @@ CHARSET_INFO my_charset_ujis_japanese_ci=
     to_lower_ujis,
     to_upper_ujis,
     sort_order_ujis,
-    NULL,		/* uca          */
+    NULL,		/* sort_order_big*/
+    NULL,		/* contractions */
     NULL,		/* tab_to_uni   */
     NULL,		/* tab_from_uni */
-    &my_caseinfo_ujis,  /* caseinfo     */
+    my_caseinfo_ujis,   /* caseinfo     */
     NULL,		/* state_map    */
     NULL,		/* ident_map    */
     1,			/* strxfrm_multiply */
@@ -67328,8 +67320,6 @@ CHARSET_INFO my_charset_ujis_japanese_ci=
     0xFEFE,		/* max_sort_char */
     ' ',                /* pad char      */
     0,                  /* escape_with_backslash_is_dangerous */
-    1,                  /* levels_for_compare */
-    1,                  /* levels_for_order   */
     &my_charset_handler,
     &my_collation_ci_handler
 };
@@ -67347,10 +67337,11 @@ CHARSET_INFO my_charset_ujis_bin=
     to_lower_ujis,
     to_upper_ujis,
     NULL,		/* sort_order   */
-    NULL,		/* uca          */
+    NULL,		/* contractions */
+    NULL,		/* sort_order_big*/
     NULL,		/* tab_to_uni   */
     NULL,		/* tab_from_uni */
-    &my_caseinfo_ujis,  /* caseinfo     */
+    my_caseinfo_ujis,   /* caseinfo     */
     NULL,		/* state_map    */
     NULL,		/* ident_map    */
     1,			/* strxfrm_multiply */
@@ -67362,8 +67353,6 @@ CHARSET_INFO my_charset_ujis_bin=
     0xFEFE,		/* max_sort_char */
     ' ',                /* pad char      */
     0,                  /* escape_with_backslash_is_dangerous */
-    1,                  /* levels_for_compare */
-    1,                  /* levels_for_order   */
     &my_charset_handler,
     &my_collation_mb_bin_handler
 };

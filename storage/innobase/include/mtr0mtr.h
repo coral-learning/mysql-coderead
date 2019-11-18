@@ -1,7 +1,6 @@
 /*****************************************************************************
 
-Copyright (c) 1995, 2016, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2012, Facebook Inc.
+Copyright (c) 1995, 2013, Oracle and/or its affiliates. All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -40,7 +39,6 @@ Created 11/26/1995 Heikki Tuuri
 #define MTR_LOG_ALL		21	/* default mode: log all operations
 					modifying disk-based data */
 #define	MTR_LOG_NONE		22	/* log no operations */
-#define	MTR_LOG_NO_REDO		23	/* Don't generate REDO */
 /*#define	MTR_LOG_SPACE	23 */	/* log only operations modifying
 					file space page allocation data
 					(operations in fsp0fsp.* ) */
@@ -182,11 +180,7 @@ For 1 - 8 bytes, the flag value must give the length also! @{ */
 #define MLOG_ZIP_WRITE_HEADER	((byte)50)	/*!< write to compressed page
 						header */
 #define MLOG_ZIP_PAGE_COMPRESS	((byte)51)	/*!< compress an index page */
-#define MLOG_ZIP_PAGE_COMPRESS_NO_DATA	((byte)52)/*!< compress an index page
-						without logging it's image */
-#define MLOG_ZIP_PAGE_REORGANIZE ((byte)53)	/*!< reorganize a compressed
-						page */
-#define MLOG_BIGGEST_TYPE	((byte)53)	/*!< biggest value (used in
+#define MLOG_BIGGEST_TYPE	((byte)51)	/*!< biggest value (used in
 						assertions) */
 /* @} */
 
@@ -197,9 +191,6 @@ functions).  The page number parameter was originally written as 0. @{ */
 					MLOG_FILE_CREATE, MLOG_FILE_CREATE2 */
 /* @} */
 
-/* included here because it needs MLOG_LSN defined */
-#include "log0log.h"
-
 /***************************************************************//**
 Starts a mini-transaction. */
 UNIV_INLINE
@@ -207,7 +198,7 @@ void
 mtr_start(
 /*======*/
 	mtr_t*	mtr)	/*!< out: mini-transaction */
-	MY_ATTRIBUTE((nonnull));
+	__attribute__((nonnull));
 /***************************************************************//**
 Commits a mini-transaction. */
 UNIV_INTERN
@@ -215,7 +206,7 @@ void
 mtr_commit(
 /*=======*/
 	mtr_t*	mtr)	/*!< in/out: mini-transaction */
-	MY_ATTRIBUTE((nonnull));
+	__attribute__((nonnull));
 /**********************************************************//**
 Sets and returns a savepoint in mtr.
 @return	savepoint */
@@ -299,29 +290,28 @@ mtr_x_lock_func(
 #endif /* !UNIV_HOTBACKUP */
 
 /***************************************************//**
-Releases an object in the memo stack.
-@return true if released */
+Releases an object in the memo stack. */
 UNIV_INTERN
-bool
+void
 mtr_memo_release(
 /*=============*/
 	mtr_t*	mtr,	/*!< in/out: mini-transaction */
 	void*	object,	/*!< in: object */
 	ulint	type)	/*!< in: object type: MTR_MEMO_S_LOCK, ... */
-	MY_ATTRIBUTE((nonnull));
+	__attribute__((nonnull));
 #ifdef UNIV_DEBUG
 # ifndef UNIV_HOTBACKUP
 /**********************************************************//**
 Checks if memo contains the given item.
 @return	TRUE if contains */
 UNIV_INLINE
-bool
+ibool
 mtr_memo_contains(
 /*==============*/
 	mtr_t*		mtr,	/*!< in: mtr */
 	const void*	object,	/*!< in: object to search */
 	ulint		type)	/*!< in: type of object */
-	MY_ATTRIBUTE((warn_unused_result, nonnull));
+	__attribute__((warn_unused_result, nonnull));
 
 /**********************************************************//**
 Checks if memo contains the given page.
@@ -367,27 +357,26 @@ mtr_memo_push(
 	void*	object,	/*!< in: object */
 	ulint	type);	/*!< in: object type: MTR_MEMO_S_LOCK, ... */
 
-/** Mini-transaction memo stack slot. */
-struct mtr_memo_slot_t{
+
+/* Type definition of a mini-transaction memo stack slot. */
+typedef	struct mtr_memo_slot_struct	mtr_memo_slot_t;
+struct mtr_memo_slot_struct{
 	ulint	type;	/*!< type of the stored object (MTR_MEMO_S_LOCK, ...) */
 	void*	object;	/*!< pointer to the object */
 };
 
 /* Mini-transaction handle and buffer */
-struct mtr_t{
+struct mtr_struct{
 #ifdef UNIV_DEBUG
 	ulint		state;	/*!< MTR_ACTIVE, MTR_COMMITTING, MTR_COMMITTED */
 #endif
 	dyn_array_t	memo;	/*!< memo stack for locks etc. */
 	dyn_array_t	log;	/*!< mini-transaction log */
-	unsigned	inside_ibuf:1;
+	ibool		inside_ibuf;
 				/*!< TRUE if inside ibuf changes */
-	unsigned	modifications:1;
-				/*!< TRUE if the mini-transaction
-				modified buffer pool pages */
-	unsigned	made_dirty:1;
-				/*!< TRUE if mtr has made at least
-				one buffer pool page dirty */
+	ibool		modifications;
+				/* TRUE if the mtr made modifications to
+				buffer pool pages */
 	ulint		n_log_recs;
 				/* count of how many page initial log records
 				have been written to the mtr log */
@@ -396,9 +385,9 @@ struct mtr_t{
 				this mini-transaction */
 	ulint		log_mode; /* specifies which operations should be
 				logged; default value MTR_LOG_ALL */
-	lsn_t		start_lsn;/* start lsn of the possible log entry for
+	ib_uint64_t	start_lsn;/* start lsn of the possible log entry for
 				this mtr */
-	lsn_t		end_lsn;/* end lsn of the possible log entry for
+	ib_uint64_t	end_lsn;/* end lsn of the possible log entry for
 				this mtr */
 #ifdef UNIV_DEBUG
 	ulint		magic_n;

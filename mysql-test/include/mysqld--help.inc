@@ -8,7 +8,7 @@
 # force symbolic-links=0 (valgrind build has a different default)
 #
 
-exec $MYSQLD_BOOTSTRAP_CMD --symbolic-links=0 --lower-case-table-names=1 --help --verbose > $MYSQL_TMP_DIR/mysqld--help.txt 2>/dev/null;
+exec $MYSQLD_BOOTSTRAP_CMD --symbolic-links=0 --lower-case-table-names=1 --help --verbose > $MYSQL_TMP_DIR/mysqld--help.txt 2>&1;
 
 # The inline perl code below will copy $MYSQL_TMP_DIR/mysqld--help.txt
 # to output, but filter away some variable stuff (e.g. paths).
@@ -16,15 +16,14 @@ exec $MYSQLD_BOOTSTRAP_CMD --symbolic-links=0 --lower-case-table-names=1 --help 
 perl;
   # Variables which we don't want to display in the result file since
   # their paths may vary:
-  @skipvars=qw/basedir open-files-limit general-log-file plugin-dir
-               pid-file slow-query-log-file
-               datadir slave-load-tmpdir tmpdir socket table-definition-cache table-open-cache
-               secure-file-priv/;
+  @skipvars=qw/basedir open-files-limit general-log-file log plugin-dir
+               log-slow-queries pid-file slow-query-log-file
+			   datadir slave-load-tmpdir tmpdir socket
+			   secure-file-priv/;
 
   # Plugins which may or may not be there:
-  @plugins=qw/innodb ndb ndbinfo archive blackhole federated partition ndbcluster debug temp-pool ssl des-key-file
-              thread-concurrency super-large-pages mutex-deadlock-detector null-audit
-              sha256-password-private-key-path sha256-password-public-key-path/;
+  @plugins=qw/innodb ndb archive blackhole federated partition ndbcluster debug temp-pool ssl des-key-file
+              thread-concurrency super-large-pages mutex-deadlock-detector null-audit/;
 
   # And substitute the content some environment variables with their
   # names:
@@ -49,8 +48,6 @@ perl;
     s/\b4294967295\b/18446744073709551615/;
     s/\b2146435072\b/9223372036853727232/;
     s/\b196608\b/262144/;
-    # Replacing port number with string
-    s/^port \d+/port ####/;
     foreach $var (@env) { s/$ENV{$var}/$var/ }
     next if /use --skip-(use-)?symbolic-links to disable/; # for valgrind, again
     next if $skip;

@@ -1,7 +1,5 @@
-/*
-   Copyright (C) 2003-2008 MySQL AB, 2009, 2010 Sun Microsystems, Inc.
-
-   All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2005, 2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -14,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include <ndb_global.h>
 
@@ -84,6 +81,33 @@ static void printprop(const Properties &p) {
 }
 #endif
 
+void
+SimpleCpcClient::cmd_stop(char *arg) {
+  Properties p;
+  Vector<Process> proc_list;
+
+  list_processes(proc_list, p);
+  bool stopped = false;
+
+  for(size_t i = 0; i < proc_list.size(); i++) {
+    if(strcmp(proc_list[i].m_name.c_str(), arg) == 0) {
+      stopped = true;
+      Properties reply;
+      stop_process(proc_list[i].m_id, reply);
+
+      Uint32 status;
+      reply.get("status", &status);
+      if(status != 0) {
+	BaseString msg;
+	reply.get("errormessage", msg);
+	ndbout << "Stop failed: " << msg << endl;
+      }
+    }
+  }
+  
+  if(!stopped)
+    ndbout << "No such process" << endl;
+}
 
 int
 SimpleCpcClient::stop_process(Uint32 id, Properties& reply){
@@ -114,10 +138,37 @@ SimpleCpcClient::stop_process(Uint32 id, Properties& reply){
     ret->get("errormessage", msg);
     reply.put("errormessage", msg.c_str());
   }
-  delete ret;
+
   return status;
 }
 
+void
+SimpleCpcClient::cmd_start(char *arg) {
+  Properties p;
+  Vector<Process> proc_list;
+  list_processes(proc_list, p);
+  bool startped = false;
+
+  for(size_t i = 0; i < proc_list.size(); i++) {
+    if(strcmp(proc_list[i].m_name.c_str(), arg) == 0) {
+      startped = true;
+
+      Properties reply;
+      start_process(proc_list[i].m_id, reply);
+
+      Uint32 status;
+      reply.get("status", &status);
+      if(status != 0) {
+	BaseString msg;
+	reply.get("errormessage", msg);
+	ndbout << "Start failed: " << msg << endl;
+      }
+    }
+  }
+  
+  if(!startped)
+    ndbout << "No such process" << endl;
+}
 
 int
 SimpleCpcClient::start_process(Uint32 id, Properties& reply){
@@ -148,8 +199,6 @@ SimpleCpcClient::start_process(Uint32 id, Properties& reply){
     ret->get("errormessage", msg);
     reply.put("errormessage", msg.c_str());
   }
-
-  delete ret;
 
   return status;
 }
@@ -184,12 +233,9 @@ SimpleCpcClient::undefine_process(Uint32 id, Properties& reply){
     reply.put("errormessage", msg.c_str());
   }
 
-  delete ret;
-
   return status;
 }
 
-#if 0
 static void
 printproc(SimpleCpcClient::Process & p) {
   ndbout.println("Name:                %s", p.m_name.c_str());
@@ -203,9 +249,19 @@ printproc(SimpleCpcClient::Process & p) {
   ndbout.println("Owner:               %s", p.m_owner.c_str());
   ndbout.println("Runas:               %s", p.m_runas.c_str());
   ndbout.println("Ulimit:              %s", p.m_ulimit.c_str());
-  ndbout.println("%s", "");
+  ndbout.println("");
 }
-#endif
+
+void
+SimpleCpcClient::cmd_list(char *arg) {
+  Properties p;
+  Vector<Process> proc_list;
+  list_processes(proc_list, p);
+
+  for(size_t i = 0; i < proc_list.size(); i++) {
+    printproc(proc_list[i]);
+  }
+}
 
 static int
 convert(const Properties & src, SimpleCpcClient::Process & dst){
@@ -291,13 +347,13 @@ SimpleCpcClient::define_process(Process & p, Properties& reply){
   }
 
   p.m_id = id;
-  delete ret;
+  
   return status;
 }
 
 int
 SimpleCpcClient::list_processes(Vector<Process> &procs, Properties& reply) {
-  int start = 0, end = 0, entry; 
+  int start, end, entry; 
   const ParserRow_t list_reply[] = {
     CPC_CMD("start processes", &start, ""),
     CPC_CMD("end processes", &end, ""),
@@ -335,10 +391,8 @@ SimpleCpcClient::list_processes(Vector<Process> &procs, Properties& reply) {
     void *p;
     cpc_recv(list_reply, &proc, &p);
 
-    end++;
     if(p == &start)
     {
-      start = 1;
       /* do nothing */
     }
     else if(p == &end)
@@ -347,16 +401,10 @@ SimpleCpcClient::list_processes(Vector<Process> &procs, Properties& reply) {
     }
     else if(p == &entry)
     {
-      if(proc != NULL)
-      {
+      if(proc != NULL){
 	Process p;
 	convert(* proc, p);
 	procs.push_back(p);
-      }
-      else
-      {
-        ndbout_c("JONAS: start: %d loop: %d cnt: %u got p == &entry with proc == NULL",
-                 start, end, procs.size());
       }
     }
     else
@@ -364,19 +412,23 @@ SimpleCpcClient::list_processes(Vector<Process> &procs, Properties& reply) {
       ndbout_c("internal error: %d", __LINE__);
       return -1;
     }
-    if (proc)
-    {
-      delete proc;
-    }
   }
   return 0;
 }
 
+void
+SimpleCpcClient::cmd_help(char *arg) {
+  ndbout
+    << "HELP				Print help text" << endl
+    << "LIST				List processes" << endl
+    << "START				Start process" << endl
+    << "STOP				Stop process" << endl;
+}
 
 SimpleCpcClient::SimpleCpcClient(const char *_host, int _port) {
   host = strdup(_host);
   port = _port;
-  my_socket_invalidate(&cpc_sock);
+  cpc_sock = -1;
 }
 
 SimpleCpcClient::~SimpleCpcClient() {
@@ -387,9 +439,9 @@ SimpleCpcClient::~SimpleCpcClient() {
 
   port = 0;
 
-  if(my_socket_valid(cpc_sock)) {
-    my_socket_close(cpc_sock);
-    my_socket_invalidate(&cpc_sock);
+  if(cpc_sock == -1) {
+    close(cpc_sock);
+    cpc_sock = -1;
   }
 }
 
@@ -399,8 +451,8 @@ SimpleCpcClient::connect() {
   struct hostent *hp;
 
   /* Create socket */
-  cpc_sock = my_socket_create(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-  if(!my_socket_valid(cpc_sock))
+  cpc_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  if(cpc_sock < 0)
     return -1;
 
   /* Connect socket */
@@ -413,7 +465,7 @@ SimpleCpcClient::connect() {
 
   memcpy(&sa.sin_addr, hp->h_addr, hp->h_length);
   sa.sin_port = htons(port);
-  if (my_connect_inet(cpc_sock, &sa) < 0)
+  if (::connect(cpc_sock, (struct sockaddr*) &sa, sizeof(sa)) < 0)
     return -1;
 
   return 0;
@@ -441,15 +493,6 @@ SimpleCpcClient::cpc_send(const char *cmd,
       break;
     case PropertiesType_char:
       args.get(name, val_s);
-      if (strlen(val_s.c_str()) > Parser_t::Context::MaxParseBytes)
-      {
-        ndbout << "Argument " << name << " at " 
-               << strlen(val_s.c_str())
-               << " longer than max of "
-               << Parser_t::Context::MaxParseBytes
-               << endl;
-        abort();
-      }
       cpc_out.println("%s: %s", name, val_s.c_str());
       break;
     default:
@@ -457,7 +500,7 @@ SimpleCpcClient::cpc_send(const char *cmd,
       break;
     }
   }
-  cpc_out.println("%s", "");
+  cpc_out.println("");
 
   return 0;
 }
@@ -488,6 +531,13 @@ SimpleCpcClient::cpc_call(const char *cmd,
 			  const ParserRow_t *reply_syntax) {
   cpc_send(cmd, args);
 
+#if 0
+  Parser_t::Context ctx;
+  ParserDummy session(cpc_sock);
+  Parser_t parser(reply_syntax, *cpc_in, true, true, true);
+  const Properties *ret = parser.parse(ctx, session);
+  return ret;
+#endif
   const Properties *ret;
   cpc_recv(reply_syntax, &ret);
   return ret;

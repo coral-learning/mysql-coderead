@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights
+/* Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights
    reserved.
 
    This program is free software; you can redistribute it and/or modify
@@ -12,19 +12,15 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include "my_global.h"                          /* NO_EMBEDDED_ACCESS_CHECKS */
-
-#include <vector>
-#include <algorithm>
-#include <functional>
-#include <list>
-#include <set>
-
 #include "sql_priv.h"
 #include "unireg.h"
 #include <signal.h>
+#ifndef __WIN__
+#include <netdb.h>        // getservbyname, servent
+#endif
 #include "sql_parse.h"    // test_if_data_home_dir
 #include "sql_cache.h"    // query_cache, query_cache_*
 #include "sql_locale.h"   // MY_LOCALES, my_locales, my_locale_by_name
@@ -45,7 +41,7 @@
 #include "sql_acl.h"      // acl_free, grant_free, acl_init,
                           // grant_init
 #include "sql_base.h"     // table_def_free, table_def_init,
-                          // Table_cache,
+                          // cached_open_tables,
                           // cached_table_definitions
 #include "sql_test.h"     // mysql_print_status
 #include "item_create.h"  // item_create_cleanup, item_create_init
@@ -58,11 +54,11 @@
 #include <m_ctype.h>
 #include <my_dir.h>
 #include <my_bit.h>
-#include "rpl_gtid.h"
-#include "rpl_slave.h"
-#include "rpl_master.h"
+#include "slave.h"
 #include "rpl_mi.h"
+#include "sql_repl.h"
 #include "rpl_filter.h"
+#include "repl_failsafe.h"
 #include <sql_common.h>
 #include <my_stacktrace.h>
 #include "mysqld_suffix.h"
@@ -73,25 +69,14 @@
 #include "scheduler.h"
 #include "debug_sync.h"
 #include "sql_callback.h"
-#include "opt_trace_context.h"
-
-#include "global_threads.h"
-#include "mysqld.h"
-#include "my_default.h"
 
 #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
 #include "../storage/perfschema/pfs_server.h"
 #endif /* WITH_PERFSCHEMA_STORAGE_ENGINE */
-#include <mysql/psi/mysql_idle.h>
-#include <mysql/psi/mysql_socket.h>
-#include <mysql/psi/mysql_statement.h>
-#include "mysql_com_server.h"
 
 #include "keycaches.h"
 #include "../storage/myisam/ha_myisam.h"
 #include "set_var.h"
-
-#include "sys_vars_shared.h"
 
 #include "rpl_injector.h"
 
@@ -112,15 +97,6 @@
 #include <poll.h>
 #endif
 
-#ifdef HAVE_FESETROUND
-#include <fenv.h>
-#endif
-#include "table_cache.h" // table_cache_manager
-
-using std::min;
-using std::max;
-using std::vector;
-
 #define mysqld_charset &my_charset_latin1
 
 /* We have HAVE_purify below as this speeds up the shutdown of MySQL */
@@ -129,18 +105,18 @@ using std::vector;
 #define HAVE_CLOSE_SERVER_SOCK 1
 #endif
 
-extern "C" {          // Because of SCO 3.2V4.2
+extern "C" {					// Because of SCO 3.2V4.2
 #include <errno.h>
 #include <sys/stat.h>
 #ifndef __GNU_LIBRARY__
-#define __GNU_LIBRARY__       // Skip warnings in getopt.h
+#define __GNU_LIBRARY__				// Skip warnings in getopt.h
 #endif
 #include <my_getopt.h>
 #ifdef HAVE_SYSENT_H
 #include <sysent.h>
 #endif
 #ifdef HAVE_PWD_H
-#include <pwd.h>        // For getpwent
+#include <pwd.h>				// For getpwent
 #endif
 #ifdef HAVE_GRP_H
 #include <grp.h>
@@ -167,7 +143,7 @@ extern "C" {          // Because of SCO 3.2V4.2
 #include <sys/mman.h>
 #endif
 
-#ifdef __WIN__
+#ifdef __WIN__ 
 #include <crtdbg.h>
 #endif
 
@@ -187,7 +163,7 @@ int initgroups(const char *,unsigned int);
 
 #if defined(__FreeBSD__) && defined(HAVE_IEEEFP_H) && !defined(HAVE_FEDISABLEEXCEPT)
 #include <ieeefp.h>
-#ifdef HAVE_FP_EXCEPT       // Fix type conflict
+#ifdef HAVE_FP_EXCEPT				// Fix type conflict
 typedef fp_except fp_except_t;
 #endif
 #endif /* __FreeBSD__ && HAVE_IEEEFP_H && !HAVE_FEDISABLEEXCEPT */
@@ -224,7 +200,7 @@ inline void setup_fpu()
   */
 #if defined(FP_X_DNML)
   fpsetmask(~(FP_X_INV | FP_X_DNML | FP_X_OFL | FP_X_UFL | FP_X_DZ |
-        FP_X_IMP));
+	      FP_X_IMP));
 #else
   fpsetmask(~(FP_X_INV |             FP_X_OFL | FP_X_UFL | FP_X_DZ |
               FP_X_IMP));
@@ -272,7 +248,7 @@ inline void setup_fpu()
 
 #define MYSQL_KILL_SIGNAL SIGTERM
 
-#include <my_pthread.h>     // For thr_setconcurency()
+#include <my_pthread.h>			// For thr_setconcurency()
 
 #ifdef SOLARIS
 extern "C" int gethostname(char *name, int namelen);
@@ -345,33 +321,32 @@ static PSI_rwlock_key key_rwlock_openssl;
 #endif
 #endif /* HAVE_PSI_INTERFACE */
 
-/**
-  Statement instrumentation key for replication.
-*/
-#ifdef HAVE_PSI_STATEMENT_INTERFACE
-PSI_statement_info stmt_info_rpl;
+#ifdef HAVE_NPTL
+volatile sig_atomic_t ld_assume_kernel_is_set= 0;
 #endif
 
 /* the default log output is log tables */
 static bool lower_case_table_names_used= 0;
+static bool max_long_data_size_used= false;
 static bool volatile select_thread_in_use, signal_thread_in_use;
 /* See Bug#56666 and Bug#56760 */;
 volatile bool ready_to_exit;
 static my_bool opt_debugging= 0, opt_external_locking= 0, opt_console= 0;
 static my_bool opt_short_log_format= 0;
-static uint kill_blocked_pthreads_flag, wake_pthread;
+static uint kill_cached_threads, wake_thread;
 static ulong killed_threads;
        ulong max_used_connections;
+static volatile ulong cached_thread_count= 0;
 static char *mysqld_user, *mysqld_chroot;
 static char *default_character_set_name;
 static char *character_set_filesystem_name;
 static char *lc_messages;
 static char *lc_time_names_name;
-char *my_bind_addr_str;
+static char *my_bind_addr_str;
 static char *default_collation_name;
 char *default_storage_engine;
-char *default_tmp_storage_engine;
 static char compiled_default_collation_name[]= MYSQL_DEFAULT_COLLATION_NAME;
+static I_List<THD> thread_cache;
 static bool binlog_format_used= false;
 
 LEX_STRING opt_init_connect, opt_init_slave;
@@ -381,10 +356,9 @@ static mysql_cond_t COND_thread_cache, COND_flush_thread_cache;
 /* Global variables */
 
 bool opt_bin_log, opt_ignore_builtin_innodb= 0;
-my_bool opt_log, opt_slow_log, opt_log_raw;
+my_bool opt_log, opt_slow_log;
 ulonglong log_output_options;
 my_bool opt_log_queries_not_using_indexes= 0;
-ulong opt_log_throttle_queries_not_using_indexes= 0;
 bool opt_error_log= IF_WIN(1,0);
 bool opt_disable_networking=0, opt_skip_show_db=0;
 bool opt_skip_name_resolve=0;
@@ -395,14 +369,12 @@ my_bool locked_in_memory;
 bool opt_using_transactions;
 bool volatile abort_loop;
 bool volatile shutdown_in_progress;
-ulong log_warnings;
-uint host_cache_size;
-
 #if defined(_WIN32) && !defined(EMBEDDED_LIBRARY)
 ulong slow_start_timeout;
 #endif
 /*
-  True if the bootstrap thread is running. Protected by LOCK_thread_count.
+  True if the bootstrap thread is running. Protected by LOCK_thread_count,
+  just like thread_count.
   Used in bootstrap() function to determine if the bootstrap thread
   has completed. Note, that we can't use 'thread_count' instead,
   since in 5.1, in presence of the Event Scheduler, there may be
@@ -415,13 +387,11 @@ ulong slow_start_timeout;
   SQL commands in the init file and in --bootstrap mode.
 */
 bool in_bootstrap= FALSE;
-my_bool opt_bootstrap= 0;
-
 /**
    @brief 'grant_option' is used to indicate if privileges needs
    to be checked, in which case the lock, LOCK_grant, is used
    to protect access to the grant table.
-   @note This flag is dropped in 5.1
+   @note This flag is dropped in 5.1 
    @see grant_init()
  */
 bool volatile grant_option;
@@ -434,7 +404,6 @@ my_bool opt_safe_user_create = 0;
 my_bool opt_show_slave_auth_info;
 my_bool opt_log_slave_updates= 0;
 char *opt_slave_skip_errors;
-my_bool opt_slave_allow_batching= 0;
 
 /**
   compatibility option:
@@ -449,8 +418,6 @@ handlerton *heap_hton;
 handlerton *myisam_hton;
 handlerton *partition_hton;
 
-uint opt_server_id_bits= 0;
-ulong opt_server_id_mask= 0;
 my_bool read_only= 0, opt_readonly= 0;
 my_bool use_temp_pool, relay_log_purge;
 my_bool relay_log_recovery;
@@ -474,25 +441,11 @@ my_bool opt_old_style_user_limits= 0, trust_function_creators= 0;
   changed). False otherwise.
 */
 volatile bool mqh_used = 0;
-my_bool opt_noacl= 0;
+my_bool opt_noacl;
 my_bool sp_automatic_privileges= 1;
 
 ulong opt_binlog_rows_event_max_size;
-const char *binlog_checksum_default= "NONE";
-ulong binlog_checksum_options;
-my_bool opt_master_verify_checksum= 0;
-my_bool opt_slave_sql_verify_checksum= 1;
 const char *binlog_format_names[]= {"MIXED", "STATEMENT", "ROW", NullS};
-my_bool enforce_gtid_consistency;
-my_bool binlog_gtid_simple_recovery;
-ulong binlog_error_action;
-const char *binlog_error_action_list[]= {"IGNORE_ERROR", "ABORT_SERVER", NullS};
-ulong gtid_mode;
-const char *gtid_mode_names[]=
-{"OFF", "UPGRADE_STEP_1", "UPGRADE_STEP_2", "ON", NullS};
-TYPELIB gtid_mode_typelib=
-{ array_elements(gtid_mode_names) - 1, "", gtid_mode_names, NULL };
-
 #ifdef HAVE_INITGROUPS
 volatile sig_atomic_t calling_initgroups= 0; /**< Used in SIGSEGV handler. */
 #endif
@@ -502,39 +455,29 @@ ulong delay_key_write_options;
 uint protocol_version;
 uint lower_case_table_names;
 ulong tc_heuristic_recover= 0;
-int32 num_thread_running;
+uint volatile thread_count;
+int32 thread_running;
 ulong thread_created;
 ulong back_log, connect_timeout, concurrency, server_id;
 ulong table_cache_size, table_def_size;
-ulong table_cache_instances;
-ulong table_cache_size_per_instance;
 ulong what_to_log;
-ulong slow_launch_time;
-int32 slave_open_temp_tables;
+ulong slow_launch_time, slave_open_temp_tables;
 ulong open_files_limit, max_binlog_size, max_relay_log_size;
 ulong slave_trans_retries;
 uint  slave_net_timeout;
 ulong slave_exec_mode_options;
 ulonglong slave_type_conversions_options;
-ulong opt_mts_slave_parallel_workers;
-ulonglong opt_mts_pending_jobs_size_max;
-ulonglong slave_rows_search_algorithms_options;
-#ifndef DBUG_OFF
-uint slave_rows_last_search_algorithm_used;
-#endif
+ulong thread_cache_size=0;
 ulong binlog_cache_size=0;
 ulonglong  max_binlog_cache_size=0;
 ulong slave_max_allowed_packet= 0;
 ulong binlog_stmt_cache_size=0;
-my_atomic_rwlock_t opt_binlog_max_flush_queue_time_lock;
-int32 opt_binlog_max_flush_queue_time= 0;
 ulonglong  max_binlog_stmt_cache_size=0;
 ulong query_cache_size=0;
 ulong refresh_version;  /* Increments on each reload */
 query_id_t global_query_id;
 my_atomic_rwlock_t global_query_id_lock;
 my_atomic_rwlock_t thread_running_lock;
-my_atomic_rwlock_t slave_open_temp_tables_lock;
 ulong aborted_threads, aborted_connects;
 ulong delayed_insert_timeout, delayed_insert_limit, delayed_queue_size;
 ulong delayed_insert_threads, delayed_insert_writes, delayed_rows_in_use;
@@ -543,18 +486,11 @@ ulong specialflag=0;
 ulong binlog_cache_use= 0, binlog_cache_disk_use= 0;
 ulong binlog_stmt_cache_use= 0, binlog_stmt_cache_disk_use= 0;
 ulong max_connections, max_connect_errors;
-ulong rpl_stop_slave_timeout= LONG_TIMEOUT;
-my_bool log_bin_use_v1_row_events= 0;
-bool thread_cache_size_specified= false;
-bool host_cache_size_specified= false;
-bool table_definition_cache_specified= false;
-
-Error_log_throttle err_log_throttle(Log_throttle::LOG_THROTTLE_WINDOW_SIZE,
-                                    sql_print_error,
-                                    "Error log throttle: %10lu 'Can't create"
-                                    " thread to handle new connection'"
-                                    " error(s) suppressed");
-
+/*
+  Maximum length of parameter value which can be set through
+  mysql_send_long_data() call.
+*/
+ulong max_long_data_size;
 /**
   Limit of the total number of prepared statements in the server.
   Is necessary to protect the server against out-of-memory attacks.
@@ -574,19 +510,14 @@ ulong prepared_stmt_count=0;
 ulong thread_id=1L,current_pid;
 ulong slow_launch_threads = 0;
 uint sync_binlog_period= 0, sync_relaylog_period= 0,
-     sync_relayloginfo_period= 0, sync_masterinfo_period= 0,
-     opt_mts_checkpoint_period, opt_mts_checkpoint_group;
+     sync_relayloginfo_period= 0, sync_masterinfo_period= 0;
 ulong expire_logs_days = 0;
+ulong rpl_recovery_rank=0;
 /**
   Soft upper limit for number of sp_head objects that can be stored
   in the sp_cache for one connection.
 */
 ulong stored_program_cache_size= 0;
-/**
-  Compatibility option to prevent auto upgrade of old temporals
-  during certain ALTER TABLE operations.
-*/
-my_bool avoid_temporal_upgrade;
 
 const double log_10[] = {
   1e000, 1e001, 1e002, 1e003, 1e004, 1e005, 1e006, 1e007, 1e008, 1e009,
@@ -624,8 +555,6 @@ const double log_10[] = {
 
 time_t server_start_time, flush_status_time;
 
-char server_uuid[UUID_LENGTH+1];
-const char *server_uuid_ptr;
 char mysql_home[FN_REFLEN], pidfile_name[FN_REFLEN], system_time_zone[30];
 char default_logfile_name[FN_REFLEN];
 char *default_tz_name;
@@ -641,8 +570,6 @@ uint mysql_real_data_home_len, mysql_data_home_len= 1;
 uint reg_ext_length;
 const key_map key_map_empty(0);
 key_map key_map_full(0);                        // Will be initialized later
-char logname_path[FN_REFLEN];
-char slow_logname_path[FN_REFLEN];
 char secure_file_real_path[FN_REFLEN];
 
 DATE_TIME_FORMAT global_date_format, global_datetime_format, global_time_format;
@@ -661,19 +588,6 @@ const char *in_additional_cond= "<IN COND>";
 const char *in_having_cond= "<IN HAVING>";
 
 my_decimal decimal_zero;
-/** Number of connection errors when selecting on the listening port */
-ulong connection_errors_select= 0;
-/** Number of connection errors when accepting sockets in the listening port. */
-ulong connection_errors_accept= 0;
-/** Number of connection errors from TCP wrappers. */
-ulong connection_errors_tcpwrap= 0;
-/** Number of connection errors from internal server errors. */
-ulong connection_errors_internal= 0;
-/** Number of connection errors from the server max_connection limit. */
-ulong connection_errors_max_connection= 0;
-/** Number of errors when reading the peer address. */
-ulong connection_errors_peer_addr= 0;
-
 /* classes for comparation parsing/processing */
 Eq_creator eq_creator;
 Ne_creator ne_creator;
@@ -685,8 +599,24 @@ Le_creator le_creator;
 MYSQL_FILE *bootstrap_file;
 int bootstrap_error;
 
+I_List<THD> threads;
 Rpl_filter* rpl_filter;
 Rpl_filter* binlog_filter;
+
+THD *first_global_thread()
+{
+  if (threads.is_empty())
+    return NULL;
+  return threads.head();
+}
+
+THD *next_global_thread(THD *thd)
+{
+  if (threads.is_last(thd))
+    return NULL;
+  struct ilink *next= thd->next;
+  return static_cast<THD*>(next);
+}
 
 struct system_variables global_system_variables;
 struct system_variables max_system_variables;
@@ -721,8 +651,6 @@ mysql_mutex_t
   LOCK_global_system_variables,
   LOCK_user_conn, LOCK_slave_list, LOCK_active_mi,
   LOCK_connection_count, LOCK_error_messages;
-mysql_mutex_t LOCK_sql_rand;
-
 /**
   The below lock protects access to two global server variables:
   max_prepared_stmt_count and prepared_stmt_count. These variables
@@ -731,16 +659,6 @@ mysql_mutex_t LOCK_sql_rand;
   server may be fairly high, we need a dedicated lock.
 */
 mysql_mutex_t LOCK_prepared_stmt_count;
-
-/*
- The below two locks are introudced as guards (second mutex) for
-  the global variables sql_slave_skip_counter and slave_net_timeout
-  respectively. See fix_slave_skip_counter/fix_slave_net_timeout
-  for more details
-*/
-mysql_mutex_t LOCK_sql_slave_skip_counter;
-mysql_mutex_t LOCK_slave_net_timeout;
-mysql_mutex_t LOCK_log_throttle_qni;
 #ifdef HAVE_OPENSSL
 mysql_mutex_t LOCK_des_key_file;
 #endif
@@ -769,11 +687,10 @@ char *opt_logname, *opt_slow_logname, *opt_bin_logname;
 static volatile sig_atomic_t kill_in_progress;
 
 
-static my_bool opt_myisam_log;
+static my_bool opt_bootstrap, opt_myisam_log;
 static int cleanup_done;
 static ulong opt_specialflag;
-static char *opt_update_logname;
-char *opt_binlog_index_name;
+static char *opt_update_logname, *opt_binlog_index_name;
 char *mysql_home_ptr, *pidfile_name_ptr;
 /** Initial command line arguments (count), after load_defaults().*/
 static int defaults_argc;
@@ -794,204 +711,12 @@ static char **remaining_argv;
 int orig_argc;
 char **orig_argv;
 
-#if defined(HAVE_OPENSSL) && !defined(HAVE_YASSL)
-bool init_rsa_keys(void);
-void deinit_rsa_keys(void);
-int show_rsa_public_key(THD *thd, SHOW_VAR *var, char *buff);
-#endif
-
-static volatile sig_atomic_t global_thread_count= 0;
-static std::set<THD*> *global_thread_list= NULL;
-
-ulong max_blocked_pthreads= 0;
-static ulong blocked_pthread_count= 0;
-static std::list<THD*> *waiting_thd_list= NULL;
-Checkable_rwlock *global_sid_lock= NULL;
-Sid_map *global_sid_map= NULL;
-Gtid_state *gtid_state= NULL;
-
 /*
-  global_thread_list and waiting_thd_list are both pointers to objects
-  on the heap, to avoid potential problems with running destructors atexit().
- */
-static void delete_global_thread_list()
-{
-  delete global_thread_list;
-  delete waiting_thd_list;
-  global_thread_list= NULL;
-  waiting_thd_list= NULL;
-}
-
-Thread_iterator global_thread_list_begin()
-{
-  mysql_mutex_assert_owner(&LOCK_thread_count);
-  return global_thread_list->begin();
-}
-
-Thread_iterator global_thread_list_end()
-{
-  mysql_mutex_assert_owner(&LOCK_thread_count);
-  return global_thread_list->end();
-}
-
-void copy_global_thread_list(std::set<THD*> *new_copy)
-{
-  mysql_mutex_assert_owner(&LOCK_thd_remove);
-  mysql_mutex_lock(&LOCK_thread_count);
-  *new_copy= *global_thread_list;
-  mysql_mutex_unlock(&LOCK_thread_count);
-}
-
-void add_global_thread(THD *thd)
-{
-  DBUG_PRINT("info", ("add_global_thread %p", thd));
-  mysql_mutex_assert_owner(&LOCK_thread_count);
-  const bool have_thread=
-    global_thread_list->find(thd) != global_thread_list->end();
-  if (!have_thread)
-  {
-    ++global_thread_count;
-    global_thread_list->insert(thd);
-  }
-  // Adding the same THD twice is an error.
-  DBUG_ASSERT(!have_thread);
-}
-
-void remove_global_thread(THD *thd)
-{
-  DBUG_PRINT("info", ("remove_global_thread %p current_linfo %p",
-                      thd, thd->current_linfo));
-  mysql_mutex_lock(&LOCK_thd_remove);
-  mysql_mutex_lock(&LOCK_thread_count);
-  DBUG_ASSERT(thd->release_resources_done());
-  /*
-    Used by binlog_reset_master.  It would be cleaner to use
-    DEBUG_SYNC here, but that's not possible because the THD's debug
-    sync feature has been shut down at this point.
-   */
-  DBUG_EXECUTE_IF("sleep_after_lock_thread_count_before_delete_thd",
-                  sleep(5););
-
-  const size_t num_erased= global_thread_list->erase(thd);
-  if (num_erased == 1)
-    --global_thread_count;
-  // Removing a THD that was never added is an error.
-  DBUG_ASSERT(1 == num_erased);
-
-  mysql_mutex_unlock(&LOCK_thd_remove);
-  mysql_cond_broadcast(&COND_thread_count);
-  mysql_mutex_unlock(&LOCK_thread_count);
-}
-
-uint get_thread_count()
-{
-  return (uint) global_thread_count;
-}
-
-
-void set_remaining_args(int argc, char **argv)
-{
-  remaining_argc= argc;
-  remaining_argv= argv;
-}
-/* 
-  Multiple threads of execution use the random state maintained in global
-  sql_rand to generate random numbers. sql_rnd_with_mutex use mutex
-  LOCK_sql_rand to protect sql_rand across multiple instantiations that use
-  sql_rand to generate random numbers.
- */
-ulong sql_rnd_with_mutex()
-{
-  mysql_mutex_lock(&LOCK_sql_rand);
-  ulong tmp=(ulong) (my_rnd(&sql_rand) * 0xffffffff); /* make all bits random */
-  mysql_mutex_unlock(&LOCK_sql_rand);
-  return tmp;
-}
-
-#ifdef HAVE_PSI_STATEMENT_INTERFACE
-PSI_statement_info stmt_info_new_packet;
-#endif
-
-#ifndef EMBEDDED_LIBRARY
-void net_before_header_psi(struct st_net *net, void *user_data, size_t /* unused: count */)
-{
-  THD *thd;
-  thd= static_cast<THD*> (user_data);
-  DBUG_ASSERT(thd != NULL);
-
-  if (thd->m_server_idle)
-  {
-    /*
-      The server is IDLE, waiting for the next command.
-      Technically, it is a wait on a socket, which may take a long time,
-      because the call is blocking.
-      Disable the socket instrumentation, to avoid recording a SOCKET event.
-      Instead, start explicitly an IDLE event.
-    */
-    MYSQL_SOCKET_SET_STATE(net->vio->mysql_socket, PSI_SOCKET_STATE_IDLE);
-    MYSQL_START_IDLE_WAIT(thd->m_idle_psi, &thd->m_idle_state);
-  }
-}
-
-void net_after_header_psi(struct st_net *net, void *user_data, size_t /* unused: count */, my_bool rc)
-{
-  THD *thd;
-  thd= static_cast<THD*> (user_data);
-  DBUG_ASSERT(thd != NULL);
-
-  if (thd->m_server_idle)
-  {
-    /*
-      The server just got data for a network packet header,
-      from the network layer.
-      The IDLE event is now complete, since we now have a message to process.
-      We need to:
-      - start a new STATEMENT event
-      - start a new STAGE event, within this statement,
-      - start recording SOCKET WAITS events, within this stage.
-      The proper order is critical to get events numbered correctly,
-      and nested in the proper parent.
-    */
-    MYSQL_END_IDLE_WAIT(thd->m_idle_psi);
-
-    if (! rc)
-    {
-      thd->m_statement_psi= MYSQL_START_STATEMENT(&thd->m_statement_state,
-                                                  stmt_info_new_packet.m_key,
-                                                  thd->db, thd->db_length,
-                                                  thd->charset());
-
-      THD_STAGE_INFO(thd, stage_init);
-    }
-
-    /*
-      TODO: consider recording a SOCKET event for the bytes just read,
-      by also passing count here.
-    */
-    MYSQL_SOCKET_SET_STATE(net->vio->mysql_socket, PSI_SOCKET_STATE_ACTIVE);
-    thd->m_server_idle= false;
-  }
-}
-
-void init_net_server_extension(THD *thd)
-{
-#ifdef HAVE_PSI_INTERFACE
-  /* Start with a clean state for connection events. */
-  thd->m_idle_psi= NULL;
-  thd->m_statement_psi= NULL;
-  thd->m_server_idle= false;
-  /* Hook up the NET_SERVER callback in the net layer. */
-  thd->m_net_server_extension.m_user_data= thd;
-  thd->m_net_server_extension.m_before_header= net_before_header_psi;
-  thd->m_net_server_extension.m_after_header= net_after_header_psi;
-  /* Activate this private extension for the mysqld server. */
-  thd->net.extension= & thd->m_net_server_extension;
-#else
-  thd->net.extension= NULL;
-#endif
-}
-#endif /* EMBEDDED_LIBRARY */
-
+  Since buffered_option_error_reporter is only used currently
+  for parsing performance schema options, this code is not needed
+  when the performance schema is not compiled in.
+*/
+#ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
 /**
   A log message for the error log, buffered in memory.
   Log messages are temporarily buffered when generated before the error log
@@ -1127,6 +852,7 @@ void Buffered_logs::print()
 /** Logs reported before a logger is available. */
 static Buffered_logs buffered_logs;
 
+#ifndef EMBEDDED_LIBRARY
 /**
   Error reporter that buffer log messages.
   @param level          log message level
@@ -1144,35 +870,11 @@ static void buffered_option_error_reporter(enum loglevel level,
   va_end(args);
   buffered_logs.buffer(level, buffer);
 }
-
-
-/**
-  Character set and collation error reporter that prints to sql error log.
-  @param level          log message level
-  @param format         log message format string
-
-  This routine is used to print character set and collation
-  warnings and errors inside an already running mysqld server,
-  e.g. when a character set or collation is requested for the very first time
-  and its initialization does not go well for some reasons.
-
-  Note: At early mysqld initialization stage,
-  when error log is not yet available,
-  we use buffered_option_error_reporter() instead,
-  to print general character set subsystem initialization errors,
-  such as Index.xml syntax problems, bad XML tag hierarchy, etc.
-*/
-static void charset_error_reporter(enum loglevel level,
-                                   const char *format, ...)
-{
-  va_list args;
-  va_start(args, format);
-  vprint_msg_to_log(level, format, args);
-  va_end(args);                      
-}
 C_MODE_END
+#endif /* !EMBEDDED_LIBRARY */
+#endif /* WITH_PERFSCHEMA_STORAGE_ENGINE */
 
-static MYSQL_SOCKET unix_sock, ip_sock;
+static my_socket unix_sock,ip_sock;
 struct rand_struct sql_rand; ///< used by sql_class.cc:THD::THD()
 
 #ifndef EMBEDDED_LIBRARY
@@ -1184,7 +886,7 @@ static uint thr_kill_signal;
 /* OS specific variables */
 
 #ifdef __WIN__
-#undef   getpid
+#undef	 getpid
 #include <process.h>
 
 static mysql_cond_t COND_handler_count;
@@ -1197,7 +899,7 @@ static char **opt_argv;
 static HANDLE hEventShutdown;
 static char shutdown_event_name[40];
 #include "nt_servc.h"
-static   NTService  Service;        ///< Service object for WinNT
+static	 NTService  Service;	      ///< Service object for WinNT
 #endif /* EMBEDDED_LIBRARY */
 #endif /* __WIN__ */
 
@@ -1223,7 +925,7 @@ static const char* default_dbug_option;
 const char *libwrapName= NULL;
 int allow_severity = LOG_INFO;
 int deny_severity = LOG_WARNING;
-#endif /* HAVE_LIBWRAP */
+#endif
 #ifdef HAVE_QUERY_CACHE
 ulong query_cache_min_res_unit= QUERY_CACHE_MIN_RESULT_DATA_SIZE;
 Query_cache query_cache;
@@ -1236,8 +938,7 @@ HANDLE smem_event_connect_request= 0;
 
 my_bool opt_use_ssl  = 0;
 char *opt_ssl_ca= NULL, *opt_ssl_capath= NULL, *opt_ssl_cert= NULL,
-     *opt_ssl_cipher= NULL, *opt_ssl_key= NULL, *opt_ssl_crl= NULL,
-     *opt_ssl_crlpath= NULL;
+     *opt_ssl_cipher= NULL, *opt_ssl_key= NULL;
 
 #ifdef HAVE_OPENSSL
 #include <openssl/crypto.h>
@@ -1265,14 +966,13 @@ struct st_VioSSLFd *ssl_acceptor_fd;
   LOCK_connection_count.
 */
 uint connection_count= 0;
-mysql_cond_t COND_connection_count;
 
 /* Function declarations */
 
 pthread_handler_t signal_hand(void *arg);
 static int mysql_init_variables(void);
 static int get_options(int *argc_ptr, char ***argv_ptr);
-static void add_terminator(vector<my_option> *options);
+static bool add_terminator(DYNAMIC_ARRAY *options);
 extern "C" my_bool mysqld_get_one_option(int, const struct my_option *, char *);
 static void set_server_version(void);
 static int init_thread_environment();
@@ -1303,7 +1003,7 @@ static void close_server_sock();
 static void clean_up_mutexes(void);
 static void wait_for_signal_thread_to_end(void);
 static void create_pid_file();
-static void mysqld_exit(int exit_code) MY_ATTRIBUTE((noreturn));
+static void mysqld_exit(int exit_code) __attribute__((noreturn));
 #endif
 static void delete_pid_file(myf flags);
 static void end_ssl();
@@ -1321,11 +1021,10 @@ static void close_connections(void)
 #endif
   DBUG_ENTER("close_connections");
 
-  /* Kill blocked pthreads */
-  kill_blocked_pthreads_flag++;
-  kill_blocked_pthreads();
-  uint dump_thread_count= 0;
-  uint dump_thread_kill_retries= 8;
+  /* Clear thread cache */
+  kill_cached_threads++;
+  flush_thread_cache();
+
   /* kill connection thread */
 #if !defined(__WIN__)
   DBUG_PRINT("quit", ("waiting for select thread: 0x%lx",
@@ -1341,7 +1040,7 @@ static void close_connections(void)
 
 #ifndef DONT_USE_THR_ALARM
     if (pthread_kill(select_thread, thr_client_alarm))
-      break;          // allready dead
+      break;					// allready dead
 #endif
     set_timespec(abstime, 2);
     for (uint tmp=0 ; tmp < 10 && select_thread_in_use; tmp++)
@@ -1349,7 +1048,7 @@ static void close_connections(void)
       error= mysql_cond_timedwait(&COND_thread_count, &LOCK_thread_count,
                                   &abstime);
       if (error != EINTR)
-  break;
+	break;
     }
 #ifdef EXTRA_DEBUG
     if (error != 0 && !count++)
@@ -1365,11 +1064,11 @@ static void close_connections(void)
   DBUG_PRINT("quit",("Closing sockets"));
   if (!opt_disable_networking )
   {
-    if (mysql_socket_getfd(ip_sock) != INVALID_SOCKET)
+    if (ip_sock != INVALID_SOCKET)
     {
       (void) mysql_socket_shutdown(ip_sock, SHUT_RDWR);
-      (void) mysql_socket_close(ip_sock);
-      ip_sock= MYSQL_INVALID_SOCKET;
+      (void) closesocket(ip_sock);
+      ip_sock= INVALID_SOCKET;
     }
   }
 #ifdef _WIN32
@@ -1380,12 +1079,12 @@ static void close_connections(void)
 
     /* Create connection to the handle named pipe handler to break the loop */
     if ((temp = CreateFile(pipe_name,
-         GENERIC_READ | GENERIC_WRITE,
-         0,
-         NULL,
-         OPEN_EXISTING,
-         0,
-         NULL )) != INVALID_HANDLE_VALUE)
+			   GENERIC_READ | GENERIC_WRITE,
+			   0,
+			   NULL,
+			   OPEN_EXISTING,
+			   0,
+			   NULL )) != INVALID_HANDLE_VALUE)
     {
       WaitNamedPipe(pipe_name, 1000);
       DWORD dwMode = PIPE_READMODE_BYTE | PIPE_WAIT;
@@ -1397,15 +1096,15 @@ static void close_connections(void)
   }
 #endif
 #ifdef HAVE_SYS_UN_H
-  if (mysql_socket_getfd(unix_sock) != INVALID_SOCKET)
+  if (unix_sock != INVALID_SOCKET)
   {
     (void) mysql_socket_shutdown(unix_sock, SHUT_RDWR);
-    (void) mysql_socket_close(unix_sock);
+    (void) closesocket(unix_sock);
     (void) unlink(mysqld_unix_port);
-    unix_sock= MYSQL_INVALID_SOCKET;
+    unix_sock= INVALID_SOCKET;
   }
 #endif
-  end_thr_alarm(0);      // Abort old alarms.
+  end_thr_alarm(0);			 // Abort old alarms.
 
   /*
     First signal all threads that it's time to die
@@ -1413,32 +1112,19 @@ static void close_connections(void)
     statements and inform their clients that the server is about to die.
   */
 
-  sql_print_information("Giving %d client threads a chance to die gracefully",
-                        static_cast<int>(get_thread_count()));
+  THD *tmp;
+  mysql_mutex_lock(&LOCK_thread_count); // For unlink from list
 
-  mysql_mutex_lock(&LOCK_thread_count);
-
-  Thread_iterator it= global_thread_list->begin();
-  for (; it != global_thread_list->end(); ++it)
+  I_List_iterator<THD> it(threads);
+  while ((tmp=it++))
   {
-    THD *tmp= *it;
     DBUG_PRINT("quit",("Informing thread %ld that it's time to die",
-                       tmp->thread_id));
+		       tmp->thread_id));
     /* We skip slave threads & scheduler on this first loop through. */
     if (tmp->slave_thread)
       continue;
-    if (tmp->get_command() == COM_BINLOG_DUMP ||
-        tmp->get_command() == COM_BINLOG_DUMP_GTID)
-    {
-      ++dump_thread_count;
-      continue;
-    }
+
     tmp->killed= THD::KILL_CONNECTION;
-    DBUG_EXECUTE_IF("Check_dump_thread_is_alive",
-                    {
-                      DBUG_ASSERT(tmp->get_command() != COM_BINLOG_DUMP &&
-                                  tmp->get_command() != COM_BINLOG_DUMP_GTID);
-                    };);
     MYSQL_CALLBACK(thread_scheduler, post_kill_notification, (tmp));
     mysql_mutex_lock(&tmp->LOCK_thd_data);
     if (tmp->mysys_var)
@@ -1455,55 +1141,13 @@ static void close_connections(void)
     }
     mysql_mutex_unlock(&tmp->LOCK_thd_data);
   }
-  mysql_mutex_unlock(&LOCK_thread_count);
+  mysql_mutex_unlock(&LOCK_thread_count); // For unlink from list
 
   Events::deinit();
-
-  sql_print_information("Shutting down slave threads");
   end_slave();
 
-  if (dump_thread_count)
-  {
-    /*
-      Replication dump thread should be terminated after the clients are
-      terminated. Wait for few more seconds for other sessions to end.
-     */
-    while (get_thread_count() > dump_thread_count && dump_thread_kill_retries)
-    {
-      sleep(1);
-      dump_thread_kill_retries--;
-    }
-    mysql_mutex_lock(&LOCK_thread_count);
-    for (it= global_thread_list->begin(); it != global_thread_list->end(); ++it)
-    {
-      THD *tmp= *it;
-      DBUG_PRINT("quit",("Informing dump thread %ld that it's time to die",
-                         tmp->thread_id));
-      if (tmp->get_command() == COM_BINLOG_DUMP ||
-          tmp->get_command() == COM_BINLOG_DUMP_GTID)
-      {
-        tmp->killed= THD::KILL_CONNECTION;
-        MYSQL_CALLBACK(thread_scheduler, post_kill_notification, (tmp));
-        mysql_mutex_lock(&tmp->LOCK_thd_data);
-        if (tmp->mysys_var)
-        {
-          tmp->mysys_var->abort= 1;
-          mysql_mutex_lock(&tmp->mysys_var->mutex);
-          if (tmp->mysys_var->current_cond)
-          {
-            mysql_mutex_lock(tmp->mysys_var->current_mutex);
-            mysql_cond_broadcast(tmp->mysys_var->current_cond);
-            mysql_mutex_unlock(tmp->mysys_var->current_mutex);
-          }
-          mysql_mutex_unlock(&tmp->mysys_var->mutex);
-        }
-        mysql_mutex_unlock(&tmp->LOCK_thd_data);
-      }
-    }
-    mysql_mutex_unlock(&LOCK_thread_count);
-  }
-  if (get_thread_count() > 0)
-    sleep(2);         // Give threads time to die
+  if (thread_count)
+    sleep(2);					// Give threads time to die
 
   /*
     Force remaining threads to die by closing the connection to the client
@@ -1511,50 +1155,39 @@ static void close_connections(void)
     client on a blocking read call are aborted.
   */
 
-  sql_print_information("Forcefully disconnecting %d remaining clients",
-                        static_cast<int>(get_thread_count()));
-
-#ifndef __bsdi__ // Bug in BSDI kernel
-  DBUG_PRINT("quit", ("Locking LOCK_thread_count"));
-  mysql_mutex_lock(&LOCK_thread_count);
-  for (it= global_thread_list->begin(); it != global_thread_list->end(); ++it)
+  for (;;)
   {
-    THD *tmp= *it;
+    DBUG_PRINT("quit",("Locking LOCK_thread_count"));
+    mysql_mutex_lock(&LOCK_thread_count); // For unlink from list
+    if (!(tmp=threads.get()))
+    {
+      DBUG_PRINT("quit",("Unlocking LOCK_thread_count"));
+      mysql_mutex_unlock(&LOCK_thread_count);
+      break;
+    }
+#ifndef __bsdi__				// Bug in BSDI kernel
     if (tmp->vio_ok())
     {
-      if (log_warnings)
+      if (global_system_variables.log_warnings)
         sql_print_warning(ER_DEFAULT(ER_FORCING_CLOSE),my_progname,
                           tmp->thread_id,
                           (tmp->main_security_ctx.user ?
                            tmp->main_security_ctx.user : ""));
       close_connection(tmp);
     }
+#endif
+    DBUG_PRINT("quit",("Unlocking LOCK_thread_count"));
+    mysql_mutex_unlock(&LOCK_thread_count);
   }
-  DBUG_PRINT("quit",("Unlocking LOCK_thread_count"));
-  mysql_mutex_unlock(&LOCK_thread_count);
-#endif // Bug in BSDI kernel
-
   /* All threads has now been aborted */
-  DBUG_PRINT("quit",("Waiting for threads to die (count=%u)",
-                     get_thread_count()));
+  DBUG_PRINT("quit",("Waiting for threads to die (count=%u)",thread_count));
   mysql_mutex_lock(&LOCK_thread_count);
-  while (get_thread_count() > 0)
+  while (thread_count)
   {
     mysql_cond_wait(&COND_thread_count, &LOCK_thread_count);
-    DBUG_PRINT("quit", ("One thread died (count=%u)", get_thread_count()));
+    DBUG_PRINT("quit",("One thread died (count=%u)",thread_count));
   }
   mysql_mutex_unlock(&LOCK_thread_count);
-
-  /*
-    Connection threads might take a little while to go down after removing from
-    global thread list. Give it some time.
-  */
-  mysql_mutex_lock(&LOCK_connection_count);
-  while (connection_count > 0)
-  {
-    mysql_cond_wait(&COND_connection_count, &LOCK_connection_count);
-  }
-  mysql_mutex_unlock(&LOCK_connection_count);
 
   close_active_mi();
   DBUG_PRINT("quit",("close_connections thread"));
@@ -1566,18 +1199,18 @@ static void close_server_sock()
 {
 #ifdef HAVE_CLOSE_SERVER_SOCK
   DBUG_ENTER("close_server_sock");
-  MYSQL_SOCKET tmp_sock;
+  my_socket tmp_sock;
   tmp_sock=ip_sock;
-  if (mysql_socket_getfd(tmp_sock) != INVALID_SOCKET)
+  if (tmp_sock != INVALID_SOCKET)
   {
-    ip_sock= MYSQL_INVALID_SOCKET;
+    ip_sock=INVALID_SOCKET;
     DBUG_PRINT("info",("calling shutdown on TCP/IP socket"));
     (void) mysql_socket_shutdown(tmp_sock, SHUT_RDWR);
   }
   tmp_sock=unix_sock;
-  if (mysql_socket_getfd(tmp_sock) != INVALID_SOCKET)
+  if (tmp_sock != INVALID_SOCKET)
   {
-    unix_sock= MYSQL_INVALID_SOCKET;
+    unix_sock=INVALID_SOCKET;
     DBUG_PRINT("info",("calling shutdown on unix socket"));
     (void) mysql_socket_shutdown(tmp_sock, SHUT_RDWR);
     (void) unlink(mysqld_unix_port);
@@ -1594,8 +1227,8 @@ void kill_mysql(void)
   DBUG_ENTER("kill_mysql");
 
 #if defined(SIGNALS_DONT_BREAK_READ) && !defined(EMBEDDED_LIBRARY)
-  abort_loop=1;         // Break connection loops
-  close_server_sock();        // Force accept to wake up
+  abort_loop=1;					// Break connection loops
+  close_server_sock();				// Force accept to wake up
 #endif
 
 #if defined(__WIN__)
@@ -1622,7 +1255,7 @@ void kill_mysql(void)
   kill(current_pid, MYSQL_KILL_SIGNAL);
 #endif
   DBUG_PRINT("quit",("After pthread_kill"));
-  shutdown_in_progress=1;     // Safety if kill didn't work
+  shutdown_in_progress=1;			// Safety if kill didn't work
 #ifdef SIGNALS_DONT_BREAK_READ
   if (!kill_in_progress)
   {
@@ -1659,15 +1292,15 @@ static void __cdecl kill_server(int sig_ptr)
 {
   DBUG_ENTER("kill_server");
 #ifndef EMBEDDED_LIBRARY
-  int sig=(int) (long) sig_ptr;     // This is passed a int
+  int sig=(int) (long) sig_ptr;			// This is passed a int
   // if there is a signal during the kill in progress, ignore the other
-  if (kill_in_progress)       // Safety
+  if (kill_in_progress)				// Safety
   {
     DBUG_LEAVE;
     RETURN_FROM_KILL_SERVER;
   }
   kill_in_progress=TRUE;
-  abort_loop=1;         // This should be set
+  abort_loop=1;					// This should be set
   if (sig != 0) // 0 is not a valid signal number
     my_sigset(sig, SIG_IGN);                    /* purify inspected */
   if (sig == MYSQL_KILL_SIGNAL || sig == 0)
@@ -1675,25 +1308,25 @@ static void __cdecl kill_server(int sig_ptr)
   else
     sql_print_error(ER_DEFAULT(ER_GOT_SIGNAL),my_progname,sig); /* purecov: inspected */
 
-#if defined(HAVE_SMEM) && defined(__WIN__)
-  /*
-   Send event to smem_event_connect_request for aborting
-   */
+#if defined(HAVE_SMEM) && defined(__WIN__)    
+  /*    
+   Send event to smem_event_connect_request for aborting    
+   */    
   if (opt_enable_shared_memory)
   {
-    if (!SetEvent(smem_event_connect_request))
-    {
+    if (!SetEvent(smem_event_connect_request))    
+    {      
       DBUG_PRINT("error",
                  ("Got error: %ld from SetEvent of smem_event_connect_request",
-                  GetLastError()));
+                  GetLastError()));    
     }
   }
-#endif
-
+#endif  
+  
   close_connections();
   if (sig != MYSQL_KILL_SIGNAL &&
       sig != 0)
-    unireg_abort(1);        /* purecov: inspected */
+    unireg_abort(1);				/* purecov: inspected */
   else
     unireg_end();
 
@@ -1715,9 +1348,9 @@ static void __cdecl kill_server(int sig_ptr)
 
 
 #if defined(USE_ONE_SIGNAL_HAND)
-pthread_handler_t kill_server_thread(void *arg MY_ATTRIBUTE((unused)))
+pthread_handler_t kill_server_thread(void *arg __attribute__((unused)))
 {
-  my_thread_init();       // Initialize new thread
+  my_thread_init();				// Initialize new thread
   kill_server(0);
   /* purecov: begin deadcode */
   my_thread_end();
@@ -1730,14 +1363,14 @@ pthread_handler_t kill_server_thread(void *arg MY_ATTRIBUTE((unused)))
 
 extern "C" sig_handler print_signal_warning(int sig)
 {
-  if (log_warnings)
+  if (global_system_variables.log_warnings)
     sql_print_warning("Got signal %d from thread %ld", sig,my_thread_id());
 #ifdef SIGNAL_HANDLER_RESET_ON_DELIVERY
-  my_sigset(sig,print_signal_warning);    /* int. thread system calls */
+  my_sigset(sig,print_signal_warning);		/* int. thread system calls */
 #endif
 #if !defined(__WIN__)
   if (sig == SIGALRM)
-    alarm(2);         /* reschedule alarm */
+    alarm(2);					/* reschedule alarm */
 #endif
 }
 
@@ -1772,7 +1405,7 @@ void unireg_end(void)
 #if defined(SIGNALS_DONT_BREAK_READ)
   exit(0);
 #else
-  pthread_exit(0);        // Exit is in main thread
+  pthread_exit(0);				// Exit is in main thread
 #endif
 }
 
@@ -1802,47 +1435,16 @@ static void mysqld_exit(int exit_code)
   clean_up_mutexes();
   clean_up_error_log_mutex();
 #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
-  shutdown_performance_schema();
+  /*
+    Bug#56666 needs to be fixed before calling:
+    shutdown_performance_schema();
+  */
 #endif
   my_end(opt_endinfo ? MY_CHECK_ERROR | MY_GIVE_INFO : 0);
   exit(exit_code); /* purecov: inspected */
 }
 
 #endif /* !EMBEDDED_LIBRARY */
-
-/**
-   GTID cleanup destroys objects and reset their pointer.
-   Function is reentrant.
-*/
-void gtid_server_cleanup()
-{
-  delete gtid_state;
-  delete global_sid_map;
-  delete global_sid_lock;
-  global_sid_lock= NULL;
-  global_sid_map= NULL;
-  gtid_state= NULL;
-}
-
-/**
-   GTID initialization.
-
-   @return true if allocation does not succeed
-           false if OK
-*/
-bool gtid_server_init()
-{
-  bool res=
-    (!(global_sid_lock= new Checkable_rwlock) ||
-     !(global_sid_map= new Sid_map(global_sid_lock)) ||
-     !(gtid_state= new Gtid_state(global_sid_lock, global_sid_map)));
-  if (res)
-  {
-    gtid_server_cleanup();
-  }
-  return res;
-}
-
 
 void clean_up(bool print_message)
 {
@@ -1853,21 +1455,16 @@ void clean_up(bool print_message)
   stop_handle_manager();
   release_ddl_log();
 
-  memcached_shutdown();
-
   /*
     make sure that handlers finish up
     what they have that is dependent on the binlog
   */
-  if ((opt_help == 0) || (opt_verbose > 0))
-    sql_print_information("Binlog end");
   ha_binlog_end(current_thd);
 
   logger.cleanup_base();
 
   injector::free_instance();
   mysql_bin_log.cleanup();
-  gtid_server_cleanup();
 
 #ifdef HAVE_REPLICATION
   if (use_slave_mask)
@@ -1875,7 +1472,6 @@ void clean_up(bool print_message)
 #endif
   my_tz_free();
   my_dboptions_cache_free();
-  ignore_db_dirs_free();
 #ifndef NO_EMBEDDED_ACCESS_CHECKS
   servers_free(1);
   acl_free(1);
@@ -1884,7 +1480,7 @@ void clean_up(bool print_message)
   query_cache_destroy();
   hostname_cache_free();
   item_user_lock_free();
-  lex_free();       /* Free some memory */
+  lex_free();				/* Free some memory */
   item_create_cleanup();
   if (!opt_noacl)
   {
@@ -1904,7 +1500,7 @@ void clean_up(bool print_message)
   key_caches.delete_elements((void (*)(const char*, uchar*)) free_key_cache);
   multi_keycache_free();
   free_status_vars();
-  end_thr_alarm(1);     /* Free allocated memory */
+  end_thr_alarm(1);			/* Free allocated memory */
   my_free_open_file_info();
   if (defaults_argv)
     free_defaults(defaults_argv);
@@ -1937,7 +1533,6 @@ void clean_up(bool print_message)
   DBUG_PRINT("quit", ("Error messages freed"));
   /* Tell main we are ready */
   logger.cleanup_end();
-  my_atomic_rwlock_destroy(&opt_binlog_max_flush_queue_time_lock);
   my_atomic_rwlock_destroy(&global_query_id_lock);
   my_atomic_rwlock_destroy(&thread_running_lock);
   free_charsets();
@@ -1948,21 +1543,6 @@ void clean_up(bool print_message)
   mysql_cond_broadcast(&COND_thread_count);
   mysql_mutex_unlock(&LOCK_thread_count);
   sys_var_end();
-  delete_global_thread_list();
-
-  my_free(const_cast<char*>(log_bin_basename));
-  my_free(const_cast<char*>(log_bin_index));
-#ifndef EMBEDDED_LIBRARY
-  my_free(const_cast<char*>(relay_log_basename));
-  my_free(const_cast<char*>(relay_log_index));
-#endif
-  free_list(opt_plugin_load_list_ptr);
-
-  if (THR_THD)
-    (void) pthread_key_delete(THR_THD);
-
-  if (THR_MALLOC)
-    (void) pthread_key_delete(THR_MALLOC);
 
   /*
     The following lines may never be executed as the main thread may have
@@ -1989,7 +1569,7 @@ static void wait_for_signal_thread_to_end()
   {
     if (pthread_kill(signal_thread, MYSQL_KILL_SIGNAL) != ESRCH)
       break;
-    my_sleep(100);        // Give it time to die
+    my_sleep(100);				// Give it time to die
   }
 }
 
@@ -1997,9 +1577,8 @@ static void wait_for_signal_thread_to_end()
 static void clean_up_mutexes()
 {
   mysql_rwlock_destroy(&LOCK_grant);
-  mysql_mutex_destroy(&LOCK_thread_created);
   mysql_mutex_destroy(&LOCK_thread_count);
-  mysql_mutex_destroy(&LOCK_log_throttle_qni);
+  mysql_mutex_destroy(&LOCK_thread_created);
   mysql_mutex_destroy(&LOCK_status);
   mysql_mutex_destroy(&LOCK_delayed_insert);
   mysql_mutex_destroy(&LOCK_delayed_status);
@@ -2016,23 +1595,23 @@ static void clean_up_mutexes()
   OPENSSL_free(openssl_stdlocks);
 #endif
 #endif
+#ifdef HAVE_REPLICATION
+  mysql_mutex_destroy(&LOCK_rpl_status);
+  mysql_cond_destroy(&COND_rpl_status);
+#endif
   mysql_mutex_destroy(&LOCK_active_mi);
   mysql_rwlock_destroy(&LOCK_sys_init_connect);
   mysql_rwlock_destroy(&LOCK_sys_init_slave);
   mysql_mutex_destroy(&LOCK_global_system_variables);
   mysql_rwlock_destroy(&LOCK_system_variables_hash);
   mysql_mutex_destroy(&LOCK_uuid_generator);
-  mysql_mutex_destroy(&LOCK_sql_rand);
   mysql_mutex_destroy(&LOCK_prepared_stmt_count);
-  mysql_mutex_destroy(&LOCK_sql_slave_skip_counter);
-  mysql_mutex_destroy(&LOCK_slave_net_timeout);
   mysql_mutex_destroy(&LOCK_error_messages);
   mysql_cond_destroy(&COND_thread_count);
   mysql_mutex_destroy(&LOCK_thd_remove);
   mysql_cond_destroy(&COND_thread_cache);
   mysql_cond_destroy(&COND_flush_thread_cache);
   mysql_cond_destroy(&COND_manager);
-  mysql_cond_destroy(&COND_connection_count);
 }
 #endif /*EMBEDDED_LIBRARY*/
 
@@ -2041,24 +1620,12 @@ static void clean_up_mutexes()
 ** Init IP and UNIX socket
 ****************************************************************************/
 
-
-/**
-  MY_BIND_ALL_ADDRESSES defines a special value for the bind-address option,
-  which means that the server should listen to all available network addresses,
-  both IPv6 (if available) and IPv4.
-
-  Basically, this value instructs the server to make an attempt to bind the
-  server socket to '::' address, and rollback to '0.0.0.0' if the attempt fails.
-*/
-const char *MY_BIND_ALL_ADDRESSES= "*";
-
-
 #ifndef EMBEDDED_LIBRARY
 static void set_ports()
 {
-  char  *env;
+  char	*env;
   if (!mysqld_port && !opt_disable_networking)
-  {         // Get port if not from commandline
+  {					// Get port if not from commandline
     mysqld_port= MYSQL_PORT;
 
     /*
@@ -2077,7 +1644,7 @@ static void set_ports()
       mysqld_port= ntohs((u_short) serv_ptr->s_port); /* purecov: inspected */
 #endif
     if ((env = getenv("MYSQL_TCP_PORT")))
-      mysqld_port= (uint) atoi(env);    /* purecov: inspected */
+      mysqld_port= (uint) atoi(env);		/* purecov: inspected */
   }
   if (!mysqld_unix_port)
   {
@@ -2087,7 +1654,7 @@ static void set_ports()
     mysqld_unix_port= (char*) MYSQL_UNIX_ADDR;
 #endif
     if ((env = getenv("MYSQL_UNIX_PORT")))
-      mysqld_unix_port= env;      /* purecov: inspected */
+      mysqld_unix_port= env;			/* purecov: inspected */
   }
 }
 
@@ -2108,7 +1675,7 @@ static struct passwd *check_user(const char *user)
       /* purecov: begin tested */
       tmp_user_info= getpwnam(user);
       if ((!tmp_user_info || user_id != tmp_user_info->pw_uid) &&
-    log_warnings)
+	  global_system_variables.log_warnings)
         sql_print_warning(
                     "One can only use the --user switch if running as root\n");
       /* purecov: end */
@@ -2220,11 +1787,11 @@ static void set_root(const char *path)
 }
 
 
-static MYSQL_SOCKET create_socket(const struct addrinfo *addrinfo_list,
-                                  int addr_family,
-                                  struct addrinfo **use_addrinfo)
+static my_socket create_socket(const struct addrinfo *addrinfo_list,
+                               int addr_family,
+                               struct addrinfo **use_addrinfo)
 {
-  MYSQL_SOCKET sock= MYSQL_INVALID_SOCKET;
+  my_socket sock= INVALID_SOCKET;
 
   for (const struct addrinfo *cur_ai= addrinfo_list; cur_ai != NULL;
        cur_ai= cur_ai->ai_next)
@@ -2232,24 +1799,22 @@ static MYSQL_SOCKET create_socket(const struct addrinfo *addrinfo_list,
     if (cur_ai->ai_family != addr_family)
       continue;
 
-    sock= mysql_socket_socket(key_socket_tcpip, cur_ai->ai_family,
-                              cur_ai->ai_socktype, cur_ai->ai_protocol);
+    sock= socket(cur_ai->ai_family, cur_ai->ai_socktype, cur_ai->ai_protocol);
 
     char ip_addr[INET6_ADDRSTRLEN];
 
-    if (vio_getnameinfo(cur_ai->ai_addr, ip_addr, sizeof (ip_addr),
-                        NULL, 0, NI_NUMERICHOST))
+    if (vio_get_normalized_ip_string(cur_ai->ai_addr, cur_ai->ai_addrlen,
+                                     ip_addr, sizeof (ip_addr)))
     {
       ip_addr[0]= 0;
     }
 
-    if (mysql_socket_getfd(sock) == INVALID_SOCKET)
+    if (sock == INVALID_SOCKET)
     {
       sql_print_error("Failed to create a socket for %s '%s': errno: %d.",
                       (addr_family == AF_INET) ? "IPv4" : "IPv6",
                       (const char *) ip_addr,
                       (int) socket_errno);
-
       continue;
     }
 
@@ -2260,16 +1825,16 @@ static MYSQL_SOCKET create_socket(const struct addrinfo *addrinfo_list,
     return sock;
   }
 
-  return MYSQL_INVALID_SOCKET;
+  return INVALID_SOCKET;
 }
 
 
 static void network_init(void)
 {
 #ifdef HAVE_SYS_UN_H
-  struct sockaddr_un  UNIXaddr;
+  struct sockaddr_un	UNIXaddr;
 #endif
-  int arg;
+  int	arg;
   int   ret;
   uint  waited;
   uint  this_wait;
@@ -2279,7 +1844,7 @@ static void network_init(void)
   LINT_INIT(ret);
 
   if (MYSQL_CALLBACK_ELSE(thread_scheduler, init, (), 0))
-    unireg_abort(1);      /* purecov: inspected */
+    unireg_abort(1);			/* purecov: inspected */
 
   set_ports();
 
@@ -2295,85 +1860,28 @@ static void network_init(void)
 
   if (mysqld_port != 0 && !opt_disable_networking && !opt_bootstrap)
   {
-    struct addrinfo *ai;
+    struct addrinfo *ai, *a;
     struct addrinfo hints;
+    const char *bind_address= my_bind_addr_str;
 
-    const char *bind_address_str= NULL;
-    const char *ipv6_all_addresses= "::";
-    const char *ipv4_all_addresses= "0.0.0.0";
+    if (!bind_address)
+      bind_address= "0.0.0.0";
 
     sql_print_information("Server hostname (bind-address): '%s'; port: %d",
-                          my_bind_addr_str, mysqld_port);
+                          bind_address, mysqld_port);
 
-    // Get list of IP-addresses associated with the bind-address.
-
-    memset(&hints, 0, sizeof (hints));
+    // Get list of IP-addresses associated with the server hostname.
+    bzero(&hints, sizeof (hints));
     hints.ai_flags= AI_PASSIVE;
     hints.ai_socktype= SOCK_STREAM;
     hints.ai_family= AF_UNSPEC;
 
     my_snprintf(port_buf, NI_MAXSERV, "%d", mysqld_port);
-
-    if (strcasecmp(my_bind_addr_str, MY_BIND_ALL_ADDRESSES) == 0)
+    if (getaddrinfo(bind_address, port_buf, &hints, &ai))
     {
-      /*
-        That's the case when bind-address is set to a special value ('*'),
-        meaning "bind to all available IP addresses". If the box supports
-        the IPv6 stack, that means binding to '::'. If only IPv4 is available,
-        bind to '0.0.0.0'.
-      */
-
-      bool ipv6_available= false;
-
-      if (!getaddrinfo(ipv6_all_addresses, port_buf, &hints, &ai))
-      {
-        /*
-          IPv6 might be available (the system might be able to resolve an IPv6
-          address, but not be able to create an IPv6-socket). Try to create a
-          dummy IPv6-socket. Do not instrument that socket by P_S.
-        */
-
-        MYSQL_SOCKET s= mysql_socket_socket(0, AF_INET6, SOCK_STREAM, 0);
-
-        ipv6_available= mysql_socket_getfd(s) != INVALID_SOCKET;
-
-        mysql_socket_close(s);
-      }
-
-      if (ipv6_available)
-      {
-        sql_print_information("IPv6 is available.");
-
-        // Address info (ai) for IPv6 address is already set.
-
-        bind_address_str= ipv6_all_addresses;
-      }
-      else
-      {
-        sql_print_information("IPv6 is not available.");
-
-        // Retrieve address info (ai) for IPv4 address.
-
-        if (getaddrinfo(ipv4_all_addresses, port_buf, &hints, &ai))
-        {
-          sql_perror(ER_DEFAULT(ER_IPSOCK_ERROR));
-          sql_print_error("Can't start server: cannot resolve hostname!");
-          unireg_abort(1);
-        }
-
-        bind_address_str= ipv4_all_addresses;
-      }
-    }
-    else
-    {
-      if (getaddrinfo(my_bind_addr_str, port_buf, &hints, &ai))
-      {
-        sql_perror(ER_DEFAULT(ER_IPSOCK_ERROR));  /* purecov: tested */
-        sql_print_error("Can't start server: cannot resolve hostname!");
-        unireg_abort(1);                          /* purecov: tested */
-      }
-
-      bind_address_str= my_bind_addr_str;
+      sql_perror(ER_DEFAULT(ER_IPSOCK_ERROR));  /* purecov: tested */
+      sql_print_error("Can't start server: cannot resolve hostname!");
+      unireg_abort(1);				/* purecov: tested */
     }
 
     // Log all the IP-addresses.
@@ -2381,15 +1889,15 @@ static void network_init(void)
     {
       char ip_addr[INET6_ADDRSTRLEN];
 
-      if (vio_getnameinfo(cur_ai->ai_addr, ip_addr, sizeof (ip_addr),
-                          NULL, 0, NI_NUMERICHOST))
+      if (vio_get_normalized_ip_string(cur_ai->ai_addr, cur_ai->ai_addrlen,
+                                       ip_addr, sizeof (ip_addr)))
       {
         sql_print_error("Fails to print out IP-address.");
         continue;
       }
 
       sql_print_information("  - '%s' resolves to '%s';",
-                            bind_address_str, ip_addr);
+                            bind_address, ip_addr);
     }
 
     /*
@@ -2401,28 +1909,24 @@ static void network_init(void)
       returned by getaddrinfo();
     */
 
-    struct addrinfo *a = NULL;
     ip_sock= create_socket(ai, AF_INET, &a);
 
-    if (mysql_socket_getfd(ip_sock) == INVALID_SOCKET)
+    if (ip_sock == INVALID_SOCKET)
       ip_sock= create_socket(ai, AF_INET6, &a);
 
     // Report user-error if we failed to create a socket.
-    if (mysql_socket_getfd(ip_sock) == INVALID_SOCKET)
+    if (ip_sock == INVALID_SOCKET)
     {
       sql_perror(ER_DEFAULT(ER_IPSOCK_ERROR));  /* purecov: tested */
       unireg_abort(1);                          /* purecov: tested */
     }
-
-    mysql_socket_set_thread_owner(ip_sock);
-
 #ifndef __WIN__
     /*
       We should not use SO_REUSEADDR on windows as this would enable a
       user to open two mysqld servers with the same TCP/IP port.
     */
     arg= 1;
-    (void) mysql_socket_setsockopt(ip_sock, SOL_SOCKET, SO_REUSEADDR, (char*)&arg,sizeof(arg));
+    (void) setsockopt(ip_sock,SOL_SOCKET,SO_REUSEADDR,(char*)&arg,sizeof(arg));
 #endif /* __WIN__ */
 
 #ifdef IPV6_V6ONLY
@@ -2438,14 +1942,8 @@ static void network_init(void)
     if (a->ai_family == AF_INET6)
     {
       arg= 0;
-
-      if (mysql_socket_setsockopt(ip_sock, IPPROTO_IPV6, IPV6_V6ONLY,
-                                  (char *) &arg, sizeof (arg)))
-      {
-        sql_print_warning("Failed to reset IPV6_V6ONLY flag (error: %d). "
-                          "The server will listen to IPv6 addresses only.",
-                          (int) socket_errno);
-      }
+      (void) setsockopt(ip_sock, IPPROTO_IPV6, IPV6_V6ONLY, (char*)&arg,
+                sizeof(arg));
     }
 #endif
     /*
@@ -2458,7 +1956,7 @@ static void network_init(void)
     */
     for (waited= 0, retry= 1; ; retry++, waited+= this_wait)
     {
-      if (((ret= mysql_socket_bind(ip_sock, a->ai_addr, a->ai_addrlen)) >= 0 ) ||
+      if (((ret= bind(ip_sock, a->ai_addr, a->ai_addrlen)) >= 0 ) ||
           (socket_errno != SOCKET_EADDRINUSE) ||
           (waited >= mysqld_port_timeout))
         break;
@@ -2474,11 +1972,11 @@ static void network_init(void)
       sql_print_error("Do you already have another mysqld server running on port: %d ?",mysqld_port);
       unireg_abort(1);
     }
-    if (mysql_socket_listen(ip_sock, (int)back_log) < 0)
+    if (listen(ip_sock,(int) back_log) < 0)
     {
       sql_perror("Can't start server: listen() on TCP/IP port");
       sql_print_error("listen() on TCP/IP failed with error %d",
-          socket_errno);
+		      socket_errno);
       unireg_abort(1);
     }
   }
@@ -2489,11 +1987,11 @@ static void network_init(void)
       opt_enable_named_pipe)
   {
     strxnmov(pipe_name, sizeof(pipe_name)-1, "\\\\.\\pipe\\",
-       mysqld_unix_port, NullS);
-    memset(&saPipeSecurity, 0, sizeof(saPipeSecurity));
-    memset(&sdPipeDescriptor, 0, sizeof(sdPipeDescriptor));
+	     mysqld_unix_port, NullS);
+    bzero((char*) &saPipeSecurity, sizeof(saPipeSecurity));
+    bzero((char*) &sdPipeDescriptor, sizeof(sdPipeDescriptor));
     if (!InitializeSecurityDescriptor(&sdPipeDescriptor,
-              SECURITY_DESCRIPTOR_REVISION))
+				      SECURITY_DESCRIPTOR_REVISION))
     {
       sql_perror("Can't start server : Initialize security descriptor");
       unireg_abort(1);
@@ -2507,25 +2005,25 @@ static void network_init(void)
     saPipeSecurity.lpSecurityDescriptor = &sdPipeDescriptor;
     saPipeSecurity.bInheritHandle = FALSE;
     if ((hPipe= CreateNamedPipe(pipe_name,
-        PIPE_ACCESS_DUPLEX|FILE_FLAG_OVERLAPPED,
-        PIPE_TYPE_BYTE |
-        PIPE_READMODE_BYTE |
-        PIPE_WAIT,
-        PIPE_UNLIMITED_INSTANCES,
-        (int) global_system_variables.net_buffer_length,
-        (int) global_system_variables.net_buffer_length,
-        NMPWAIT_USE_DEFAULT_WAIT,
-        &saPipeSecurity)) == INVALID_HANDLE_VALUE)
+				PIPE_ACCESS_DUPLEX|FILE_FLAG_OVERLAPPED,
+				PIPE_TYPE_BYTE |
+				PIPE_READMODE_BYTE |
+				PIPE_WAIT,
+				PIPE_UNLIMITED_INSTANCES,
+				(int) global_system_variables.net_buffer_length,
+				(int) global_system_variables.net_buffer_length,
+				NMPWAIT_USE_DEFAULT_WAIT,
+				&saPipeSecurity)) == INVALID_HANDLE_VALUE)
       {
-  LPVOID lpMsgBuf;
-  int error=GetLastError();
-  FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
-          FORMAT_MESSAGE_FROM_SYSTEM,
-          NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-          (LPTSTR) &lpMsgBuf, 0, NULL );
-  sql_perror((char *)lpMsgBuf);
-  LocalFree(lpMsgBuf);
-  unireg_abort(1);
+	LPVOID lpMsgBuf;
+	int error=GetLastError();
+	FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+		      FORMAT_MESSAGE_FROM_SYSTEM,
+		      NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+		      (LPTSTR) &lpMsgBuf, 0, NULL );
+	sql_perror((char *)lpMsgBuf);
+	LocalFree(lpMsgBuf);
+	unireg_abort(1);
       }
   }
 #endif
@@ -2544,39 +2042,33 @@ static void network_init(void)
                       (uint) sizeof(UNIXaddr.sun_path) - 1, mysqld_unix_port);
       unireg_abort(1);
     }
-
-    unix_sock= mysql_socket_socket(key_socket_unix, AF_UNIX, SOCK_STREAM, 0);
-
-    if (mysql_socket_getfd(unix_sock) < 0)
+    if ((unix_sock= socket(AF_UNIX, SOCK_STREAM, 0)) < 0)
     {
       sql_perror("Can't start server : UNIX Socket "); /* purecov: inspected */
-      unireg_abort(1);        /* purecov: inspected */
+      unireg_abort(1);				/* purecov: inspected */
     }
-
-    mysql_socket_set_thread_owner(unix_sock);
-
-    memset(&UNIXaddr, 0, sizeof(UNIXaddr));
+    bzero((char*) &UNIXaddr, sizeof(UNIXaddr));
     UNIXaddr.sun_family = AF_UNIX;
     strmov(UNIXaddr.sun_path, mysqld_unix_port);
     (void) unlink(mysqld_unix_port);
     arg= 1;
-    (void) mysql_socket_setsockopt(unix_sock, SOL_SOCKET, SO_REUSEADDR, (char*)&arg,
-          sizeof(arg));
+    (void) setsockopt(unix_sock,SOL_SOCKET,SO_REUSEADDR,(char*)&arg,
+		      sizeof(arg));
     umask(0);
-    if (mysql_socket_bind(unix_sock, reinterpret_cast<struct sockaddr *> (&UNIXaddr),
-                          sizeof(UNIXaddr)) < 0)
+    if (bind(unix_sock, reinterpret_cast<struct sockaddr *>(&UNIXaddr),
+	     sizeof(UNIXaddr)) < 0)
     {
       sql_perror("Can't start server : Bind on unix socket"); /* purecov: tested */
       sql_print_error("Do you already have another mysqld server running on socket: %s ?",mysqld_unix_port);
-      unireg_abort(1);          /* purecov: tested */
+      unireg_abort(1);					/* purecov: tested */
     }
     umask(((~my_umask) & 0666));
 #if defined(S_IFSOCK) && defined(SECURE_SOCKETS)
-    (void) chmod(mysqld_unix_port,S_IFSOCK);  /* Fix solaris 2.6 bug */
+    (void) chmod(mysqld_unix_port,S_IFSOCK);	/* Fix solaris 2.6 bug */
 #endif
-    if (mysql_socket_listen(unix_sock, (int)back_log) < 0)
+    if (listen(unix_sock,(int) back_log) < 0)
       sql_print_warning("listen() on Unix socket failed with error %d",
-          socket_errno);
+		      socket_errno);
   }
 #endif
   DBUG_PRINT("info",("server started"));
@@ -2619,29 +2111,30 @@ void close_connection(THD *thd, uint sql_errno)
 
 /** Called when a thread is aborted. */
 /* ARGSUSED */
-extern "C" sig_handler end_thread_signal(int sig MY_ATTRIBUTE((unused)))
+extern "C" sig_handler end_thread_signal(int sig __attribute__((unused)))
 {
   THD *thd=current_thd;
-  my_safe_printf_stderr("end_thread_signal %p", thd);
+  DBUG_ENTER("end_thread_signal");
   if (thd && ! thd->bootstrap)
   {
     statistic_increment(killed_threads, &LOCK_status);
     MYSQL_CALLBACK(thread_scheduler, end_thread, (thd,0)); /* purecov: inspected */
   }
+  DBUG_VOID_RETURN;				/* purecov: deadcode */
 }
 
 
 /*
-  Rlease resources of the THD, prior to destruction.
+  Cleanup THD object
 
   SYNOPSIS
-    thd_release_resources()
-    thd    Thread handler
+    thd_cleanup()
+    thd		 Thread handler
 */
 
-void thd_release_resources(THD *thd)
+void thd_cleanup(THD *thd)
 {
-  thd->release_resources();
+  thd->cleanup();
 }
 
 /*
@@ -2655,75 +2148,118 @@ void dec_connection_count()
 {
   mysql_mutex_lock(&LOCK_connection_count);
   --connection_count;
-  if (connection_count == 0)
-    mysql_cond_signal(&COND_connection_count);
   mysql_mutex_unlock(&LOCK_connection_count);
 }
 
 
-/**
-  Delete the THD object.
- */
-void destroy_thd(THD *thd)
+/*
+  Delete the THD object and decrease number of threads
+
+  SYNOPSIS
+    delete_thd()
+    thd		 Thread handler
+*/
+
+void delete_thd(THD *thd)
 {
-  mysql_mutex_assert_not_owner(&LOCK_thread_count);
+  mysql_mutex_assert_owner(&LOCK_thread_count);
+  mysql_mutex_assert_owner(&LOCK_thd_remove);
+  thread_count--;
   delete thd;
 }
 
 
-/**
-  Block the current pthread for reuse by new connections.
+/*
+  Unlink thd from global list of available connections and free thd
 
-  @retval false  Pthread was not blocked for reuse.
-  @retval true   Pthread is to be reused by new connection.
-                 (ie, caller should return, not abort with pthread_exit())
+  SYNOPSIS
+    unlink_thd()
+    thd		 Thread handler
+
+  NOTES
+    LOCK_thread_count, LOCK_thd_remove are locked and left locked
 */
 
-static bool block_until_new_connection()
+void unlink_thd(THD *thd)
 {
+  DBUG_ENTER("unlink_thd");
+  DBUG_PRINT("enter", ("thd: 0x%lx", (long) thd));
+
+  thd_cleanup(thd);
+  dec_connection_count();
+  mysql_mutex_lock(&LOCK_thd_remove);
   mysql_mutex_lock(&LOCK_thread_count);
-  if (blocked_pthread_count < max_blocked_pthreads &&
-      !abort_loop && !kill_blocked_pthreads_flag)
+  /*
+    Used by binlog_reset_master.  It would be cleaner to use
+    DEBUG_SYNC here, but that's not possible because the THD's debug
+    sync feature has been shut down at this point.
+  */
+  DBUG_EXECUTE_IF("sleep_after_lock_thread_count_before_delete_thd", sleep(5););
+  delete_thd(thd);
+  DBUG_VOID_RETURN;
+}
+
+
+/*
+  Store thread in cache for reuse by new connections
+
+  SYNOPSIS
+    cache_thread()
+
+  NOTES
+    LOCK_thread_count has to be locked
+
+  RETURN
+    0  Thread was not put in cache
+    1  Thread is to be reused by new connection.
+       (ie, caller should return, not abort with pthread_exit())
+*/
+
+
+static bool cache_thread()
+{
+  mysql_mutex_assert_owner(&LOCK_thread_count);
+  if (cached_thread_count < thread_cache_size &&
+      ! abort_loop && !kill_cached_threads)
   {
-    /* Don't kill the pthread, just block it for reuse */
-    DBUG_PRINT("info", ("Blocking pthread for reuse"));
-    blocked_pthread_count++;
+    /* Don't kill the thread, just put it in cache for reuse */
+    DBUG_PRINT("info", ("Adding thread to cache"));
+    cached_thread_count++;
 
-    DBUG_POP();
+#ifdef HAVE_PSI_INTERFACE
     /*
-      mysys_var is bound to the physical thread,
-      so make sure mysys_var->dbug is reset to a clean state
-      before picking another session in the thread cache.
+      Delete the instrumentation for the job that just completed,
+      before parking this pthread in the cache (blocked on COND_thread_cache).
     */
-    DBUG_ASSERT( ! _db_is_pushed_());
+    if (likely(PSI_server != NULL))
+      PSI_server->delete_current_thread();
+#endif
 
-    // Block pthread
-    while (!abort_loop && !wake_pthread && !kill_blocked_pthreads_flag)
+    while (!abort_loop && ! wake_thread && ! kill_cached_threads)
       mysql_cond_wait(&COND_thread_cache, &LOCK_thread_count);
-
-    blocked_pthread_count--;
-    if (kill_blocked_pthreads_flag)
+    cached_thread_count--;
+    if (kill_cached_threads)
       mysql_cond_signal(&COND_flush_thread_cache);
-    if (wake_pthread)
+    if (wake_thread)
     {
       THD *thd;
-      wake_pthread--;
-      DBUG_ASSERT(!waiting_thd_list->empty());
-      thd= waiting_thd_list->front();
-      waiting_thd_list->pop_front();
-      DBUG_PRINT("info", ("waiting_thd_list->pop %p", thd));
-
+      wake_thread--;
+      thd= thread_cache.get();
       thd->thread_stack= (char*) &thd;          // For store_globals
       (void) thd->store_globals();
 
-#ifdef HAVE_PSI_THREAD_INTERFACE
+#ifdef HAVE_PSI_INTERFACE
       /*
         Create new instrumentation for the new THD job,
         and attach it to this running pthread.
       */
-      PSI_thread *psi= PSI_THREAD_CALL(new_thread)
-        (key_thread_one_connection, thd, thd->thread_id);
-      PSI_THREAD_CALL(set_thread)(psi);
+      if (likely(PSI_server != NULL))
+      {
+        PSI_thread *psi= PSI_server->new_thread(key_thread_one_connection,
+                                                thd, thd->thread_id);
+        if (likely(psi != NULL))
+          PSI_server->set_thread(psi);
+      }
 #endif
 
       /*
@@ -2733,64 +2269,43 @@ static bool block_until_new_connection()
       */
       thd->mysys_var->abort= 0;
       thd->thr_create_utime= thd->start_utime= my_micro_time();
-      add_global_thread(thd);
-      mysql_mutex_unlock(&LOCK_thread_count);
-      return true;
+      threads.append(thd);
+      return(1);
     }
   }
-  mysql_mutex_unlock(&LOCK_thread_count);
-  return false;
+  return(0);
 }
 
 
-/**
+/*
   End thread for the current connection
 
-  @param thd            Thread handler
-  @param block_pthread  Block the pthread so it can be reused later.
-                        Normally this is true in all cases except when we got
-                        out of resources initializing the current thread
+  SYNOPSIS
+    one_thread_per_connection_end()
+    thd		  Thread handler
+    put_in_cache  Store thread in cache, if there is room in it
+                  Normally this is true in all cases except when we got
+                  out of resources initializing the current thread
 
-  @retval false  Signal to handle_one_connection to reuse connection
+  NOTES
+    If thread is cached, we will wait until thread is scheduled to be
+    reused and then we will return.
+    If thread is not cached, we end the thread.
 
-  @note If the pthread is blocked, we will wait until the pthread is
-        scheduled to be reused and then return.
-        If the pthread is not to be blocked, it will be ended.
+  RETURN
+    0    Signal to handle_one_connection to reuse connection
 */
 
-bool one_thread_per_connection_end(THD *thd, bool block_pthread)
+bool one_thread_per_connection_end(THD *thd, bool put_in_cache)
 {
   DBUG_ENTER("one_thread_per_connection_end");
-  DBUG_PRINT("info", ("thd %p block_pthread %d", thd, (int) block_pthread));
-
-  thd->release_resources();
-  remove_global_thread(thd);
-  dec_connection_count();
-  if (kill_blocked_pthreads_flag)
-  {
-    // Do not block if we are about to shut down
-    block_pthread= false;
-  }
-
-  // Clean up errors now, before possibly waiting for a new connection.
-#ifndef EMBEDDED_LIBRARY
-  ERR_remove_state(0);
-#endif
-
-  delete thd;
-
-#ifdef HAVE_PSI_THREAD_INTERFACE
-  /*
-    Delete the instrumentation for the job that just completed.
-  */
-  PSI_THREAD_CALL(delete_current_thread)();
-#endif
-
-  if (block_pthread)
-    block_pthread= block_until_new_connection();
-
-  if (block_pthread)
-    DBUG_RETURN(false);                         // Pthread is reused
+  unlink_thd(thd);
+  mysql_mutex_unlock(&LOCK_thd_remove);
+  if (put_in_cache)
+    put_in_cache= cache_thread();
+  mysql_mutex_unlock(&LOCK_thread_count);
+  if (put_in_cache)
+    DBUG_RETURN(0);                             // Thread is reused
 
   /* It's safe to broadcast outside a lock (COND... is not deleted here) */
   DBUG_PRINT("signal", ("Broadcasting COND_thread_count"));
@@ -2799,20 +2314,20 @@ bool one_thread_per_connection_end(THD *thd, bool block_pthread)
   mysql_cond_broadcast(&COND_thread_count);
 
   pthread_exit(0);
-  return false;                                 // Avoid compiler warnings
+  return 0;                                     // Avoid compiler warnings
 }
 
 
-void kill_blocked_pthreads()
+void flush_thread_cache()
 {
   mysql_mutex_lock(&LOCK_thread_count);
-  kill_blocked_pthreads_flag++;
-  while (blocked_pthread_count)
+  kill_cached_threads++;
+  while (cached_thread_count)
   {
     mysql_cond_broadcast(&COND_thread_cache);
     mysql_cond_wait(&COND_flush_thread_cache, &LOCK_thread_count);
   }
-  kill_blocked_pthreads_flag--;
+  kill_cached_threads--;
   mysql_mutex_unlock(&LOCK_thread_count);
 }
 
@@ -2824,7 +2339,7 @@ void kill_blocked_pthreads()
   @todo
     One should have to fix that thr_alarm know about this thread too.
 */
-extern "C" sig_handler abort_thread(int sig MY_ATTRIBUTE((unused)))
+extern "C" sig_handler abort_thread(int sig __attribute__((unused)))
 {
   THD *thd=current_thd;
   DBUG_ENTER("abort_thread");
@@ -2853,7 +2368,7 @@ extern "C" sig_handler abort_thread(int sig MY_ATTRIBUTE((unused)))
   callstack.
 */
 
-static BOOL WINAPI console_event_handler( DWORD type )
+static BOOL WINAPI console_event_handler( DWORD type ) 
 {
   DBUG_ENTER("console_event_handler");
 #ifndef EMBEDDED_LIBRARY
@@ -2861,7 +2376,7 @@ static BOOL WINAPI console_event_handler( DWORD type )
   {
      /*
        Do not shutdown before startup is finished and shutdown
-       thread is initialized. Otherwise there is a race condition
+       thread is initialized. Otherwise there is a race condition 
        between main thread doing initialization and CTRL-C thread doing
        cleanup, which can result into crash.
      */
@@ -2926,9 +2441,9 @@ LONG WINAPI my_unhandler_exception_filter(EXCEPTION_POINTERS *ex_pointers)
 #ifdef DEBUG_UNHANDLED_EXCEPTION_FILTER
    /*
     Unfortunately there is no clean way to debug unhandled exception filters,
-    as debugger does not stop there(also documented in MSDN)
+    as debugger does not stop there(also documented in MSDN) 
     To overcome, one could put a MessageBox, but this will not work in service.
-    Better solution is to print error message and sleep some minutes
+    Better solution is to print error message and sleep some minutes 
     until debugger is attached
   */
   wait_for_debugger(DEBUGGER_ATTACH_TIMEOUT);
@@ -2942,7 +2457,7 @@ LONG WINAPI my_unhandler_exception_filter(EXCEPTION_POINTERS *ex_pointers)
   {
     DWORD written;
     const char msg[] = "Got exception in exception handler!\n";
-    WriteFile(GetStdHandle(STD_OUTPUT_HANDLE),msg, sizeof(msg)-1,
+    WriteFile(GetStdHandle(STD_OUTPUT_HANDLE),msg, sizeof(msg)-1, 
       &written,NULL);
   }
   /*
@@ -2955,7 +2470,7 @@ LONG WINAPI my_unhandler_exception_filter(EXCEPTION_POINTERS *ex_pointers)
 }
 
 
-void my_init_signals(void)
+static void init_signals(void)
 {
   if(opt_console)
     SetConsoleCtrlHandler(console_event_handler,TRUE);
@@ -3006,6 +2521,7 @@ extern "C" char *my_demangle(const char *mangled_name, int *status)
 #endif
 
 
+
 #if !defined(__WIN__)
 #ifndef SA_RESETHAND
 #define SA_RESETHAND 0
@@ -3016,11 +2532,11 @@ extern "C" char *my_demangle(const char *mangled_name, int *status)
 
 #ifndef EMBEDDED_LIBRARY
 
-void my_init_signals(void)
+static void init_signals(void)
 {
   sigset_t set;
   struct sigaction sa;
-  DBUG_ENTER("my_init_signals");
+  DBUG_ENTER("init_signals");
 
   my_sigset(THR_SERVER_ALARM,print_signal_warning); // Should never be called!
 
@@ -3053,7 +2569,7 @@ void my_init_signals(void)
     /* Change limits so that we will get a core file */
     STRUCT_RLIMIT rl;
     rl.rlim_cur = rl.rlim_max = RLIM_INFINITY;
-    if (setrlimit(RLIMIT_CORE, &rl) && log_warnings)
+    if (setrlimit(RLIMIT_CORE, &rl) && global_system_variables.log_warnings)
       sql_print_warning("setrlimit could not change the size of core files to 'infinity';  We may not be able to generate a core file on signals");
   }
 #endif
@@ -3077,7 +2593,8 @@ void my_init_signals(void)
 #ifdef SIGTSTP
   sigaddset(&set,SIGTSTP);
 #endif
-  sigaddset(&set,THR_SERVER_ALARM);
+  if (thd_lib_detected != THD_LIB_LT)
+    sigaddset(&set,THR_SERVER_ALARM);
   if (test_flags & TEST_SIGINT)
   {
     my_sigset(thr_kill_signal, end_thread_signal);
@@ -3102,19 +2619,15 @@ static void start_signal_handler(void)
 #if !defined(HAVE_DEC_3_2_THREADS)
   pthread_attr_setscope(&thr_attr,PTHREAD_SCOPE_SYSTEM);
   (void) pthread_attr_setdetachstate(&thr_attr,PTHREAD_CREATE_DETACHED);
-
-  size_t guardize= 0;
-  pthread_attr_getguardsize(&thr_attr, &guardize);
-
 #if defined(__ia64__) || defined(__ia64)
   /*
     Peculiar things with ia64 platforms - it seems we only have half the
     stack size in reality, so we have to double it here
   */
-  guardize= my_thread_stack_size;
+  pthread_attr_setstacksize(&thr_attr,my_thread_stack_size*2);
+#else
+  pthread_attr_setstacksize(&thr_attr,my_thread_stack_size);
 #endif
-
-  pthread_attr_setstacksize(&thr_attr, my_thread_stack_size + guardize);
 #endif
 
   mysql_mutex_lock(&LOCK_thread_count);
@@ -3122,7 +2635,7 @@ static void start_signal_handler(void)
                                   &signal_thread, &thr_attr, signal_hand, 0)))
   {
     sql_print_error("Can't create interrupt-thread (error %d, errno: %d)",
-                    error,errno);
+		    error,errno);
     exit(1);
   }
   mysql_cond_wait(&COND_thread_count, &LOCK_thread_count);
@@ -3135,11 +2648,12 @@ static void start_signal_handler(void)
 
 /** This threads handles all signals and alarms. */
 /* ARGSUSED */
-pthread_handler_t signal_hand(void *arg MY_ATTRIBUTE((unused)))
+pthread_handler_t signal_hand(void *arg __attribute__((unused)))
 {
   sigset_t set;
   int sig;
-  my_thread_init();       // Init new thread
+  my_thread_init();				// Init new thread
+  DBUG_ENTER("signal_hand");
   signal_thread_in_use= 1;
 
   /*
@@ -3148,16 +2662,16 @@ pthread_handler_t signal_hand(void *arg MY_ATTRIBUTE((unused)))
     but the +10 should be quite safe.
   */
   init_thr_alarm(thread_scheduler->max_threads +
-     global_system_variables.max_insert_delayed_threads + 10);
-  if (test_flags & TEST_SIGINT)
+		 global_system_variables.max_insert_delayed_threads + 10);
+  if (thd_lib_detected != THD_LIB_LT && (test_flags & TEST_SIGINT))
   {
-    (void) sigemptyset(&set);     // Setup up SIGINT for debug
-    (void) sigaddset(&set,SIGINT);    // For debugging
+    (void) sigemptyset(&set);			// Setup up SIGINT for debug
+    (void) sigaddset(&set,SIGINT);		// For debugging
     (void) pthread_sigmask(SIG_UNBLOCK,&set,NULL);
   }
-  (void) sigemptyset(&set);     // Setup up SIGINT for debug
+  (void) sigemptyset(&set);			// Setup up SIGINT for debug
 #ifdef USE_ONE_SIGNAL_HAND
-  (void) sigaddset(&set,THR_SERVER_ALARM);  // For alarms
+  (void) sigaddset(&set,THR_SERVER_ALARM);	// For alarms
 #endif
 #ifndef IGNORE_SIGHUP_SIGQUIT
   (void) sigaddset(&set,SIGQUIT);
@@ -3178,24 +2692,13 @@ pthread_handler_t signal_hand(void *arg MY_ATTRIBUTE((unused)))
     should not be any other mysql_cond_signal() calls.
   */
   mysql_mutex_lock(&LOCK_thread_count);
-  mysql_cond_broadcast(&COND_thread_count);
   mysql_mutex_unlock(&LOCK_thread_count);
+  mysql_cond_broadcast(&COND_thread_count);
 
-  /*
-    Waiting for until mysqld_server_started != 0
-    to ensure that all server components has been successfully
-    initialized. This step is mandatory since signal processing
-    could be done safely only when all server components
-    has been initialized.
-  */
-  mysql_mutex_lock(&LOCK_server_started);
-  while (!mysqld_server_started)
-    mysql_cond_wait(&COND_server_started, &LOCK_server_started);
-  mysql_mutex_unlock(&LOCK_server_started);
-
+  (void) pthread_sigmask(SIG_BLOCK,&set,NULL);
   for (;;)
   {
-    int error;          // Used when debugging
+    int error;					// Used when debugging
     if (shutdown_in_progress && !abort_loop)
     {
       sig= SIGTERM;
@@ -3205,9 +2708,11 @@ pthread_handler_t signal_hand(void *arg MY_ATTRIBUTE((unused)))
       while ((error=my_sigwait(&set,&sig)) == EINTR) ;
     if (cleanup_done)
     {
+      DBUG_PRINT("quit",("signal_handler: calling my_thread_end()"));
       my_thread_end();
       signal_thread_in_use= 0;
-      pthread_exit(0);        // Safety
+      DBUG_LEAVE;                               // Must match DBUG_ENTER()
+      pthread_exit(0);				// Safety
       return 0;                                 // Avoid compiler warnings
     }
     switch (sig) {
@@ -3223,13 +2728,14 @@ pthread_handler_t signal_hand(void *arg MY_ATTRIBUTE((unused)))
       DBUG_PRINT("info",("Got signal: %d  abort_loop: %d",sig,abort_loop));
       if (!abort_loop)
       {
-        abort_loop=1;       // mark abort for threads
-#ifdef HAVE_PSI_THREAD_INTERFACE
+	abort_loop=1;				// mark abort for threads
+#ifdef HAVE_PSI_INTERFACE
         /* Delete the instrumentation for the signal thread */
-        PSI_THREAD_CALL(delete_current_thread)();
+        if (likely(PSI_server != NULL))
+          PSI_server->delete_current_thread();
 #endif
 #ifdef USE_ONE_SIGNAL_HAND
-        pthread_t tmp;
+	pthread_t tmp;
         if ((error= mysql_thread_create(0, /* Not instrumented */
                                         &tmp, &connection_attrib,
                                         kill_server_thread,
@@ -3237,7 +2743,7 @@ pthread_handler_t signal_hand(void *arg MY_ATTRIBUTE((unused)))
           sql_print_error("Can't create thread to kill server (errno= %d)",
                           error);
 #else
-        kill_server((void*) sig); // MIT THREAD has a alarm thread
+	kill_server((void*) sig);	// MIT THREAD has a alarm thread
 #endif
       }
       break;
@@ -3245,12 +2751,12 @@ pthread_handler_t signal_hand(void *arg MY_ATTRIBUTE((unused)))
       if (!abort_loop)
       {
         int not_used;
-  mysql_print_status();   // Print some debug info
-  reload_acl_and_cache((THD*) 0,
-           (REFRESH_LOG | REFRESH_TABLES | REFRESH_FAST |
-            REFRESH_GRANT |
-            REFRESH_THREADS | REFRESH_HOSTS),
-           (TABLE_LIST*) 0, &not_used); // Flush logs
+	mysql_print_status();		// Print some debug info
+	reload_acl_and_cache((THD*) 0,
+			     (REFRESH_LOG | REFRESH_TABLES | REFRESH_FAST |
+			      REFRESH_GRANT |
+			      REFRESH_THREADS | REFRESH_HOSTS),
+			     (TABLE_LIST*) 0, &not_used); // Flush logs
       }
       /* reenable logs after the options were reloaded */
       if (log_output_options & LOG_NONE)
@@ -3268,24 +2774,24 @@ pthread_handler_t signal_hand(void *arg MY_ATTRIBUTE((unused)))
       break;
 #ifdef USE_ONE_SIGNAL_HAND
     case THR_SERVER_ALARM:
-      process_alarm(sig);     // Trigger alarms.
+      process_alarm(sig);			// Trigger alarms.
       break;
 #endif
     default:
 #ifdef EXTRA_DEBUG
       sql_print_warning("Got signal: %d  error: %d",sig,error); /* purecov: tested */
 #endif
-      break;          /* purecov: tested */
+      break;					/* purecov: tested */
     }
   }
-  return(0);          /* purecov: deadcode */
+  return(0);					/* purecov: deadcode */
 }
 
 static void check_data_home(const char *path)
 {}
 
 #endif /*!EMBEDDED_LIBRARY*/
-#endif  /* __WIN__*/
+#endif	/* __WIN__*/
 
 
 /**
@@ -3327,7 +2833,7 @@ void my_message_sql(uint error, const char *str, myf MyFlags)
       thd->is_fatal_error= 1;
     (void) thd->raise_condition(error,
                                 NULL,
-                                Sql_condition::WARN_LEVEL_ERROR,
+                                MYSQL_ERROR::WARN_LEVEL_ERROR,
                                 str);
   }
 
@@ -3343,7 +2849,6 @@ void my_message_sql(uint error, const char *str, myf MyFlags)
 #ifndef EMBEDDED_LIBRARY
 extern "C" void *my_str_malloc_mysqld(size_t size);
 extern "C" void my_str_free_mysqld(void *ptr);
-extern "C" void *my_str_realloc_mysqld(void *ptr, size_t size);
 
 void *my_str_malloc_mysqld(size_t size)
 {
@@ -3354,11 +2859,6 @@ void *my_str_malloc_mysqld(size_t size)
 void my_str_free_mysqld(void *ptr)
 {
   my_free(ptr);
-}
-
-void *my_str_realloc_mysqld(void *ptr, size_t size)
-{
-  return my_realloc(ptr, size, MYF(MY_FAE));
 }
 #endif /* EMBEDDED_LIBRARY */
 
@@ -3391,14 +2891,15 @@ static const int load_default_groups_sz=
 sizeof(load_default_groups)/sizeof(load_default_groups[0]);
 #endif
 
+
 #ifndef EMBEDDED_LIBRARY
 /**
   This function is used to check for stack overrun for pathological
-  cases of regular expressions and 'like' expressions.
-  The call to current_thd is quite expensive, so we try to avoid it
+  cases of  regular expressions and 'like' expressions.
+  The call to current_thd is  quite expensive, so we try to avoid it
   for the normal cases.
-  The size of each stack frame for the wildcmp() routines is ~128 bytes,
-  so checking *every* recursive call is not necessary.
+  The size of  each stack frame for the wildcmp() routines is ~128 bytes,
+  so checking  *every* recursive call is not necessary.
  */
 extern "C" int
 check_enough_stack_size(int recurse_level)
@@ -3418,8 +2919,8 @@ check_enough_stack_size(int recurse_level)
 /**
   Initialize one of the global date/time format variables.
 
-  @param format_type    What kind of format should be supported
-  @param var_ptr    Pointer to variable that should be updated
+  @param format_type		What kind of format should be supported
+  @param var_ptr		Pointer to variable that should be updated
 
   @retval
     0 ok
@@ -3456,7 +2957,6 @@ SHOW_VAR com_status_vars[]= {
   {"alter_server",         (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_ALTER_SERVER]), SHOW_LONG_STATUS},
   {"alter_table",          (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_ALTER_TABLE]), SHOW_LONG_STATUS},
   {"alter_tablespace",     (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_ALTER_TABLESPACE]), SHOW_LONG_STATUS},
-  {"alter_user",           (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_ALTER_USER]), SHOW_LONG_STATUS},
   {"analyze",              (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_ANALYZE]), SHOW_LONG_STATUS},
   {"begin",                (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_BEGIN]), SHOW_LONG_STATUS},
   {"binlog",               (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_BINLOG_BASE64_EVENT]), SHOW_LONG_STATUS},
@@ -3494,7 +2994,6 @@ SHOW_VAR com_status_vars[]= {
   {"empty_query",          (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_EMPTY_QUERY]), SHOW_LONG_STATUS},
   {"execute_sql",          (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_EXECUTE]), SHOW_LONG_STATUS},
   {"flush",                (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_FLUSH]), SHOW_LONG_STATUS},
-  {"get_diagnostics",      (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_GET_DIAGNOSTICS]), SHOW_LONG_STATUS},
   {"grant",                (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_GRANT]), SHOW_LONG_STATUS},
   {"ha_close",             (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_HA_CLOSE]), SHOW_LONG_STATUS},
   {"ha_open",              (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_HA_OPEN]), SHOW_LONG_STATUS},
@@ -3527,10 +3026,12 @@ SHOW_VAR com_status_vars[]= {
   {"select",               (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SELECT]), SHOW_LONG_STATUS},
   {"set_option",           (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SET_OPTION]), SHOW_LONG_STATUS},
   {"signal",               (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SIGNAL]), SHOW_LONG_STATUS},
+  {"show_authors",         (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_AUTHORS]), SHOW_LONG_STATUS},
   {"show_binlog_events",   (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_BINLOG_EVENTS]), SHOW_LONG_STATUS},
   {"show_binlogs",         (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_BINLOGS]), SHOW_LONG_STATUS},
   {"show_charsets",        (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_CHARSETS]), SHOW_LONG_STATUS},
   {"show_collations",      (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_COLLATIONS]), SHOW_LONG_STATUS},
+  {"show_contributors",    (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_CONTRIBUTORS]), SHOW_LONG_STATUS},
   {"show_create_db",       (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_CREATE_DB]), SHOW_LONG_STATUS},
   {"show_create_event",    (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_CREATE_EVENT]), SHOW_LONG_STATUS},
   {"show_create_func",     (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_CREATE_FUNC]), SHOW_LONG_STATUS},
@@ -3544,7 +3045,9 @@ SHOW_VAR com_status_vars[]= {
   {"show_events",          (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_EVENTS]), SHOW_LONG_STATUS},
   {"show_errors",          (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_ERRORS]), SHOW_LONG_STATUS},
   {"show_fields",          (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_FIELDS]), SHOW_LONG_STATUS},
+#ifndef DBUG_OFF
   {"show_function_code",   (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_FUNC_CODE]), SHOW_LONG_STATUS},
+#endif
   {"show_function_status", (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_STATUS_FUNC]), SHOW_LONG_STATUS},
   {"show_grants",          (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_GRANTS]), SHOW_LONG_STATUS},
   {"show_keys",            (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_KEYS]), SHOW_LONG_STATUS},
@@ -3552,7 +3055,9 @@ SHOW_VAR com_status_vars[]= {
   {"show_open_tables",     (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_OPEN_TABLES]), SHOW_LONG_STATUS},
   {"show_plugins",         (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_PLUGINS]), SHOW_LONG_STATUS},
   {"show_privileges",      (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_PRIVILEGES]), SHOW_LONG_STATUS},
+#ifndef DBUG_OFF
   {"show_procedure_code",  (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_PROC_CODE]), SHOW_LONG_STATUS},
+#endif
   {"show_procedure_status",(char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_STATUS_PROC]), SHOW_LONG_STATUS},
   {"show_processlist",     (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_PROCESSLIST]), SHOW_LONG_STATUS},
   {"show_profile",         (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_PROFILE]), SHOW_LONG_STATUS},
@@ -3628,49 +3133,9 @@ void init_sql_statement_names()
   sql_statement_names[(uint) SQLCOM_END].str= "error";
 }
 
-#ifdef HAVE_PSI_STATEMENT_INTERFACE
-PSI_statement_info sql_statement_info[(uint) SQLCOM_END + 1];
-PSI_statement_info com_statement_info[(uint) COM_END + 1];
-
-/**
-  Initialize the command names array.
-  Since we do not want to maintain a separate array,
-  this is populated from data mined in com_status_vars,
-  which already has one name for each command.
-*/
-void init_sql_statement_info()
-{
-  uint i;
-
-  for (i= 0; i < ((uint) SQLCOM_END + 1); i++)
-  {
-    sql_statement_info[i].m_name= sql_statement_names[i].str;
-    sql_statement_info[i].m_flags= 0;
-  }
-
-  /* "statement/sql/error" represents broken queries (syntax error). */
-  sql_statement_info[(uint) SQLCOM_END].m_name= "error";
-  sql_statement_info[(uint) SQLCOM_END].m_flags= 0;
-}
-
-void init_com_statement_info()
-{
-  uint index;
-
-  for (index= 0; index < (uint) COM_END + 1; index++)
-  {
-    com_statement_info[index].m_name= command_name[index].str;
-    com_statement_info[index].m_flags= 0;
-  }
-
-  /* "statement/abstract/query" can mutate into "statement/sql/..." */
-  com_statement_info[(uint) COM_QUERY].m_flags= PSI_FLAG_MUTABLE;
-}
-#endif
-
 /**
   Create the name of the default general log file
-
+  
   @param[IN] buff    Location for building new string.
   @param[IN] log_ext The extension for the file (e.g .log)
   @returns Pointer to a new string containing the name
@@ -3680,54 +3145,12 @@ static inline char *make_default_log_name(char *buff,const char* log_ext)
   return make_log_name(buff, default_logfile_name, log_ext);
 }
 
-/**
-  Create a replication file name or base for file names.
-
-  @param[in] opt Value of option, or NULL
-  @param[in] def Default value if option value is not set.
-  @param[in] ext Extension to use for the path
-
-  @returns Pointer to string containing the full file path, or NULL if
-  it was not possible to create the path.
- */
-static inline const char *
-rpl_make_log_name(const char *opt,
-                  const char *def,
-                  const char *ext)
+static int init_common_variables()
 {
-  DBUG_ENTER("rpl_make_log_name");
-  DBUG_PRINT("enter", ("opt: %s, def: %s, ext: %s", opt, def, ext));
   char buff[FN_REFLEN];
-  const char *base= opt ? opt : def;
-  unsigned int options=
-    MY_REPLACE_EXT | MY_UNPACK_FILENAME | MY_SAFE_PATH;
-
-  /* mysql_real_data_home_ptr  may be null if no value of datadir has been
-     specified through command-line or througha cnf file. If that is the 
-     case we make mysql_real_data_home_ptr point to mysql_real_data_home
-     which, in that case holds the default path for data-dir.
-  */ 
-  if(mysql_real_data_home_ptr == NULL)
-    mysql_real_data_home_ptr= mysql_real_data_home;
-
-  if (fn_format(buff, base, mysql_real_data_home_ptr, ext, options))
-    DBUG_RETURN(strdup(buff));
-  else
-    DBUG_RETURN(NULL);
-}
-
-
-int init_common_variables()
-{
   umask(((~my_umask) & 0666));
-  connection_errors_select= 0;
-  connection_errors_accept= 0;
-  connection_errors_tcpwrap= 0;
-  connection_errors_internal= 0;
-  connection_errors_max_connection= 0;
-  connection_errors_peer_addr= 0;
   my_decimal_set_zero(&decimal_zero); // set decimal_zero constant;
-  tzset();      // Set tzname
+  tzset();			// Set tzname
 
   max_system_variables.pseudo_thread_id= (ulong)~0;
   server_start_time= flush_status_time= my_time(0);
@@ -3742,9 +3165,6 @@ int init_common_variables()
 
   if (init_thread_environment() ||
       mysql_init_variables())
-    return 1;
-
-  if (ignore_db_dirs_init())
     return 1;
 
 #ifdef HAVE_TZNAME
@@ -3771,17 +3191,7 @@ int init_common_variables()
     and can not be set in the MYSQL_BIN_LOG constructor (called before main()).
   */
   mysql_bin_log.set_psi_keys(key_BINLOG_LOCK_index,
-                             key_BINLOG_LOCK_commit,
-                             key_BINLOG_LOCK_commit_queue,
-                             key_BINLOG_LOCK_done,
-                             key_BINLOG_LOCK_flush_queue,
-                             key_BINLOG_LOCK_log,
-                             key_BINLOG_LOCK_sync,
-                             key_BINLOG_LOCK_sync_queue,
-                             key_BINLOG_LOCK_xids,
-                             key_BINLOG_COND_done,
                              key_BINLOG_update_cond,
-                             key_BINLOG_prep_xids_cond,
                              key_file_binlog,
                              key_file_binlog_index);
 #endif
@@ -3809,12 +3219,11 @@ int init_common_variables()
     strmake(default_logfile_name, STRING_WITH_LEN("mysql"));
   }
   else
-    strmake(default_logfile_name, glob_hostname,
-      sizeof(default_logfile_name)-5);
+    strmake(default_logfile_name, glob_hostname, 
+	    sizeof(default_logfile_name)-5);
 
   strmake(pidfile_name, default_logfile_name, sizeof(pidfile_name)-5);
-  strmov(fn_ext(pidfile_name),".pid");    // Add proper extension
-
+  strmov(fn_ext(pidfile_name),".pid");		// Add proper extension
 
   /*
     The default-storage-engine entry in my_long_options should have a
@@ -3833,9 +3242,6 @@ int init_common_variables()
 #else
   default_storage_engine= const_cast<char *>("InnoDB");
 #endif
-  default_tmp_storage_engine= default_storage_engine;
-
-  init_default_auth_plugin();
 
   /*
     Add server status variables to the dynamic list of
@@ -3885,7 +3291,7 @@ int init_common_variables()
 #endif /*!EMBEDDED_LIBRARY*/
 
   DBUG_PRINT("info",("%s  Ver %s for %s on %s\n",my_progname,
-         server_version, SYSTEM_TYPE,MACHINE_TYPE));
+		     server_version, SYSTEM_TYPE,MACHINE_TYPE));
 
 #ifdef HAVE_LARGE_PAGES
   /* Initialize large page size */
@@ -3899,7 +3305,7 @@ int init_common_variables()
   else
   {
     opt_large_pages= 0;
-    /*
+    /* 
        Either not configured to use large pages or Linux haven't
        been compiled with large page support
     */
@@ -3956,36 +3362,57 @@ int init_common_variables()
   }
 #endif /* HAVE_SOLARIS_LARGE_PAGES */
 
-  longlong default_value;
-  sys_var *var;
-  /* Calculate and update default value for thread_cache_size. */
-  if ((default_value= 8 + max_connections / 100) > 100)
-    default_value= 100;
-  var= intern_find_sys_var(STRING_WITH_LEN("thread_cache_size"));
-  var->update_default(default_value);
+  /* connections and databases needs lots of files */
+  {
+    uint files, wanted_files, max_open_files;
 
-  /* Calculate and update default value for host_cache_size. */
-  if ((default_value= 128 + max_connections) > 628 &&
-      (default_value= 628 + ((max_connections - 500) / 20)) > 2000)
-    default_value= 2000;
-  var= intern_find_sys_var(STRING_WITH_LEN("host_cache_size"));
-  var->update_default(default_value);
+    /* MyISAM requires two file handles per table. */
+    wanted_files= 10+max_connections+table_cache_size*2;
+    /*
+      We are trying to allocate no less than max_connections*5 file
+      handles (i.e. we are trying to set the limit so that they will
+      be available).  In addition, we allocate no less than how much
+      was already allocated.  However below we report a warning and
+      recompute values only if we got less file handles than were
+      explicitly requested.  No warning and re-computation occur if we
+      can't get max_connections*5 but still got no less than was
+      requested (value of wanted_files).
+    */
+    max_open_files= max(max(wanted_files, max_connections*5),
+                        open_files_limit);
+    files= my_set_max_open_files(max_open_files);
 
-  /* Fix thread_cache_size. */
-  if (!thread_cache_size_specified &&
-      (max_blocked_pthreads= 8 + max_connections / 100) > 100)
-    max_blocked_pthreads= 100;
-
-  /* Fix host_cache_size. */
-  if (!host_cache_size_specified &&
-      (host_cache_size= 128 + max_connections) > 628 &&
-      (host_cache_size= 628 + ((max_connections - 500) / 20)) > 2000)
-    host_cache_size= 2000;
-
-  /* Fix back_log */
-  if (back_log == 0 && (back_log= 50 + max_connections / 5) > 900)
-    back_log= 900;
-
+    if (files < wanted_files)
+    {
+      if (!open_files_limit)
+      {
+        /*
+          If we have requested too much file handles than we bring
+          max_connections in supported bounds.
+        */
+        max_connections= (ulong) min(files-10-TABLE_OPEN_CACHE_MIN*2,
+                                     max_connections);
+        /*
+          Decrease table_cache_size according to max_connections, but
+          not below TABLE_OPEN_CACHE_MIN.  Outer min() ensures that we
+          never increase table_cache_size automatically (that could
+          happen if max_connections is decreased above).
+        */
+        table_cache_size= (ulong) min(max((files-10-max_connections)/2,
+                                          TABLE_OPEN_CACHE_MIN),
+                                      table_cache_size);
+	DBUG_PRINT("warning",
+		   ("Changed limits: max_open_files: %u  max_connections: %ld  table_cache: %ld",
+		    files, max_connections, table_cache_size));
+	if (global_system_variables.log_warnings)
+	  sql_print_warning("Changed limits: max_open_files: %u  max_connections: %ld  table_cache: %ld",
+			files, max_connections, table_cache_size);
+      }
+      else if (global_system_variables.log_warnings)
+	sql_print_warning("Could not increase number of max_open_files to more than %u (request: %u)", files, wanted_files);
+    }
+    open_files_limit= files;
+  }
   unireg_init(opt_specialflag); /* Set up extern variabels */
   if (!(my_default_lc_messages=
         my_locale_by_name(lc_messages)))
@@ -3994,7 +3421,7 @@ int init_common_variables()
     return 1;
   }
   global_system_variables.lc_messages= my_default_lc_messages;
-  if (init_errmessage())  /* Read error messages from file */
+  if (init_errmessage())	/* Read error messages from file */
     return 1;
   init_client_errs();
   mysql_client_plugin_init();
@@ -4041,25 +3468,21 @@ int init_common_variables()
     default_collation= get_charset_by_name(default_collation_name, MYF(0));
     if (!default_collation)
     {
-#ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
-      buffered_logs.print();
-      buffered_logs.cleanup();
-#endif
       sql_print_error(ER_DEFAULT(ER_UNKNOWN_COLLATION), default_collation_name);
       return 1;
     }
     if (!my_charset_same(default_charset_info, default_collation))
     {
       sql_print_error(ER_DEFAULT(ER_COLLATION_CHARSET_MISMATCH),
-          default_collation_name,
-          default_charset_info->csname);
+		      default_collation_name,
+		      default_charset_info->csname);
       return 1;
     }
     default_charset_info= default_collation;
   }
   /* Set collactions that depends on the default collation */
-  global_system_variables.collation_server=  default_charset_info;
-  global_system_variables.collation_database=  default_charset_info;
+  global_system_variables.collation_server=	 default_charset_info;
+  global_system_variables.collation_database=	 default_charset_info;
 
   if (is_supported_parser_charset(default_charset_info))
   {
@@ -4078,7 +3501,7 @@ int init_common_variables()
     global_system_variables.character_set_client= &my_charset_latin1;
   }
 
-  if (!(character_set_filesystem=
+  if (!(character_set_filesystem= 
         get_charset_by_csname(character_set_filesystem_name,
                               MY_CS_PRIMARY, MYF(MY_WME))))
     return 1;
@@ -4096,20 +3519,14 @@ int init_common_variables()
   if (opt_log && opt_logname && !(log_output_options & LOG_FILE) &&
       !(log_output_options & LOG_NONE))
     sql_print_warning("Although a path was specified for the "
-                      "--general-log-file option, log tables are used. "
-                      "To enable logging to files use the --log-output=file option.");
+                      "--log option, log tables are used. "
+                      "To enable logging to files use the --log-output option.");
 
   if (opt_slow_log && opt_slow_logname && !(log_output_options & LOG_FILE)
       && !(log_output_options & LOG_NONE))
     sql_print_warning("Although a path was specified for the "
-                      "--slow-query-log-file option, log tables are used. "
+                      "--log-slow-queries option, log tables are used. "
                       "To enable logging to files use the --log-output=file option.");
-
-  if (!opt_logname || !*opt_logname)
-    opt_logname= make_default_log_name(logname_path, ".log");
-
-  if (!opt_slow_logname || !*opt_slow_logname)
-    opt_slow_logname= make_default_log_name(slow_logname_path, "-slow.log");
 
   if (opt_logname &&
       !is_valid_log_name(opt_logname, strlen(opt_logname)))
@@ -4126,6 +3543,18 @@ int init_common_variables()
                     opt_slow_logname);
     return 1;
   }
+
+#define FIX_LOG_VAR(VAR, ALT)                                   \
+  if (!VAR || !*VAR)                                            \
+  {                                                             \
+    my_free(VAR); /* it could be an allocated empty string "" */ \
+    VAR= my_strdup(ALT, MYF(0));                                \
+  }
+
+  FIX_LOG_VAR(opt_logname,
+              make_default_log_name(buff, ".log"));
+  FIX_LOG_VAR(opt_slow_logname,
+              make_default_log_name(buff, "-slow.log"));
 
 #if defined(ENABLED_DEBUG_SYNC)
   /* Initialize the debug sync facility. See debug_sync.cc. */
@@ -4165,8 +3594,8 @@ int init_common_variables()
     }
     else
     {
-      if (log_warnings)
-  sql_print_warning("Setting lower_case_table_names=2 because file system for %s is case insensitive", mysql_real_data_home);
+      if (global_system_variables.log_warnings)
+	sql_print_warning("Setting lower_case_table_names=2 because file system for %s is case insensitive", mysql_real_data_home);
       lower_case_table_names= 2;
     }
   }
@@ -4174,11 +3603,11 @@ int init_common_variables()
            !(lower_case_file_system=
              (test_if_case_insensitive(mysql_real_data_home) == 1)))
   {
-    if (log_warnings)
+    if (global_system_variables.log_warnings)
       sql_print_warning("lower_case_table_names was set to 2, even though your "
                         "the file system '%s' is case sensitive.  Now setting "
                         "lower_case_table_names to 0 to avoid future problems.",
-      mysql_real_data_home);
+			mysql_real_data_home);
     lower_case_table_names= 0;
   }
   else
@@ -4189,26 +3618,8 @@ int init_common_variables()
 
   /* Reset table_alias_charset, now that lower_case_table_names is set. */
   table_alias_charset= (lower_case_table_names ?
-      &my_charset_utf8_tolower_ci :
-      &my_charset_bin);
-
-  /*
-    Build do_table and ignore_table rules to hush
-    after the resetting of table_alias_charset
-  */
-  if (rpl_filter->build_do_table_hash() ||
-      rpl_filter->build_ignore_table_hash())
-  {
-    sql_print_error("An error occurred while building do_table"
-                    "and ignore_table rules to hush.");
-    return 1;
-  }
-
-  if (ignore_db_dirs_process_additions())
-  {
-    sql_print_error("An error occurred while storing ignore_db_dirs to a hash.");
-    return 1;
-  }
+			files_charset_info :
+			&my_charset_bin);
 
   return 0;
 }
@@ -4216,8 +3627,7 @@ int init_common_variables()
 
 static int init_thread_environment()
 {
-  mysql_mutex_init(key_LOCK_thread_created,
-                   &LOCK_thread_created, MY_MUTEX_INIT_FAST);
+  mysql_mutex_init(key_LOCK_thread_created, &LOCK_thread_created, MY_MUTEX_INIT_FAST);
   mysql_mutex_init(key_LOCK_thread_count, &LOCK_thread_count, MY_MUTEX_INIT_FAST);
   mysql_mutex_init(key_LOCK_status, &LOCK_status, MY_MUTEX_INIT_FAST);
   mysql_mutex_init(key_LOCK_thd_remove,
@@ -4239,20 +3649,12 @@ static int init_thread_environment()
                     &LOCK_system_variables_hash);
   mysql_mutex_init(key_LOCK_prepared_stmt_count,
                    &LOCK_prepared_stmt_count, MY_MUTEX_INIT_FAST);
-  mysql_mutex_init(key_LOCK_sql_slave_skip_counter,
-                   &LOCK_sql_slave_skip_counter, MY_MUTEX_INIT_FAST);
-  mysql_mutex_init(key_LOCK_slave_net_timeout,
-                   &LOCK_slave_net_timeout, MY_MUTEX_INIT_FAST);
   mysql_mutex_init(key_LOCK_error_messages,
                    &LOCK_error_messages, MY_MUTEX_INIT_FAST);
   mysql_mutex_init(key_LOCK_uuid_generator,
                    &LOCK_uuid_generator, MY_MUTEX_INIT_FAST);
-  mysql_mutex_init(key_LOCK_sql_rand,
-                   &LOCK_sql_rand, MY_MUTEX_INIT_FAST);
   mysql_mutex_init(key_LOCK_connection_count,
                    &LOCK_connection_count, MY_MUTEX_INIT_FAST);
-  mysql_mutex_init(key_LOCK_log_throttle_qni,
-                   &LOCK_log_throttle_qni, MY_MUTEX_INIT_FAST);
 #ifdef HAVE_OPENSSL
   mysql_mutex_init(key_LOCK_des_key_file,
                    &LOCK_des_key_file, MY_MUTEX_INIT_FAST);
@@ -4272,10 +3674,13 @@ static int init_thread_environment()
   mysql_rwlock_init(key_rwlock_LOCK_sys_init_slave, &LOCK_sys_init_slave);
   mysql_rwlock_init(key_rwlock_LOCK_grant, &LOCK_grant);
   mysql_cond_init(key_COND_thread_count, &COND_thread_count, NULL);
-  mysql_cond_init(key_COND_connection_count, &COND_connection_count, NULL);
   mysql_cond_init(key_COND_thread_cache, &COND_thread_cache, NULL);
   mysql_cond_init(key_COND_flush_thread_cache, &COND_flush_thread_cache, NULL);
   mysql_cond_init(key_COND_manager, &COND_manager, NULL);
+#ifdef HAVE_REPLICATION
+  mysql_mutex_init(key_LOCK_rpl_status, &LOCK_rpl_status, MY_MUTEX_INIT_FAST);
+  mysql_cond_init(key_COND_rpl_status, &COND_rpl_status, NULL);
+#endif
   mysql_mutex_init(key_LOCK_server_started,
                    &LOCK_server_started, MY_MUTEX_INIT_FAST);
   mysql_cond_init(key_COND_server_started, &COND_server_started, NULL);
@@ -4286,7 +3691,7 @@ static int init_thread_environment()
   /* Parameter for threads created for connections */
   (void) pthread_attr_init(&connection_attrib);
   (void) pthread_attr_setdetachstate(&connection_attrib,
-             PTHREAD_CREATE_DETACHED);
+				     PTHREAD_CREATE_DETACHED);
   pthread_attr_setscope(&connection_attrib, PTHREAD_SCOPE_SYSTEM);
 
   if (pthread_key_create(&THR_THD,NULL) ||
@@ -4301,21 +3706,21 @@ static int init_thread_environment()
 
 #if defined(HAVE_OPENSSL) && !defined(HAVE_YASSL)
 static unsigned long openssl_id_function()
-{
+{ 
   return (unsigned long) pthread_self();
-}
+} 
 
 
 static openssl_lock_t *openssl_dynlock_create(const char *file, int line)
-{
+{ 
   openssl_lock_t *lock= new openssl_lock_t;
   mysql_rwlock_init(key_rwlock_openssl, &lock->lock);
   return lock;
 }
 
 
-static void openssl_dynlock_destroy(openssl_lock_t *lock, const char *file,
-            int line)
+static void openssl_dynlock_destroy(openssl_lock_t *lock, const char *file, 
+				    int line)
 {
   mysql_rwlock_destroy(&lock->lock);
   delete lock;
@@ -4334,8 +3739,8 @@ static void openssl_lock_function(int mode, int n, const char *file, int line)
 }
 
 
-static void openssl_lock(int mode, openssl_lock_t *lock, const char *file,
-       int line)
+static void openssl_lock(int mode, openssl_lock_t *lock, const char *file, 
+			 int line)
 {
   int err;
   char const *what;
@@ -4359,7 +3764,7 @@ static void openssl_lock(int mode, openssl_lock_t *lock, const char *file,
     sql_print_error("Fatal: OpenSSL interface problem (mode=0x%x)", mode);
     abort();
   }
-  if (err)
+  if (err) 
   {
     sql_print_error("Fatal: can't %s OpenSSL lock", what);
     abort();
@@ -4368,13 +3773,9 @@ static void openssl_lock(int mode, openssl_lock_t *lock, const char *file,
 #endif /* HAVE_OPENSSL */
 
 
-static int init_ssl()
+static void init_ssl()
 {
 #ifdef HAVE_OPENSSL
-#ifndef HAVE_YASSL
-  CRYPTO_malloc_init();
-#endif
-  ssl_start();
 #ifndef EMBEDDED_LIBRARY
   if (opt_use_ssl)
   {
@@ -4383,10 +3784,8 @@ static int init_ssl()
     /* having ssl_acceptor_fd != 0 signals the use of SSL */
     ssl_acceptor_fd= new_VioSSLAcceptorFd(opt_ssl_key, opt_ssl_cert,
 					  opt_ssl_ca, opt_ssl_capath,
-					  opt_ssl_cipher, &error,
-                                          opt_ssl_crl, opt_ssl_crlpath);
+					  opt_ssl_cipher, &error);
     DBUG_PRINT("info",("ssl_acceptor_fd: 0x%lx", (long) ssl_acceptor_fd));
-    ERR_remove_state(0);
     if (!ssl_acceptor_fd)
     {
       sql_print_warning("Failed to setup SSL");
@@ -4404,12 +3803,7 @@ static int init_ssl()
 #endif /* ! EMBEDDED_LIBRARY */
   if (des_key_file)
     load_des_key_file(des_key_file);
-#ifndef HAVE_YASSL
-  if (init_rsa_keys())
-    return 1;
-#endif
 #endif /* HAVE_OPENSSL */
-  return 0;
 }
 
 
@@ -4423,236 +3817,7 @@ static void end_ssl()
     ssl_acceptor_fd= 0;
   }
 #endif /* ! EMBEDDED_LIBRARY */
-#ifndef HAVE_YASSL
-  deinit_rsa_keys();
-#endif
 #endif /* HAVE_OPENSSL */
-}
-
-/**
-  Generate a UUID and save it into server_uuid variable.
-
-  @return Retur 0 or 1 if an error occurred.
- */
-static int generate_server_uuid()
-{
-  THD *thd;
-  Item_func_uuid *func_uuid;
-  String uuid;
-
-  /*
-    To be able to run this from boot, we allocate a temporary THD
-   */
-  if (!(thd=new THD))
-  {
-    sql_print_error("Failed to generate a server UUID because it is failed"
-                    " to allocate the THD.");
-    return 1;
-  }
-  thd->thread_stack= (char*) &thd;
-  thd->store_globals();
-  lex_start(thd);
-  func_uuid= new (thd->mem_root) Item_func_uuid();
-  func_uuid->fixed= 1;
-  func_uuid->val_str(&uuid);
-  delete thd;
-  /* Remember that we don't have a THD */
-  my_pthread_setspecific_ptr(THR_THD,  0);
-
-  strncpy(server_uuid, uuid.c_ptr(), UUID_LENGTH);
-  server_uuid[UUID_LENGTH]= '\0';
-  return 0;
-}
-
-/**
-  Save all options which was auto-generated by server-self into the given file.
-
-  @param fname The name of the file in which the auto-generated options will b
-  e saved.
-
-  @return Return 0 or 1 if an error occurred.
- */
-int flush_auto_options(const char* fname)
-{
-  File fd;
-  IO_CACHE io_cache;
-  int result= 0;
-
-  if ((fd= my_open((const char *)fname, O_CREAT|O_RDWR, MYF(MY_WME))) < 0)
-  {
-    sql_print_error("Failed to create file(file: '%s', errno %d)", fname, my_errno);
-    return 1;
-  }
-
-  if (init_io_cache(&io_cache, fd, IO_SIZE*2, WRITE_CACHE, 0L, 0, MYF(MY_WME)))
-  {
-    sql_print_error("Failed to create a cache on (file: %s', errno %d)", fname, my_errno);
-    my_close(fd, MYF(MY_WME));
-    return 1;
-  }
-
-  my_b_seek(&io_cache, 0L);
-  my_b_printf(&io_cache, "%s\n", "[auto]");
-  my_b_printf(&io_cache, "server-uuid=%s\n", server_uuid);
-
-  if (flush_io_cache(&io_cache) || my_sync(fd, MYF(MY_WME)))
-    result= 1;
-
-  my_close(fd, MYF(MY_WME));
-  end_io_cache(&io_cache);
-  return result;
-}
-
-/**
-  File 'auto.cnf' resides in the data directory to hold values of options that
-  server evaluates itself and that needs to be durable to sustain the server
-  restart. There is only a section ['auto'] in the file. All these options are
-  in the section. Only one option exists now, it is server_uuid.
-  Note, the user may not supply any literal value to these auto-options, and
-  only allowed to trigger (re)evaluation.
-  For instance, 'server_uuid' value will be evaluated and stored if there is
-  no corresponding line in the file.
-  Because of the specifics of the auto-options, they need a seperate storage.
-  Meanwhile, it is the 'auto.cnf' that has the same structure as 'my.cnf'.
-
-  @todo consider to implement sql-query-able persistent storage by WL#5279.
-  @return Return 0 or 1 if an error occurred.
- */
-static int init_server_auto_options()
-{
-  bool flush= false;
-  char fname[FN_REFLEN];
-  char *name= (char *)"auto";
-  const char *groups[]= {"auto", NULL};
-  char *uuid= 0;
-  my_option auto_options[]= {
-    {"server-uuid", 0, "", &uuid, &uuid,
-      0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0}
-  };
-
-  DBUG_ENTER("init_server_auto_options");
-
-  if (NULL == fn_format(fname, "auto.cnf", mysql_data_home, "",
-                        MY_UNPACK_FILENAME | MY_SAFE_PATH))
-    DBUG_RETURN(1);
-
-  /* load_defaults require argv[0] is not null */
-  char **argv= &name;
-  int argc= 1;
-  if (!check_file_permissions(fname, false))
-  {
-    /*
-      Found a world writable file hence removing it as it is dangerous to write
-      a new UUID into the same file.
-     */
-    my_delete(fname,MYF(MY_WME));
-    sql_print_warning("World-writable config file '%s' has been removed.\n",
-                      fname);
-  }
-
-  /* load all options in 'auto.cnf'. */
-  if (my_load_defaults(fname, groups, &argc, &argv, NULL))
-    DBUG_RETURN(1);
-
-  /*
-    Record the origial pointer allocated by my_load_defaults for free,
-    because argv will be changed by handle_options
-   */
-  char **old_argv= argv;
-  if (handle_options(&argc, &argv, auto_options, mysqld_get_one_option))
-    DBUG_RETURN(1);
-
-  DBUG_PRINT("info", ("uuid=%p=%s server_uuid=%s", uuid, uuid, server_uuid));
-  if (uuid)
-  {
-    if (!Uuid::is_valid(uuid))
-    {
-      sql_print_error("The server_uuid stored in auto.cnf file is not a valid UUID.");
-      goto err;
-    }
-    /*
-      Uuid::is_valid() cannot do strict check on the length as it will be
-      called by GTID::is_valid() as well (GTID = UUID:seq_no). We should
-      explicitly add the *length check* here in this function.
-
-      If UUID length is less than '36' (UUID_LENGTH), that error case would have
-      got caught in above is_valid check. The below check is to make sure that
-      length is not greater than UUID_LENGTH i.e., there are no extra characters
-      (Garbage) at the end of the valid UUID.
-    */
-    if (strlen(uuid) > UUID_LENGTH)
-    {
-      sql_print_error("Garbage characters found at the end of the server_uuid "
-                      "value in auto.cnf file. It should be of length '%d' "
-                      "(UUID_LENGTH). Clear it and restart the server. ",
-                      UUID_LENGTH);
-      goto err;
-    }
-    strcpy(server_uuid, uuid);
-  }
-  else
-  {
-    DBUG_PRINT("info", ("generating server_uuid"));
-    flush= TRUE;
-    /* server_uuid will be set in the function */
-    if (generate_server_uuid())
-      goto err;
-    DBUG_PRINT("info", ("generated server_uuid=%s", server_uuid));
-    sql_print_warning("No existing UUID has been found, so we assume that this"
-                      " is the first time that this server has been started."
-                      " Generating a new UUID: %s.",
-                      server_uuid);
-  }
-  /*
-    The uuid has been copied to server_uuid, so the memory allocated by
-    my_load_defaults can be freed now.
-   */
-  free_defaults(old_argv);
-
-  if (flush)
-    DBUG_RETURN(flush_auto_options(fname));
-  DBUG_RETURN(0);
-err:
-  free_defaults(argv);
-  DBUG_RETURN(1);
-}
-
-
-static bool
-initialize_storage_engine(char *se_name, const char *se_kind,
-                          plugin_ref *dest_plugin)
-{
-  LEX_STRING name= { se_name, strlen(se_name) };
-  plugin_ref plugin;
-  handlerton *hton;
-  if ((plugin= ha_resolve_by_name(0, &name, FALSE)))
-    hton= plugin_data(plugin, handlerton*);
-  else
-  {
-    sql_print_error("Unknown/unsupported storage engine: %s", se_name);
-    return true;
-  }
-  if (!ha_storage_engine_is_enabled(hton))
-  {
-    if (!opt_bootstrap)
-    {
-      sql_print_error("Default%s storage engine (%s) is not available",
-                      se_kind, se_name);
-      return true;
-    }
-    DBUG_ASSERT(*dest_plugin);
-  }
-  else
-  {
-    /*
-      Need to unlock as global_system_variables.table_plugin
-      was acquired during plugin_init()
-    */
-    plugin_unlock(0, *dest_plugin);
-    *dest_plugin= plugin;
-  }
-  return false;
 }
 
 
@@ -4664,7 +3829,7 @@ static int init_server_components()
     all things are initialized so that unireg_abort() doesn't fail
   */
   mdl_init();
-  if (table_def_init() | hostname_cache_init(host_cache_size))
+  if (table_def_init() | hostname_cache_init())
     unireg_abort(1);
 
   query_cache_set_min_res_unit(query_cache_min_res_unit);
@@ -4713,12 +3878,11 @@ static int init_server_components()
     }
   }
 
-  proc_info_hook= set_thd_stage_info;
+  proc_info_hook= set_thd_proc_info;
 
+#ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
   /*
-    Parsing the performance schema command line option and
-    adjusting the values for options such as "open_files_limit",
-    "max_connections", and "table_cache_size" may have reported
+    Parsing the performance schema command line option may have reported
     warnings/information messages.
     Now that the logger is finally available, and redirected
     to the proper file when the --log--error option is used,
@@ -4726,13 +3890,7 @@ static int init_server_components()
   */
   buffered_logs.print();
   buffered_logs.cleanup();
-
-  /*
-    Now that the logger is available, redirect character set
-    errors directly to the logger
-    (instead of the buffered_logs used at the server startup time).
-  */
-  my_charset_error_reporter= charset_error_reporter;
+#endif /* WITH_PERFSCHEMA_STORAGE_ENGINE */
 
   if (xid_cache_init())
   {
@@ -4753,7 +3911,7 @@ static int init_server_components()
     sql_print_warning("You need to use --log-bin to make "
                     "--log-slave-updates work.");
   }
-  if (binlog_format_used && !opt_bin_log)
+  if (!opt_bin_log && binlog_format_used)
     sql_print_warning("You need to use --log-bin to make "
                       "--binlog-format work.");
 
@@ -4778,23 +3936,11 @@ will be ignored as the --log-bin option is not defined.");
   }
 #endif
 
-  opt_server_id_mask = ~ulong(0);
-#ifdef HAVE_REPLICATION
-  opt_server_id_mask = (opt_server_id_bits == 32)?
-    ~ ulong(0) : (1 << opt_server_id_bits) -1;
-  if (server_id != (server_id & opt_server_id_mask))
-  {
-    sql_print_error("server-id configured is too large to represent with"
-                    "server-id-bits configured.");
-    unireg_abort(1);
-  }
-#endif
-
   if (opt_bin_log)
   {
-    /* Reports an error and aborts, if the --log-bin's path
+    /* Reports an error and aborts, if the --log-bin's path 
        is a directory.*/
-    if (opt_bin_logname &&
+    if (opt_bin_logname && 
         opt_bin_logname[strlen(opt_bin_logname) - 1] == FN_LIBCHAR)
     {
       sql_print_error("Path '%s' is a directory name, please specify \
@@ -4802,10 +3948,10 @@ a file name for --log-bin option", opt_bin_logname);
       unireg_abort(1);
     }
 
-    /* Reports an error and aborts, if the --log-bin-index's path
+    /* Reports an error and aborts, if the --log-bin-index's path 
        is a directory.*/
-    if (opt_binlog_index_name &&
-        opt_binlog_index_name[strlen(opt_binlog_index_name) - 1]
+    if (opt_binlog_index_name && 
+        opt_binlog_index_name[strlen(opt_binlog_index_name) - 1] 
         == FN_LIBCHAR)
     {
       sql_print_error("Path '%s' is a directory name, please specify \
@@ -4842,45 +3988,6 @@ a file name for --log-bin-index option", opt_binlog_index_name);
     }
   }
 
-  if (opt_bin_log)
-  {
-    log_bin_basename=
-      rpl_make_log_name(opt_bin_logname, pidfile_name,
-                        opt_bin_logname ? "" : "-bin");
-    log_bin_index=
-      rpl_make_log_name(opt_binlog_index_name, log_bin_basename, ".index");
-    if (log_bin_basename == NULL || log_bin_index == NULL)
-    {
-      sql_print_error("Unable to create replication path names:"
-                      " out of memory or path names too long"
-                      " (path name exceeds " STRINGIFY_ARG(FN_REFLEN)
-                      " or file name exceeds " STRINGIFY_ARG(FN_LEN) ").");
-      unireg_abort(1);
-    }
-  }
-
-#ifndef EMBEDDED_LIBRARY
-  DBUG_PRINT("debug",
-             ("opt_bin_logname: %s, opt_relay_logname: %s, pidfile_name: %s",
-              opt_bin_logname, opt_relay_logname, pidfile_name));
-  if (opt_relay_logname)
-  {
-    relay_log_basename=
-      rpl_make_log_name(opt_relay_logname, pidfile_name,
-                        opt_relay_logname ? "" : "-relay-bin");
-    relay_log_index=
-      rpl_make_log_name(opt_relaylog_index_name, relay_log_basename, ".index");
-    if (relay_log_basename == NULL || relay_log_index == NULL)
-    {
-      sql_print_error("Unable to create replication path names:"
-                      " out of memory or path names too long"
-                      " (path name exceeds " STRINGIFY_ARG(FN_REFLEN)
-                      " or file name exceeds " STRINGIFY_ARG(FN_LEN) ").");
-      unireg_abort(1);
-    }
-  }
-#endif /* !EMBEDDED_LIBRARY */
-
   /* call ha_init_key_cache() on all key caches to init them */
   process_key_caches(&ha_init_key_cache);
 
@@ -4889,14 +3996,9 @@ a file name for --log-bin-index option", opt_binlog_index_name);
     DBUG_RETURN(1);
 
   if (opt_ignore_builtin_innodb)
-    sql_print_warning("ignore-builtin-innodb is ignored "
+    sql_print_warning("ignore-builtin-innodb is deprecated "
                       "and will be removed in future releases.");
-  if (gtid_server_init())
-  {
-    sql_print_error("Failed to initialize GTID structures.");
-    unireg_abort(1);
-  }
-
+    
   if (plugin_init(&remaining_argc, remaining_argv,
                   (opt_noacl ? PLUGIN_INIT_SKIP_PLUGIN_TABLE : 0) |
                   (opt_help ? PLUGIN_INIT_SKIP_INITIALIZATION : 0)))
@@ -4905,6 +4007,13 @@ a file name for --log-bin-index option", opt_binlog_index_name);
     unireg_abort(1);
   }
   plugins_are_initialized= TRUE;  /* Don't separate from init function */
+
+  have_csv= plugin_status(STRING_WITH_LEN("csv"),
+                          MYSQL_STORAGE_ENGINE_PLUGIN);
+  have_ndbcluster= plugin_status(STRING_WITH_LEN("ndbcluster"),
+                                 MYSQL_STORAGE_ENGINE_PLUGIN);
+  have_partitioning= plugin_status(STRING_WITH_LEN("partition"),
+                                   MYSQL_STORAGE_ENGINE_PLUGIN);
 
   /* we do want to exit if there are any other unknown options */
   if (remaining_argc > 1)
@@ -4942,7 +4051,7 @@ a file name for --log-bin-index option", opt_binlog_index_name);
 
   /* if the errmsg.sys is not loaded, terminate to maintain behaviour */
   if (!DEFAULT_ERRMSGS[0][0])
-    unireg_abort(1);
+    unireg_abort(1);  
 
   /* We have to initialize the storage engines before CSV logging */
   if (ha_init())
@@ -4991,24 +4100,43 @@ a file name for --log-bin-index option", opt_binlog_index_name);
 #endif
 
   /*
-    Set the default storage engines
+    Set the default storage engine
   */
-  if (initialize_storage_engine(default_storage_engine, "",
-                                &global_system_variables.table_plugin))
-    unireg_abort(1);
-  if (initialize_storage_engine(default_tmp_storage_engine, " temp",
-                                &global_system_variables.temp_table_plugin))
-    unireg_abort(1);
-
-  if (total_ha_2pc > 1 || (1 == total_ha_2pc && opt_bin_log))
+  LEX_STRING name= { default_storage_engine, strlen(default_storage_engine) };
+  plugin_ref plugin;
+  handlerton *hton;
+  if ((plugin= ha_resolve_by_name(0, &name)))
+    hton= plugin_data(plugin, handlerton*);
+  else
   {
-    if (opt_bin_log)
-      tc_log= &mysql_bin_log;
-    else
-      tc_log= &tc_log_mmap;
+    sql_print_error("Unknown/unsupported storage engine: %s",
+                    default_storage_engine);
+    unireg_abort(1);
+  }
+  if (!ha_storage_engine_is_enabled(hton))
+  {
+    if (!opt_bootstrap)
+    {
+      sql_print_error("Default storage engine (%s) is not available",
+                      default_storage_engine);
+      unireg_abort(1);
+    }
+    DBUG_ASSERT(global_system_variables.table_plugin);
   }
   else
-    tc_log= &tc_log_dummy;
+  {
+    /*
+      Need to unlock as global_system_variables.table_plugin
+      was acquired during plugin_init()
+    */
+    plugin_unlock(0, global_system_variables.table_plugin);
+    global_system_variables.table_plugin= plugin;
+  }
+
+  tc_log= (total_ha_2pc > 1 ? (opt_bin_log  ?
+                               (TC_LOG *) &mysql_bin_log :
+                               (TC_LOG *) &tc_log_mmap) :
+           (TC_LOG *) &tc_log_dummy);
 
   if (tc_log->open(opt_bin_log ? opt_bin_logname : opt_tc_log_file))
   {
@@ -5021,52 +4149,16 @@ a file name for --log-bin-index option", opt_binlog_index_name);
     unireg_abort(1);
   }
 
-  if (gtid_mode >= 1 && opt_bootstrap)
-  {
-    sql_print_warning("Bootstrap mode disables GTIDs. Bootstrap mode "
-    "should only be used by mysql_install_db which initializes the MySQL "
-    "data directory and creates system tables.");
-    gtid_mode= 0;
-  }
-  if (gtid_mode >= 1 && !(opt_bin_log && opt_log_slave_updates))
-  {
-    sql_print_error("--gtid-mode=ON or UPGRADE_STEP_1 or UPGRADE_STEP_2 requires --log-bin and --log-slave-updates");
+  if (opt_bin_log && mysql_bin_log.open(opt_bin_logname, LOG_BIN, 0,
+                                        WRITE_CACHE, 0, max_binlog_size, 0, TRUE))
     unireg_abort(1);
-  }
-  if (gtid_mode >= 2 && !enforce_gtid_consistency)
-  {
-    sql_print_error("--gtid-mode=ON or UPGRADE_STEP_1 requires --enforce-gtid-consistency");
-    unireg_abort(1);
-  }
-  if (gtid_mode == 1 || gtid_mode == 2)
-  {
-    sql_print_error("--gtid-mode=UPGRADE_STEP_1 or --gtid-mode=UPGRADE_STEP_2 are not yet supported");
-    unireg_abort(1);
-  }
-
-  if (opt_bin_log)
-  {
-    /*
-      Configures what object is used by the current log to store processed
-      gtid(s). This is necessary in the MYSQL_BIN_LOG::MYSQL_BIN_LOG to
-      corretly compute the set of previous gtids.
-    */
-    mysql_bin_log.set_previous_gtid_set(
-      const_cast<Gtid_set*>(gtid_state->get_logged_gtids()));
-    if (mysql_bin_log.open_binlog(opt_bin_logname, 0,
-                                  WRITE_CACHE, max_binlog_size, false,
-                                  true/*need_lock_index=true*/,
-                                  true/*need_sid_lock=true*/,
-                                  NULL))
-      unireg_abort(1);
-  }
 
 #ifdef HAVE_REPLICATION
   if (opt_bin_log && expire_logs_days)
   {
     time_t purge_time= server_start_time - expire_logs_days*24*60*60;
     if (purge_time >= 0)
-      mysql_bin_log.purge_logs_before_date(purge_time, true);
+      mysql_bin_log.purge_logs_before_date(purge_time);
   }
 #endif
 
@@ -5083,8 +4175,8 @@ a file name for --log-bin-index option", opt_binlog_index_name);
     }
     if (mlockall(MCL_CURRENT))
     {
-      if (log_warnings)
-  sql_print_warning("Failed to lock memory. Errno: %d\n",errno);
+      if (global_system_variables.log_warnings)
+	sql_print_warning("Failed to lock memory. Errno: %d\n",errno);
       locked_in_memory= 0;
     }
     if (user_info)
@@ -5135,7 +4227,7 @@ static void handle_connections_methods()
       !opt_enable_shared_memory)
   {
     sql_print_error("TCP/IP, --shared-memory, or --named-pipe should be configured on NT OS");
-    unireg_abort(1);        // Will not return
+    unireg_abort(1);				// Will not return
   }
 
   mysql_mutex_lock(&LOCK_thread_count);
@@ -5178,7 +4270,7 @@ static void handle_connections_methods()
       handler_count--;
     }
   }
-#endif
+#endif 
 
   while (handler_count > 0)
     mysql_cond_wait(&COND_handler_count, &LOCK_thread_count);
@@ -5248,7 +4340,9 @@ int mysqld_main(int argc, char **argv)
     to be able to read defaults files and parse options.
   */
   my_progname= argv[0];
-
+#ifdef HAVE_NPTL
+  ld_assume_kernel_is_set= (getenv("LD_ASSUME_KERNEL") != 0);
+#endif
 #ifndef _WIN32
   // For windows, my_init() is called from the win specific mysqld_main
   if (my_init())                 // init my_sys library & pthreads
@@ -5261,7 +4355,6 @@ int mysqld_main(int argc, char **argv)
   orig_argc= argc;
   orig_argv= argv;
   my_getopt_use_args_separator= TRUE;
-  my_defaults_read_login_file= FALSE;
   if (load_defaults(MYSQL_CONFIG_NAME, load_default_groups, &argc, &argv))
     return 1;
   my_getopt_use_args_separator= FALSE;
@@ -5276,40 +4369,49 @@ int mysqld_main(int argc, char **argv)
   init_sql_statement_names();
   sys_var_init();
 
-  int ho_error;
-
 #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
   /*
-    Initialize the array of performance schema instrument configurations.
+    The performance schema needs to be initialized as early as possible,
+    before to-be-instrumented objects of the server are initialized.
   */
-  init_pfs_instrument_array();
-#endif /* WITH_PERFSCHEMA_STORAGE_ENGINE */
+  int ho_error;
+  DYNAMIC_ARRAY all_early_options;
 
-  ho_error= handle_early_options();
+  my_getopt_register_get_addr(NULL);
+  /* Skip unknown options so that they may be processed later */
+  my_getopt_skip_unknown= TRUE;
 
+  /* prepare all_early_options array */
+  my_init_dynamic_array(&all_early_options, sizeof(my_option), 100, 25);
+  sys_var_add_options(&all_early_options, sys_var::PARSE_EARLY);
+  add_terminator(&all_early_options);
+
+  /*
+    Logs generated while parsing the command line
+    options are buffered and printed later.
+  */
+  buffered_logs.init();
+  my_getopt_error_reporter= buffered_option_error_reporter;
+
+  ho_error= handle_options(&remaining_argc, &remaining_argv,
+                           (my_option*)(all_early_options.buffer), NULL);
+  delete_dynamic(&all_early_options);
+  if (ho_error == 0)
   {
-    ulong requested_open_files;
-    adjust_related_options(&requested_open_files);
-
-#ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
-    if (ho_error == 0)
+    /* Add back the program name handle_options removes */
+    remaining_argc++;
+    remaining_argv--;
+    if (pfs_param.m_enabled)
     {
-      if (pfs_param.m_enabled && !opt_help && !opt_bootstrap)
+      PSI_hook= initialize_performance_schema(&pfs_param);
+      if (PSI_hook == NULL)
       {
-        /* Add sizing hints from the server sizing parameters. */
-        pfs_param.m_hints.m_table_definition_cache= table_def_size;
-        pfs_param.m_hints.m_table_open_cache= table_cache_size;
-        pfs_param.m_hints.m_max_connections= max_connections;
-	pfs_param.m_hints.m_open_files_limit= requested_open_files;
-        PSI_hook= initialize_performance_schema(&pfs_param);
-        if (PSI_hook == NULL)
-        {
-          pfs_param.m_enabled= false;
-          buffered_logs.buffer(WARNING_LEVEL,
-                               "Performance schema disabled (reason: init failed).");
-        }
+        pfs_param.m_enabled= false;
+        buffered_logs.buffer(WARNING_LEVEL,
+                             "Performance schema disabled (reason: init failed).");
       }
     }
+  }
 #else
   /*
     Other provider of the instrumentation interface should
@@ -5321,7 +4423,6 @@ int mysqld_main(int argc, char **argv)
     these two defines are kept separate.
   */
 #endif /* WITH_PERFSCHEMA_STORAGE_ENGINE */
-  }
 
 #ifdef HAVE_PSI_INTERFACE
   /*
@@ -5329,29 +4430,27 @@ int mysqld_main(int argc, char **argv)
     if available.
   */
   if (PSI_hook)
+    PSI_server= (PSI*) PSI_hook->get_interface(PSI_CURRENT_VERSION);
+
+  if (PSI_server)
   {
-    PSI *psi_server= (PSI*) PSI_hook->get_interface(PSI_CURRENT_VERSION);
-    if (likely(psi_server != NULL))
-    {
-      set_psi_server(psi_server);
+    /*
+      Now that we have parsed the command line arguments, and have initialized
+      the performance schema itself, the next step is to register all the
+      server instruments.
+    */
+    init_server_psi_keys();
+    /* Instrument the main thread */
+    PSI_thread *psi= PSI_server->new_thread(key_thread_main, NULL, 0);
+    if (psi)
+      PSI_server->set_thread(psi);
 
-      /*
-        Now that we have parsed the command line arguments, and have initialized
-        the performance schema itself, the next step is to register all the
-        server instruments.
-      */
-      init_server_psi_keys();
-      /* Instrument the main thread */
-      PSI_thread *psi= PSI_THREAD_CALL(new_thread)(key_thread_main, NULL, 0);
-      PSI_THREAD_CALL(set_thread)(psi);
-
-      /*
-        Now that some instrumentation is in place,
-        recreate objects which were initialised early,
-        so that they are instrumented as well.
-      */
-      my_thread_global_reinit();
-    }
+    /*
+      Now that some instrumentation is in place,
+      recreate objects which were initialised early,
+      so that they are instrumented as well.
+    */
+    my_thread_global_reinit();
   }
 #endif /* HAVE_PSI_INTERFACE */
 
@@ -5359,7 +4458,7 @@ int mysqld_main(int argc, char **argv)
 
   /* Set signal used to kill MySQL */
 #if defined(SIGUSR2)
-  thr_kill_signal= SIGUSR2;
+  thr_kill_signal= thd_lib_detected == THD_LIB_LT ? SIGINT : SIGUSR2;
 #else
   thr_kill_signal= SIGINT;
 #endif
@@ -5373,6 +4472,7 @@ int mysqld_main(int argc, char **argv)
   */
   logger.init_base();
 
+#ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
   if (ho_error)
   {
     /*
@@ -5392,6 +4492,7 @@ int mysqld_main(int argc, char **argv)
     */
     exit (ho_error);
   }
+#endif /* WITH_PERFSCHEMA_STORAGE_ENGINE */
 
 #ifdef _CUSTOMSTARTUPCONFIG_
   if (_cust_check_startup())
@@ -5402,49 +4503,42 @@ int mysqld_main(int argc, char **argv)
 #endif
 
   if (init_common_variables())
-    unireg_abort(1);        // Will do exit
+    unireg_abort(1);				// Will do exit
 
-  my_init_signals();
-
-  size_t guardize= 0;
-  int retval= pthread_attr_getguardsize(&connection_attrib, &guardize);
-  DBUG_ASSERT(retval == 0);
-  if (retval != 0)
-    guardize= my_thread_stack_size;
-
+  init_signals();
 #if defined(__ia64__) || defined(__ia64)
   /*
     Peculiar things with ia64 platforms - it seems we only have half the
     stack size in reality, so we have to double it here
   */
-  guardize= my_thread_stack_size;
+  pthread_attr_setstacksize(&connection_attrib,my_thread_stack_size*2);
+#else
+  pthread_attr_setstacksize(&connection_attrib,my_thread_stack_size);
 #endif
-
-  pthread_attr_setstacksize(&connection_attrib,
-                            my_thread_stack_size + guardize);
-
 #ifdef HAVE_PTHREAD_ATTR_GETSTACKSIZE
   {
     /* Retrieve used stack size;  Needed for checking stack overflows */
     size_t stack_size= 0;
     pthread_attr_getstacksize(&connection_attrib, &stack_size);
-
-    /* We must check if stack_size = 0 as Solaris 2.9 can return 0 here */
-    if (stack_size && stack_size < (my_thread_stack_size + guardize))
-    {
-      if (log_warnings)
-        sql_print_warning("Asked for %lu thread stack, but got %ld",
-                          my_thread_stack_size + guardize, (long) stack_size);
 #if defined(__ia64__) || defined(__ia64)
-      my_thread_stack_size= stack_size / 2;
+    stack_size/= 2;
+#endif
+    /* We must check if stack_size = 0 as Solaris 2.9 can return 0 here */
+    if (stack_size && stack_size < my_thread_stack_size)
+    {
+      if (global_system_variables.log_warnings)
+	sql_print_warning("Asked for %lu thread stack, but got %ld",
+			  my_thread_stack_size, (long) stack_size);
+#if defined(__ia64__) || defined(__ia64)
+      my_thread_stack_size= stack_size*2;
 #else
-      my_thread_stack_size= stack_size - guardize;
+      my_thread_stack_size= stack_size;
 #endif
     }
   }
 #endif
 
-  (void) thr_setconcurrency(concurrency); // 10 by default
+  (void) thr_setconcurrency(concurrency);	// 10 by default
 
   select_thread=pthread_self();
   select_thread_in_use=1;
@@ -5452,11 +4546,10 @@ int mysqld_main(int argc, char **argv)
 #ifdef HAVE_LIBWRAP
   libwrapName= my_progname+dirname_length(my_progname);
   openlog(libwrapName, LOG_PID, LOG_AUTH);
-#endif /* HAVE_LIBWRAP */
+#endif
 
 #ifndef DBUG_OFF
   test_lc_time_sz();
-  srand(time(NULL));
 #endif
 
   /*
@@ -5464,7 +4557,7 @@ int mysqld_main(int argc, char **argv)
   */
   check_data_home(mysql_real_data_home);
   if (my_setwd(mysql_real_data_home,MYF(MY_WME)) && !opt_help)
-    unireg_abort(1);        /* purecov: inspected */
+    unireg_abort(1);				/* purecov: inspected */
 
   if ((user_info= check_user(mysqld_user)))
   {
@@ -5476,7 +4569,7 @@ int mysqld_main(int argc, char **argv)
       set_user(mysqld_user, user_info);
   }
 
-  if (opt_bin_log && server_id == 0)
+  if (opt_bin_log && !server_id)
   {
     server_id= 1;
 #ifdef EXTRA_DEBUG
@@ -5498,80 +4591,7 @@ int mysqld_main(int argc, char **argv)
   if (init_server_components())
     unireg_abort(1);
 
-  /*
-    Each server should have one UUID. We will create it automatically, if it
-    does not exist.
-   */
-  if (!opt_bootstrap)
-  {
-    if (init_server_auto_options())
-    {
-      sql_print_error("Initialzation of the server's UUID failed because it could"
-                      " not be read from the auto.cnf file. If this is a new"
-                      " server, the initialization failed because it was not"
-                      " possible to generate a new UUID.");
-      unireg_abort(1);
-    }
-
-    if (opt_bin_log)
-    {
-      /*
-        Add server_uuid to the sid_map.  This must be done after
-        server_uuid has been initialized in init_server_auto_options and
-        after the binary log (and sid_map file) has been initialized in
-        init_server_components().
-
-        No error message is needed: init_sid_map() prints a message.
-      */
-      global_sid_lock->rdlock();
-      int ret= gtid_state->init();
-      global_sid_lock->unlock();
-      if (ret)
-        unireg_abort(1);
-
-      if (mysql_bin_log.init_gtid_sets(
-            const_cast<Gtid_set *>(gtid_state->get_logged_gtids()),
-            const_cast<Gtid_set *>(gtid_state->get_lost_gtids()),
-            NULL,
-            opt_master_verify_checksum,
-            true/*true=need lock*/, true))
-        unireg_abort(1);
-
-      /*
-        Write the previous set of gtids at this point because during
-        the creation of the binary log this is not done as we cannot
-        move the init_gtid_sets() to a place before openning the binary
-        log. This requires some investigation.
-
-        /Alfranio
-      */
-      if (gtid_mode > 0)
-      {
-        global_sid_lock->wrlock();
-        const Gtid_set *logged_gtids= gtid_state->get_logged_gtids();
-        if (gtid_mode > 1 || !logged_gtids->is_empty())
-        {
-          Previous_gtids_log_event prev_gtids_ev(logged_gtids);
-          global_sid_lock->unlock();
-
-          prev_gtids_ev.checksum_alg= binlog_checksum_options;
-
-          if (prev_gtids_ev.write(mysql_bin_log.get_log_file()))
-            unireg_abort(1);
-          mysql_bin_log.add_bytes_written(prev_gtids_ev.data_written);
-
-          if (flush_io_cache(mysql_bin_log.get_log_file()) ||
-              mysql_file_sync(mysql_bin_log.get_log_file()->file, MYF(MY_WME)))
-            unireg_abort(1);
-        }
-        else
-          global_sid_lock->unlock();
-      }
-    }
-  }
-
-  if (init_ssl())
-    unireg_abort(1);
+  init_ssl();
   network_init();
 
 #ifdef __WIN__
@@ -5580,24 +4600,23 @@ int mysqld_main(int argc, char **argv)
     if (reopen_fstreams(log_error_file, stdout, stderr))
       unireg_abort(1);
     setbuf(stderr, NULL);
-    FreeConsole();        // Remove window
+    FreeConsole();				// Remove window
   }
 #endif
 
   /*
-   Initialize my_str_malloc(), my_str_realloc() and my_str_free()
+   Initialize my_str_malloc() and my_str_free()
   */
   my_str_malloc= &my_str_malloc_mysqld;
   my_str_free= &my_str_free_mysqld;
-  my_str_realloc= &my_str_realloc_mysqld;
 
   /*
     init signals & alarm
     After this we can't quit by a simple unireg_abort
   */
   error_handler_hook= my_message_sql;
-  start_signal_handler();       // Creates pidfile
   sql_print_warning_hook = sql_print_warning;
+  start_signal_handler();				// Creates pidfile
 
   if (mysql_rm_tmp_tables() || acl_init(opt_noacl) ||
       my_tz_init((THD *)0, default_tz_name, opt_bootstrap))
@@ -5609,7 +4628,7 @@ int mysqld_main(int argc, char **argv)
 
     delete_pid_file(MYF(MY_WME));
 
-    if (mysql_socket_getfd(unix_sock) != INVALID_SOCKET)
+    if (unix_sock != INVALID_SOCKET)
       unlink(mysqld_unix_port);
     exit(1);
   }
@@ -5628,26 +4647,19 @@ int mysqld_main(int argc, char **argv)
   }
 
   init_status_vars();
-  /* If running with bootstrap, do not start replication. */
-  if (opt_bootstrap)
+  if (opt_bootstrap) /* If running with bootstrap, do not start replication. */
     opt_skip_slave_start= 1;
 
-  check_binlog_cache_size(NULL);
-  check_binlog_stmt_cache_size(NULL);
-
   binlog_unsafe_map_init();
-
-  /* If running with bootstrap, do not start replication. */
-  if (!opt_bootstrap)
+  /*
+    init_slave() must be called after the thread keys are created.
+    Some parts of the code (e.g. SHOW STATUS LIKE 'slave_running' and other
+    places) assume that active_mi != 0, so let's fail if it's 0 (out of
+    memory); a message has already been printed.
+  */
+  if (init_slave() && !active_mi)
   {
-    // Make @@slave_skip_errors show the nice human-readable value.
-    set_slave_skip_errors(&opt_slave_skip_errors);
-
-    /*
-      init_slave() must be called after the thread keys are created.
-    */
-    if (server_id != 0)
-      init_slave(); /* Ignoring errors while configuring replication. */
+    unireg_abort(1);
   }
 
 #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
@@ -5672,12 +4684,6 @@ int mysqld_main(int argc, char **argv)
   if (opt_bootstrap)
   {
     select_thread_in_use= 0;                    // Allow 'kill' to work
-    /* Signal threads waiting for server to be started */
-    mysql_mutex_lock(&LOCK_server_started);
-    mysqld_server_started= 1;
-    mysql_cond_broadcast(&COND_server_started);
-    mysql_mutex_unlock(&LOCK_server_started);
-
     bootstrap(mysql_stdin);
     unireg_abort(bootstrap_error ? 1 : 0);
   }
@@ -5691,7 +4697,7 @@ int mysqld_main(int argc, char **argv)
   start_handle_manager();
 
   sql_print_information(ER_DEFAULT(ER_STARTUP),my_progname,server_version,
-                        ((mysql_socket_getfd(unix_sock) == INVALID_SOCKET) ? (char*) ""
+                        ((unix_sock == INVALID_SOCKET) ? (char*) ""
                                                        : mysqld_unix_port),
                          mysqld_port,
                          MYSQL_COMPILATION_COMMENT);
@@ -5703,20 +4709,8 @@ int mysqld_main(int argc, char **argv)
   /* Signal threads waiting for server to be started */
   mysql_mutex_lock(&LOCK_server_started);
   mysqld_server_started= 1;
-  mysql_cond_broadcast(&COND_server_started);
+  mysql_cond_signal(&COND_server_started);
   mysql_mutex_unlock(&LOCK_server_started);
-
-#ifdef WITH_NDBCLUSTER_STORAGE_ENGINE
-  /* engine specific hook, to be made generic */
-  if (ndb_wait_setup_func && ndb_wait_setup_func(opt_ndb_wait_setup))
-  {
-    sql_print_warning("NDB : Tables not available after %lu seconds."
-                      "  Consider increasing --ndb-wait-setup value",
-                      opt_ndb_wait_setup);
-  }
-#endif
-
-  MYSQL_SET_STAGE(0 ,__FILE__, __LINE__);
 
 #if defined(_WIN32) || defined(HAVE_SMEM)
   handle_connections_methods();
@@ -5725,7 +4719,7 @@ int mysqld_main(int argc, char **argv)
 #endif /* _WIN32 || HAVE_SMEM */
 
   /* (void) pthread_attr_destroy(&connection_attrib); */
-
+  
   DBUG_PRINT("quit",("Exiting main thread"));
 
 #ifndef __WIN__
@@ -5734,7 +4728,7 @@ int mysqld_main(int argc, char **argv)
 #endif
   mysql_mutex_lock(&LOCK_thread_count);
   DBUG_PRINT("quit", ("Got thread_count mutex"));
-  select_thread_in_use=0;     // For close_connections
+  select_thread_in_use=0;			// For close_connections
   mysql_mutex_unlock(&LOCK_thread_count);
   mysql_cond_broadcast(&COND_thread_count);
 #ifdef EXTRA_DEBUG2
@@ -5742,12 +4736,13 @@ int mysqld_main(int argc, char **argv)
 #endif
 #endif /* __WIN__ */
 
-#ifdef HAVE_PSI_THREAD_INTERFACE
+#ifdef HAVE_PSI_INTERFACE
   /*
     Disable the main thread instrumentation,
     to avoid recording events during the shutdown.
   */
-  PSI_THREAD_CALL(delete_current_thread)();
+  if (PSI_server)
+    PSI_server->delete_current_thread();
 #endif
 
   /* Wait until cleanup is done */
@@ -5783,7 +4778,7 @@ int mysql_service(void *p)
 {
   if (my_thread_init())
     return 1;
-
+  
   if (use_opt_args)
     win_main(opt_argc, opt_argv);
   else
@@ -5809,25 +4804,25 @@ static char *add_quoted_string(char *to, const char *from, char *to_end)
 /**
   Handle basic handling of services, like installation and removal.
 
-  @param argv             Pointer to argument list
-  @param servicename    Internal name of service
-  @param displayname    Display name of service (in taskbar ?)
-  @param file_path    Path to this program
-  @param startup_option Startup option to mysqld
+  @param argv	   	        Pointer to argument list
+  @param servicename		Internal name of service
+  @param displayname		Display name of service (in taskbar ?)
+  @param file_path		Path to this program
+  @param startup_option	Startup option to mysqld
 
   @retval
-    0   option handled
+    0		option handled
   @retval
-    1   Could not handle option
+    1		Could not handle option
 */
 
 static bool
 default_service_handling(char **argv,
-       const char *servicename,
-       const char *displayname,
-       const char *file_path,
-       const char *extra_opt,
-       const char *account_name)
+			 const char *servicename,
+			 const char *displayname,
+			 const char *file_path,
+			 const char *extra_opt,
+			 const char *account_name)
 {
   char path_and_service[FN_REFLEN+FN_REFLEN+32], *pos, *end;
   const char *opt_delim;
@@ -5837,10 +4832,10 @@ default_service_handling(char **argv,
   pos= add_quoted_string(path_and_service, file_path, end);
   if (extra_opt && *extra_opt)
   {
-    /*
-     Add option after file_path. There will be zero or one extra option.  It's
+    /* 
+     Add option after file_path. There will be zero or one extra option.  It's 
      assumed to be --defaults-file=file but isn't checked.  The variable (not
-     the option name) should be quoted if it contains a string.
+     the option name) should be quoted if it contains a string.  
     */
     *pos++= ' ';
     if (opt_delim= strchr(extra_opt, '='))
@@ -5850,7 +4845,7 @@ default_service_handling(char **argv,
     }
     else
       opt_delim= extra_opt;
-
+    
     pos= add_quoted_string(pos, opt_delim, end);
   }
   /* We must have servicename last */
@@ -5897,28 +4892,28 @@ int mysqld_main(int argc, char **argv)
     return 1;
   }
 
-  if (Service.GetOS())  /* true NT family */
+  if (Service.GetOS())	/* true NT family */
   {
     char file_path[FN_REFLEN];
-    my_path(file_path, argv[0], "");          /* Find name in path */
+    my_path(file_path, argv[0], "");		      /* Find name in path */
     fn_format(file_path,argv[0],file_path,"",
-        MY_REPLACE_DIR | MY_UNPACK_FILENAME | MY_RESOLVE_SYMLINKS);
+	      MY_REPLACE_DIR | MY_UNPACK_FILENAME | MY_RESOLVE_SYMLINKS);
 
     if (argc == 2)
     {
       if (!default_service_handling(argv, MYSQL_SERVICENAME, MYSQL_SERVICENAME,
-           file_path, "", NULL))
-  return 0;
+				   file_path, "", NULL))
+	return 0;
       if (Service.IsService(argv[1]))        /* Start an optional service */
       {
-  /*
-    Only add the service name to the groups read from the config file
-    if it's not "MySQL". (The default service name should be 'mysqld'
-    but we started a bad tradition by calling it MySQL from the start
-    and we are now stuck with it.
-  */
-  if (my_strcasecmp(system_charset_info, argv[1],"mysql"))
-    load_default_groups[load_default_groups_sz-2]= argv[1];
+	/*
+	  Only add the service name to the groups read from the config file
+	  if it's not "MySQL". (The default service name should be 'mysqld'
+	  but we started a bad tradition by calling it MySQL from the start
+	  and we are now stuck with it.
+	*/
+	if (my_strcasecmp(system_charset_info, argv[1],"mysql"))
+	  load_default_groups[load_default_groups_sz-2]= argv[1];
         start_mode= 1;
         Service.Init(argv[1], mysql_service);
         return 0;
@@ -5928,21 +4923,21 @@ int mysqld_main(int argc, char **argv)
     {
       if (!default_service_handling(argv, argv[2], argv[2], file_path, "",
                                     NULL))
-  return 0;
+	return 0;
       if (Service.IsService(argv[2]))
       {
-  /*
-    mysqld was started as
-    mysqld --defaults-file=my_path\my.ini service-name
-  */
-  use_opt_args=1;
-  opt_argc= 2;        // Skip service-name
-  opt_argv=argv;
-  start_mode= 1;
-  if (my_strcasecmp(system_charset_info, argv[2],"mysql"))
-    load_default_groups[load_default_groups_sz-2]= argv[2];
-  Service.Init(argv[2], mysql_service);
-  return 0;
+	/*
+	  mysqld was started as
+	  mysqld --defaults-file=my_path\my.ini service-name
+	*/
+	use_opt_args=1;
+	opt_argc= 2;				// Skip service-name
+	opt_argv=argv;
+	start_mode= 1;
+	if (my_strcasecmp(system_charset_info, argv[2],"mysql"))
+	  load_default_groups[load_default_groups_sz-2]= argv[2];
+	Service.Init(argv[2], mysql_service);
+	return 0;
       }
     }
     else if (argc == 4 || argc == 5)
@@ -6002,11 +4997,11 @@ static void bootstrap(MYSQL_FILE *file)
   thd->max_client_packet_length= thd->net.max_packet;
   thd->security_ctx->master_access= ~(ulong)0;
   thd->thread_id= thd->variables.pseudo_thread_id= thread_id++;
-
+  thread_count++;
   in_bootstrap= TRUE;
 
   bootstrap_file=file;
-#ifndef EMBEDDED_LIBRARY      // TODO:  Enable this
+#ifndef EMBEDDED_LIBRARY			// TODO:  Enable this
   int error;
   if ((error= mysql_thread_create(key_thread_bootstrap,
                                   &thd->real_id, &connection_attrib,
@@ -6023,7 +5018,7 @@ static void bootstrap(MYSQL_FILE *file)
   while (in_bootstrap)
   {
     mysql_cond_wait(&COND_thread_count, &LOCK_thread_count);
-    DBUG_PRINT("quit", ("One thread died (count=%u)", get_thread_count()));
+    DBUG_PRINT("quit",("One thread died (count=%u)",thread_count));
   }
   mysql_mutex_unlock(&LOCK_thread_count);
 #else
@@ -6040,17 +5035,11 @@ static bool read_init_file(char *file_name)
   MYSQL_FILE *file;
   DBUG_ENTER("read_init_file");
   DBUG_PRINT("enter",("name: %s",file_name));
-
-  sql_print_information("Execution of init_file \'%s\' started.", file_name);
-
   if (!(file= mysql_file_fopen(key_file_init, file_name,
                                O_RDONLY, MYF(MY_WME))))
     DBUG_RETURN(TRUE);
   bootstrap(file);
   mysql_file_fclose(file, MYF(MY_WME));
-
-  sql_print_information("Execution of init_file \'%s\' ended.", file_name);
-
   DBUG_RETURN(FALSE);
 }
 
@@ -6074,14 +5063,14 @@ void inc_thread_created(void)
      This is only used for debugging, when starting mysqld with
      --thread-handling=no-threads or --one-thread
 
-     When we enter this function, LOCK_thread_count is held!
+     When we enter this function, LOCK_thread_count is hold!
 */
 
 void handle_connection_in_main_thread(THD *thd)
 {
   mysql_mutex_assert_owner(&LOCK_thread_count);
-  max_blocked_pthreads= 0;      // Safety
-  add_global_thread(thd);
+  thread_cache_size=0;			// Safety
+  threads.append(thd);
   mysql_mutex_unlock(&LOCK_thread_count);
   thd->start_utime= my_micro_time();
   do_handle_one_connection(thd);
@@ -6094,13 +5083,11 @@ void handle_connection_in_main_thread(THD *thd)
 
 void create_thread_to_handle_connection(THD *thd)
 {
-  mysql_mutex_assert_owner(&LOCK_thread_count);
-  if (blocked_pthread_count >  wake_pthread)
+  if (cached_thread_count > wake_thread)
   {
-    /* Wake up blocked pthread */
-    DBUG_PRINT("info", ("waiting_thd_list->push %p", thd));
-    waiting_thd_list->push_back(thd);
-    wake_pthread++;
+    /* Get thread from cache */
+    thread_cache.push_back(thd);
+    wake_thread++;
     mysql_cond_signal(&COND_thread_cache);
   }
   else
@@ -6108,7 +5095,8 @@ void create_thread_to_handle_connection(THD *thd)
     char error_message_buff[MYSQL_ERRMSG_SIZE];
     /* Create new thread to handle connection */
     int error;
-    inc_thread_created();
+    thread_created++;
+    threads.append(thd);
     DBUG_PRINT("info",(("creating thread %lu"), thd->thread_id));
     thd->prior_thr_create_utime= thd->start_utime= my_micro_time();
     if ((error= mysql_thread_create(key_thread_one_connection,
@@ -6120,30 +5108,29 @@ void create_thread_to_handle_connection(THD *thd)
       DBUG_PRINT("error",
                  ("Can't create thread to handle request (error %d)",
                   error));
-      if (!err_log_throttle.log(thd))
-        sql_print_error("Can't create thread to handle request (errno= %d)",
-                        error);
-      thd->killed= THD::KILL_CONNECTION;      // Safety
+
+      thread_count--;
+      thd->killed= THD::KILL_CONNECTION;			// Safety
       mysql_mutex_unlock(&LOCK_thread_count);
 
       mysql_mutex_lock(&LOCK_connection_count);
       --connection_count;
-      if (connection_count == 0)
-        mysql_cond_signal(&COND_connection_count);
       mysql_mutex_unlock(&LOCK_connection_count);
 
       statistic_increment(aborted_connects,&LOCK_status);
-      statistic_increment(connection_errors_internal, &LOCK_status);
       /* Can't use my_error() since store_globals has not been called. */
       my_snprintf(error_message_buff, sizeof(error_message_buff),
                   ER_THD(thd, ER_CANT_CREATE_THREAD), error);
       net_send_error(thd, ER_CANT_CREATE_THREAD, error_message_buff, NULL);
       close_connection(thd);
+      mysql_mutex_lock(&LOCK_thd_remove);
+      mysql_mutex_lock(&LOCK_thread_count);
       delete thd;
+      mysql_mutex_unlock(&LOCK_thread_count);
+      mysql_mutex_unlock(&LOCK_thd_remove);
       return;
       /* purecov: end */
     }
-    add_global_thread(thd);
   }
   mysql_mutex_unlock(&LOCK_thread_count);
   DBUG_PRINT("info",("Thread created"));
@@ -6155,6 +5142,7 @@ void create_thread_to_handle_connection(THD *thd)
 
     This function will create new thread to handle the incoming
     connection.  If there are idle cached threads one will be used.
+    'thd' will be pushed into 'threads'.
 
     In single-threaded mode (\#define ONE_THREAD) connection will be
     handled inside this function.
@@ -6178,21 +5166,8 @@ static void create_new_thread(THD *thd)
     mysql_mutex_unlock(&LOCK_connection_count);
 
     DBUG_PRINT("error",("Too many connections"));
-    /*
-      The server just accepted the socket connection from the network,
-      and we already have too many connections.
-      Note that the server knows nothing of the client yet,
-      and in particular thd->client_capabilities has not been negotiated.
-      ER_CON_COUNT_ERROR is normally associated with SQLSTATE '08004',
-      but sending a SQLSTATE in the network assumes CLIENT_PROTOCOL_41.
-      See net_send_error_packet().
-      The error packet returned here will only contain the error code,
-      with no sqlstate.
-      A client expecting a SQLSTATE will not find any, and assume 'HY000'.
-    */
     close_connection(thd, ER_CON_COUNT_ERROR);
     delete thd;
-    statistic_increment(connection_errors_max_connection, &LOCK_status);
     DBUG_VOID_RETURN;
   }
 
@@ -6214,6 +5189,8 @@ static void create_new_thread(THD *thd)
   */
   thd->thread_id= thd->variables.pseudo_thread_id= thread_id++;
 
+  thread_count++;
+
   MYSQL_CALLBACK(thread_scheduler, add_connection, (thd));
 
   DBUG_VOID_RETURN;
@@ -6225,8 +5202,8 @@ static void create_new_thread(THD *thd)
 inline void kill_broken_server()
 {
   /* hack to get around signals ignored in syscalls for problem OS's */
-  if (mysql_get_fd(unix_sock) == INVALID_SOCKET ||
-      (!opt_disable_networking && mysql_socket_getfd(ip_sock) == INVALID_SOCKET))
+  if (unix_sock == INVALID_SOCKET ||
+      (!opt_disable_networking && ip_sock == INVALID_SOCKET))
   {
     select_thread_in_use = 0;
     /* The following call will never return */
@@ -6238,14 +5215,13 @@ inline void kill_broken_server()
 #define MAYBE_BROKEN_SYSCALL
 #endif
 
-  /* Handle new connections and spawn new process to handle them */
+	/* Handle new connections and spawn new process to handle them */
 
 #ifndef EMBEDDED_LIBRARY
 
 void handle_connections_sockets()
 {
-  MYSQL_SOCKET sock= mysql_socket_invalid();
-  MYSQL_SOCKET new_sock= mysql_socket_invalid();
+  my_socket UNINIT_VAR(sock), UNINIT_VAR(new_sock);
   uint error_count=0;
   THD *thd;
   struct sockaddr_storage cAddr;
@@ -6254,10 +5230,9 @@ void handle_connections_sockets()
 #ifdef HAVE_POLL
   int socket_count= 0;
   struct pollfd fds[2]; // for ip_sock and unix_sock
-  MYSQL_SOCKET pfs_fds[2]; // for performance schema
 #else
   fd_set readFDs,clientFDs;
-  uint max_used_connection= max<uint>(mysql_socket_getfd(ip_sock), mysql_socket_getfd(unix_sock)) + 1;
+  uint max_used_connection= (uint) (max(ip_sock,unix_sock)+1);
 #endif
 
   DBUG_ENTER("handle_connections_sockets");
@@ -6269,33 +5244,29 @@ void handle_connections_sockets()
   FD_ZERO(&clientFDs);
 #endif
 
-  if (mysql_socket_getfd(ip_sock) != INVALID_SOCKET)
+  if (ip_sock != INVALID_SOCKET)
   {
-    mysql_socket_set_thread_owner(ip_sock);
 #ifdef HAVE_POLL
-    fds[socket_count].fd= mysql_socket_getfd(ip_sock);
+    fds[socket_count].fd= ip_sock;
     fds[socket_count].events= POLLIN;
-    pfs_fds[socket_count]= ip_sock;
     socket_count++;
 #else
-    FD_SET(mysql_socket_getfd(ip_sock), &clientFDs);
-#endif
+    FD_SET(ip_sock,&clientFDs);
+#endif    
 #ifdef HAVE_FCNTL
-    ip_flags = fcntl(mysql_socket_getfd(ip_sock), F_GETFL, 0);
+    ip_flags = fcntl(ip_sock, F_GETFL, 0);
 #endif
   }
 #ifdef HAVE_SYS_UN_H
-  mysql_socket_set_thread_owner(unix_sock);
 #ifdef HAVE_POLL
-  fds[socket_count].fd= mysql_socket_getfd(unix_sock);
+  fds[socket_count].fd= unix_sock;
   fds[socket_count].events= POLLIN;
-  pfs_fds[socket_count]= unix_sock;
   socket_count++;
 #else
-  FD_SET(mysql_socket_getfd(unix_sock), &clientFDs);
+  FD_SET(unix_sock,&clientFDs);
 #endif
 #ifdef HAVE_FCNTL
-  socket_flags=fcntl(mysql_socket_getfd(unix_sock), F_GETFL, 0);
+  socket_flags=fcntl(unix_sock, F_GETFL, 0);
 #endif
 #endif
 
@@ -6315,14 +5286,8 @@ void handle_connections_sockets()
     {
       if (socket_errno != SOCKET_EINTR)
       {
-        /*
-          select(2)/poll(2) failed on the listening port.
-          There is not much details to report about the client,
-          increment the server global status variable.
-        */
-        statistic_increment(connection_errors_select, &LOCK_status);
-        if (!select_errors++ && !abort_loop)  /* purecov: inspected */
-          sql_print_error("mysqld: Got error %d from select",socket_errno); /* purecov: inspected */
+	if (!select_errors++ && !abort_loop)	/* purecov: inspected */
+	  sql_print_error("mysqld: Got error %d from select",socket_errno); /* purecov: inspected */
       }
       MAYBE_BROKEN_SYSCALL
       continue;
@@ -6336,13 +5301,13 @@ void handle_connections_sockets()
 
     /* Is this a new connection request ? */
 #ifdef HAVE_POLL
-    for (int i= 0; i < socket_count; ++i)
+    for (int i= 0; i < socket_count; ++i) 
     {
       if (fds[i].revents & POLLIN)
       {
-        sock= pfs_fds[i];
+        sock= fds[i].fd;
 #ifdef HAVE_FCNTL
-        flags= fcntl(mysql_socket_getfd(sock), F_GETFL, 0);
+        flags= fcntl(sock, F_GETFL, 0);
 #else
         flags= 0;
 #endif // HAVE_FCNTL
@@ -6351,7 +5316,7 @@ void handle_connections_sockets()
     }
 #else  // HAVE_POLL
 #ifdef HAVE_SYS_UN_H
-    if (FD_ISSET(mysql_socket_getfd(unix_sock), &readFDs))
+    if (FD_ISSET(unix_sock,&readFDs))
     {
       sock = unix_sock;
       flags= socket_flags;
@@ -6368,89 +5333,91 @@ void handle_connections_sockets()
     if (!(test_flags & TEST_BLOCKING))
     {
 #if defined(O_NONBLOCK)
-      fcntl(mysql_socket_getfd(sock), F_SETFL, flags | O_NONBLOCK);
+      fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 #elif defined(O_NDELAY)
-      fcntl(mysql_socket_getfd(sock), F_SETFL, flags | O_NDELAY);
+      fcntl(sock, F_SETFL, flags | O_NDELAY);
 #endif
     }
 #endif /* NO_FCNTL_NONBLOCK */
     for (uint retry=0; retry < MAX_ACCEPT_RETRY; retry++)
     {
       size_socket length= sizeof(struct sockaddr_storage);
-      new_sock= mysql_socket_accept(key_socket_client_connection, sock,
-                                    (struct sockaddr *)(&cAddr), &length);
-      if (mysql_socket_getfd(new_sock) != INVALID_SOCKET ||
-          (socket_errno != SOCKET_EINTR && socket_errno != SOCKET_EAGAIN))
-        break;
+      new_sock= accept(sock, (struct sockaddr *)(&cAddr),
+                       &length);
+      if (new_sock != INVALID_SOCKET ||
+	  (socket_errno != SOCKET_EINTR && socket_errno != SOCKET_EAGAIN))
+	break;
       MAYBE_BROKEN_SYSCALL;
 #if !defined(NO_FCNTL_NONBLOCK)
       if (!(test_flags & TEST_BLOCKING))
       {
-        if (retry == MAX_ACCEPT_RETRY - 1)
-          fcntl(mysql_socket_getfd(sock), F_SETFL, flags);    // Try without O_NONBLOCK
+	if (retry == MAX_ACCEPT_RETRY - 1)
+	  fcntl(sock, F_SETFL, flags);		// Try without O_NONBLOCK
       }
 #endif
     }
 #if !defined(NO_FCNTL_NONBLOCK)
     if (!(test_flags & TEST_BLOCKING))
-      fcntl(mysql_socket_getfd(sock), F_SETFL, flags);
+      fcntl(sock, F_SETFL, flags);
 #endif
-    if (mysql_socket_getfd(new_sock) == INVALID_SOCKET)
+    if (new_sock == INVALID_SOCKET)
     {
-      /*
-        accept(2) failed on the listening port, after many retries.
-        There is not much details to report about the client,
-        increment the server global status variable.
-      */
-      statistic_increment(connection_errors_accept, &LOCK_status);
-      if ((error_count++ & 255) == 0)   // This can happen often
-        sql_perror("Error in accept");
+      if ((error_count++ & 255) == 0)		// This can happen often
+	sql_perror("Error in accept");
       MAYBE_BROKEN_SYSCALL;
       if (socket_errno == SOCKET_ENFILE || socket_errno == SOCKET_EMFILE)
-        sleep(1);       // Give other threads some time
+	sleep(1);				// Give other threads some time
       continue;
     }
 
 #ifdef HAVE_LIBWRAP
     {
-      if (mysql_socket_getfd(sock) == mysql_socket_getfd(ip_sock))
+      if (sock == ip_sock)
       {
-        struct request_info req;
-        signal(SIGCHLD, SIG_DFL);
-        request_init(&req, RQ_DAEMON, libwrapName, RQ_FILE, mysql_socket_getfd(new_sock), NULL);
-        my_fromhost(&req);
+	struct request_info req;
+	signal(SIGCHLD, SIG_DFL);
+	request_init(&req, RQ_DAEMON, libwrapName, RQ_FILE, new_sock, NULL);
+	my_fromhost(&req);
+	if (!my_hosts_access(&req))
+	{
+	  /*
+	    This may be stupid but refuse() includes an exit(0)
+	    which we surely don't want...
+	    clean_exit() - same stupid thing ...
+	  */
+	  syslog(deny_severity, "refused connect from %s",
+		 my_eval_client(&req));
 
-        if (!my_hosts_access(&req))
-        {
-          /*
-            This may be stupid but refuse() includes an exit(0)
-            which we surely don't want...
-            clean_exit() - same stupid thing ...
-          */
-          syslog(deny_severity, "refused connect from %s",
-          my_eval_client(&req));
+	  /*
+	    C++ sucks (the gibberish in front just translates the supplied
+	    sink function pointer in the req structure from a void (*sink)();
+	    to a void(*sink)(int) if you omit the cast, the C++ compiler
+	    will cry...
+	  */
+	  if (req.sink)
+	    ((void (*)(int))req.sink)(req.fd);
 
-          /*
-            C++ sucks (the gibberish in front just translates the supplied
-            sink function pointer in the req structure from a void (*sink)();
-            to a void(*sink)(int) if you omit the cast, the C++ compiler
-            will cry...
-          */
-          if (req.sink)
-            ((void (*)(int))req.sink)(req.fd);
-
-          mysql_socket_shutdown(new_sock, SHUT_RDWR);
-          mysql_socket_close(new_sock);
-          /*
-            The connection was refused by TCP wrappers.
-            There are no details (by client IP) available to update the host_cache.
-          */
-          statistic_increment(connection_errors_tcpwrap, &LOCK_status);
-          continue;
-        }
+	  (void) mysql_socket_shutdown(new_sock, SHUT_RDWR);
+	  (void) closesocket(new_sock);
+	  continue;
+	}
       }
     }
 #endif /* HAVE_LIBWRAP */
+
+    {
+      size_socket dummyLen;
+      struct sockaddr_storage dummy;
+      dummyLen = sizeof(dummy);
+      if (  getsockname(new_sock,(struct sockaddr *)&dummy, 
+                  (SOCKET_SIZE_TYPE *)&dummyLen) < 0  )
+      {
+	sql_perror("Error on new connection socket");
+	(void) mysql_socket_shutdown(new_sock, SHUT_RDWR);
+	(void) closesocket(new_sock);
+	continue;
+      }
+    }
 
     /*
     ** Don't allow too many connections
@@ -6459,18 +5426,14 @@ void handle_connections_sockets()
     if (!(thd= new THD))
     {
       (void) mysql_socket_shutdown(new_sock, SHUT_RDWR);
-      (void) mysql_socket_close(new_sock);
-      statistic_increment(connection_errors_internal, &LOCK_status);
+      (void) closesocket(new_sock);
       continue;
     }
-
-    bool is_unix_sock= (mysql_socket_getfd(sock) == mysql_socket_getfd(unix_sock));
-    enum_vio_type vio_type= (is_unix_sock ? VIO_TYPE_SOCKET : VIO_TYPE_TCPIP);
-    uint vio_flags= (is_unix_sock ? VIO_LOCALHOST : 0);
-
-    vio_tmp= mysql_socket_vio_new(new_sock, vio_type, vio_flags);
-
-    if (!vio_tmp || my_net_init(&thd->net, vio_tmp))
+    if (!(vio_tmp=vio_new(new_sock,
+			  sock == unix_sock ? VIO_TYPE_SOCKET :
+			  VIO_TYPE_TCPIP,
+			  sock == unix_sock ? VIO_LOCALHOST: 0)) ||
+	my_net_init(&thd->net,vio_tmp))
     {
       /*
         Only delete the temporary vio if we didn't already attach it to the
@@ -6481,15 +5444,13 @@ void handle_connections_sockets()
         vio_delete(vio_tmp);
       else
       {
-        (void) mysql_socket_shutdown(new_sock, SHUT_RDWR);
-        (void) mysql_socket_close(new_sock);
+	(void) mysql_socket_shutdown(new_sock, SHUT_RDWR);
+	(void) closesocket(new_sock);
       }
       delete thd;
-      statistic_increment(connection_errors_internal, &LOCK_status);
       continue;
     }
-    init_net_server_extension(thd);
-    if (mysql_socket_getfd(sock) == mysql_socket_getfd(unix_sock))
+    if (sock == unix_sock)
       thd->security_ctx->set_host((char*) my_localhost);
 
     create_new_thread(thd);
@@ -6554,10 +5515,10 @@ pthread_handler_t handle_connections_namedpipes(void *arg)
                                   net_buffer_length,
                                   NMPWAIT_USE_DEFAULT_WAIT,
                                   &saPipeSecurity)) ==
-    INVALID_HANDLE_VALUE)
+	  INVALID_HANDLE_VALUE)
       {
-  sql_perror("Can't create new named pipe!");
-  break;          // Abort
+	sql_perror("Can't create new named pipe!");
+	break;					// Abort
       }
     }
     hConnectedPipe = hPipe;
@@ -6565,19 +5526,19 @@ pthread_handler_t handle_connections_namedpipes(void *arg)
     if ((hPipe = CreateNamedPipe(pipe_name,
                  PIPE_ACCESS_DUPLEX |
                  FILE_FLAG_OVERLAPPED,
-         PIPE_TYPE_BYTE |
-         PIPE_READMODE_BYTE |
-         PIPE_WAIT,
-         PIPE_UNLIMITED_INSTANCES,
-         (int) global_system_variables.net_buffer_length,
-         (int) global_system_variables.net_buffer_length,
-         NMPWAIT_USE_DEFAULT_WAIT,
-         &saPipeSecurity)) ==
-  INVALID_HANDLE_VALUE)
+				 PIPE_TYPE_BYTE |
+				 PIPE_READMODE_BYTE |
+				 PIPE_WAIT,
+				 PIPE_UNLIMITED_INSTANCES,
+				 (int) global_system_variables.net_buffer_length,
+				 (int) global_system_variables.net_buffer_length,
+				 NMPWAIT_USE_DEFAULT_WAIT,
+				 &saPipeSecurity)) ==
+	INVALID_HANDLE_VALUE)
     {
       sql_perror("Can't create new named pipe!");
       hPipe=hConnectedPipe;
-      continue;         // We have to try again
+      continue;					// We have to try again
     }
 
     if (!(thd = new THD))
@@ -6587,7 +5548,7 @@ pthread_handler_t handle_connections_namedpipes(void *arg)
       continue;
     }
     if (!(thd->net.vio= vio_new_win32pipe(hConnectedPipe)) ||
-  my_net_init(&thd->net, thd->net.vio))
+	my_net_init(&thd->net, thd->net.vio))
     {
       close_connection(thd, ER_OUT_OF_RESOURCES);
       delete thd;
@@ -6673,8 +5634,8 @@ pthread_handler_t handle_connections_shared_memory(void *arg)
     goto error;
   }
   if ((handle_connect_map= (char *)MapViewOfFile(handle_connect_file_map,
-              FILE_MAP_WRITE,0,0,
-              sizeof(DWORD))) == 0)
+						  FILE_MAP_WRITE,0,0,
+						  sizeof(DWORD))) == 0)
   {
     errmsg= "Could not create shared memory service";
     goto error;
@@ -6705,12 +5666,12 @@ pthread_handler_t handle_connections_shared_memory(void *arg)
       The name of event and file-mapping events create agree next rule:
         shared_memory_base_name+unique_part+number_of_connection
         Where:
-    shared_memory_base_name is uniquel value for each server
-    unique_part is unique value for each object (events and file-mapping)
-    number_of_connection is connection-number between server and client
+	  shared_memory_base_name is uniquel value for each server
+	  unique_part is unique value for each object (events and file-mapping)
+	  number_of_connection is connection-number between server and client
     */
     suffix_pos= strxmov(tmp,shared_memory_base_name,"_",connect_number_char,
-       "_",NullS);
+			 "_",NullS);
     strmov(suffix_pos, "DATA");
     if ((handle_client_file_map=
          CreateFileMapping(INVALID_HANDLE_VALUE, sa_mapping,
@@ -6720,8 +5681,8 @@ pthread_handler_t handle_connections_shared_memory(void *arg)
       goto errorconn;
     }
     if ((handle_client_map= (char*)MapViewOfFile(handle_client_file_map,
-              FILE_MAP_WRITE,0,0,
-              smem_buffer_length)) == 0)
+						  FILE_MAP_WRITE,0,0,
+						  smem_buffer_length)) == 0)
     {
       errmsg= "Could not create memory map";
       goto errorconn;
@@ -6799,7 +5760,7 @@ errorconn:
     {
       char buff[180];
       strxmov(buff, "Can't create shared memory connection: ", errmsg, ".",
-        NullS);
+	      NullS);
       sql_perror(buff);
     }
     if (handle_client_file_map)
@@ -6832,9 +5793,9 @@ error:
   }
   my_security_attr_free(sa_event);
   my_security_attr_free(sa_mapping);
-  if (handle_connect_map) UnmapViewOfFile(handle_connect_map);
-  if (handle_connect_file_map)  CloseHandle(handle_connect_file_map);
-  if (event_connect_answer) CloseHandle(event_connect_answer);
+  if (handle_connect_map)	UnmapViewOfFile(handle_connect_map);
+  if (handle_connect_file_map)	CloseHandle(handle_connect_file_map);
+  if (event_connect_answer)	CloseHandle(event_connect_answer);
   if (smem_event_connect_request) CloseHandle(smem_event_connect_request);
   DBUG_LEAVE;
   decrement_handler_count();
@@ -6848,211 +5809,7 @@ error:
   Handle start options
 ******************************************************************************/
 
-/**
-  Process command line options flagged as 'early'.
-  Some components needs to be initialized as early as possible,
-  because the rest of the server initialization depends on them.
-  Options that needs to be parsed early includes:
-  - the performance schema, when compiled in,
-  - options related to the help,
-  - options related to the bootstrap
-  The performance schema needs to be initialized as early as possible,
-  before to-be-instrumented objects of the server are initialized.
-*/
-int handle_early_options()
-{
-  int ho_error;
-  vector<my_option> all_early_options;
-  all_early_options.reserve(100);
-
-  my_getopt_register_get_addr(NULL);
-  /* Skip unknown options so that they may be processed later */
-  my_getopt_skip_unknown= TRUE;
-
-  /* Add the system variables parsed early */
-  sys_var_add_options(&all_early_options, sys_var::PARSE_EARLY);
-
-  /* Add the command line options parsed early */
-  for (my_option *opt= my_long_early_options;
-       opt->name != NULL;
-       opt++)
-    all_early_options.push_back(*opt);
-
-  add_terminator(&all_early_options);
-
-  /*
-    Logs generated while parsing the command line
-    options are buffered and printed later.
-  */
-  buffered_logs.init();
-  my_getopt_error_reporter= buffered_option_error_reporter;
-  my_charset_error_reporter= buffered_option_error_reporter;
-
-  ho_error= handle_options(&remaining_argc, &remaining_argv,
-                           &all_early_options[0], mysqld_get_one_option);
-  if (ho_error == 0)
-  {
-    /* Add back the program name handle_options removes */
-    remaining_argc++;
-    remaining_argv--;
-  }
-
-  // Swap with an empty vector, i.e. delete elements and free allocated space.
-  vector<my_option>().swap(all_early_options);
-
-  return ho_error;
-}
-
-/**
-  Adjust @c open_files_limit.
-  Computation is  based on:
-  - @c max_connections,
-  - @c table_cache_size,
-  - the platform max open file limit.
-*/
-void adjust_open_files_limit(ulong *requested_open_files)
-{
-  ulong limit_1;
-  ulong limit_2;
-  ulong limit_3;
-  ulong request_open_files;
-  ulong effective_open_files;
-
-  /* MyISAM requires two file handles per table. */
-  limit_1= 10 + max_connections + table_cache_size * 2;
-
-  /*
-    We are trying to allocate no less than max_connections*5 file
-    handles (i.e. we are trying to set the limit so that they will
-    be available).
-  */
-  limit_2= max_connections * 5;
-
-  /* Try to allocate no less than 5000 by default. */
-  limit_3= open_files_limit ? open_files_limit : 5000;
-
-  request_open_files= max<ulong>(max<ulong>(limit_1, limit_2), limit_3);
-
-  /* Notice: my_set_max_open_files() may return more than requested. */
-  effective_open_files= my_set_max_open_files(request_open_files);
-
-  if (effective_open_files < request_open_files)
-  {
-    char msg[1024];
-
-    if (open_files_limit == 0)
-    {
-      snprintf(msg, sizeof(msg),
-               "Changed limits: max_open_files: %lu (requested %lu)",
-               effective_open_files, request_open_files);
-      buffered_logs.buffer(WARNING_LEVEL, msg);
-    }
-    else
-    {
-      snprintf(msg, sizeof(msg),
-               "Could not increase number of max_open_files to "
-               "more than %lu (request: %lu)",
-               effective_open_files, request_open_files);
-      buffered_logs.buffer(WARNING_LEVEL, msg);
-    }
-  }
-
-  open_files_limit= effective_open_files;
-  if (requested_open_files)
-    *requested_open_files= min<ulong>(effective_open_files, request_open_files);
-}
-
-void adjust_max_connections(ulong requested_open_files)
-{
-  ulong limit;
-
-  limit= requested_open_files - 10 - TABLE_OPEN_CACHE_MIN * 2;
-
-  if (limit < max_connections)
-  {
-    char msg[1024];
-
-    snprintf(msg, sizeof(msg),
-             "Changed limits: max_connections: %lu (requested %lu)",
-             limit, max_connections);
-    buffered_logs.buffer(WARNING_LEVEL, msg);
-
-    max_connections= limit;
-  }
-}
-
-void adjust_table_cache_size(ulong requested_open_files)
-{
-  ulong limit;
-
-  limit= max<ulong>((requested_open_files - 10 - max_connections) / 2,
-                    TABLE_OPEN_CACHE_MIN);
-
-  if (limit < table_cache_size)
-  {
-    char msg[1024];
-
-    snprintf(msg, sizeof(msg),
-             "Changed limits: table_open_cache: %lu (requested %lu)",
-             limit, table_cache_size);
-    buffered_logs.buffer(WARNING_LEVEL, msg);
-
-    table_cache_size= limit;
-  }
-
-  table_cache_size_per_instance= table_cache_size / table_cache_instances;
-}
-
-void adjust_table_def_size()
-{
-  longlong default_value;
-  sys_var *var;
-
-  default_value= min<longlong> (400 + table_cache_size / 2, 2000);
-  var= intern_find_sys_var(STRING_WITH_LEN("table_definition_cache"));
-  DBUG_ASSERT(var != NULL);
-  var->update_default(default_value);
-
-  if (! table_definition_cache_specified)
-    table_def_size= default_value;
-}
-
-void adjust_related_options(ulong *requested_open_files)
-{
-  /* In bootstrap, disable grant tables (we are about to create them) */
-  if (opt_bootstrap)
-    opt_noacl= 1;
-
-  /* The order is critical here, because of dependencies. */
-  adjust_open_files_limit(requested_open_files);
-  adjust_max_connections(*requested_open_files);
-  adjust_table_cache_size(*requested_open_files);
-  adjust_table_def_size();
-}
-
-vector<my_option> all_options;
-
-struct my_option my_long_early_options[]=
-{
-#ifndef DISABLE_GRANT_OPTIONS
-  {"bootstrap", OPT_BOOTSTRAP, "Used by mysql installation scripts.", 0, 0, 0,
-   GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0},
-#endif
-#ifndef DISABLE_GRANT_OPTIONS
-  {"skip-grant-tables", 0,
-   "Start without grant tables. This gives all users FULL ACCESS to all tables.",
-   &opt_noacl, &opt_noacl, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0,
-   0},
-#endif
-  {"help", '?', "Display this help and exit.",
-   &opt_help, &opt_help, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0,
-   0, 0},
-  {"verbose", 'v', "Used with --help option for detailed help.",
-   &opt_verbose, &opt_verbose, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"version", 'V', "Output version information and exit.", 0, 0, 0, GET_NO_ARG,
-   NO_ARG, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0}
-};
+DYNAMIC_ARRAY all_options;
 
 /**
   System variables are automatically command-line options (few
@@ -7062,6 +5819,9 @@ struct my_option my_long_early_options[]=
 
 struct my_option my_long_options[]=
 {
+  {"help", '?', "Display this help and exit.", 
+   &opt_help, &opt_help, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0,
+   0, 0},
 #ifdef HAVE_REPLICATION
   {"abort-slave-event-count", 0,
    "Option used by mysql-test for debugging and testing of replication.",
@@ -7085,6 +5845,9 @@ struct my_option my_long_options[]=
   {"autocommit", 0, "Set default value for autocommit (0 or 1)",
    &opt_autocommit, &opt_autocommit, 0,
    GET_BOOL, OPT_ARG, 1, 0, 0, 0, 0, NULL},
+  {"bind-address", OPT_BIND_ADDRESS, "IP address to bind to.",
+   &my_bind_addr_str, &my_bind_addr_str, 0, GET_STR,
+   REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"binlog-do-db", OPT_BINLOG_DO_DB,
    "Tells the master it should log updates for the specified database, "
    "and exclude all others not explicitly mentioned.",
@@ -7098,10 +5861,14 @@ struct my_option my_long_options[]=
    "The value has to be a multiple of 256.",
    &opt_binlog_rows_event_max_size, &opt_binlog_rows_event_max_size,
    0, GET_ULONG, REQUIRED_ARG,
-   /* def_value */ 8192, /* min_value */  256, /* max_value */ ULONG_MAX,
-   /* sub_size */     0, /* block_size */ 256,
+   /* def_value */ 1024, /* min_value */  256, /* max_value */ ULONG_MAX, 
+   /* sub_size */     0, /* block_size */ 256, 
    /* app_type */ 0
   },
+#ifndef DISABLE_GRANT_OPTIONS
+  {"bootstrap", OPT_BOOTSTRAP, "Used by mysql installation scripts.", 0, 0, 0,
+   GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0},
+#endif
   {"character-set-client-handshake", 0,
    "Don't ignore client side character set value sent during handshake.",
    &opt_character_set_client_handshake,
@@ -7131,10 +5898,6 @@ struct my_option my_long_options[]=
      to a compiler bug in Sun Studio compiler. */
   {"default-storage-engine", 0, "The default storage engine for new tables",
    &default_storage_engine, 0, 0, GET_STR, REQUIRED_ARG,
-   0, 0, 0, 0, 0, 0 },
-  {"default-tmp-storage-engine", 0, 
-    "The default storage engine for new explict temporary tables",
-   &default_tmp_storage_engine, 0, 0, GET_STR, REQUIRED_ARG,
    0, 0, 0, 0, 0, 0 },
   {"default-time-zone", 0, "Set the default time zone.",
    &default_tz_name, &default_tz_name,
@@ -7170,11 +5933,6 @@ struct my_option my_long_options[]=
    &opt_super_large_pages, &opt_super_large_pages, 0,
    GET_BOOL, OPT_ARG, 0, 0, 1, 0, 1, 0},
 #endif
-  {"ignore-db-dir", OPT_IGNORE_DB_DIRECTORY,
-   "Specifies a directory to add to the ignore list when collecting "
-   "database names from the datadir. Put a blank argument to reset "
-   "the list accumulated so far.", 0, 0, 0, GET_STR, REQUIRED_ARG, 
-   0, 0, 0, 0, 0, 0},
   {"language", 'L',
    "Client error messages in given language. May be given as a full path. "
    "Deprecated. Use --lc-messages-dir instead.",
@@ -7188,6 +5946,9 @@ struct my_option my_long_options[]=
    "Set the language used for the month names and the days of the week.",
    &lc_time_names_name, &lc_time_names_name,
    0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0 },
+  {"log", 'l', "Log connections and queries to file (deprecated option, use "
+   "--general-log/--general-log-file instead).", &opt_logname, &opt_logname,
+   0, GET_STR_ALLOC, OPT_ARG, 0, 0, 0, 0, 0, 0},
   {"log-bin", OPT_BIN_LOG,
    "Log update queries in binary format. Optional (but strongly recommended "
    "to avoid replication problems if server's hostname changes) argument "
@@ -7195,25 +5956,31 @@ struct my_option my_long_options[]=
    &opt_bin_logname, &opt_bin_logname, 0, GET_STR_ALLOC,
    OPT_ARG, 0, 0, 0, 0, 0, 0},
   {"log-bin-index", 0,
-   "File that holds the names for binary log files.",
+   "File that holds the names for last binary log files.",
    &opt_binlog_index_name, &opt_binlog_index_name, 0, GET_STR,
-   REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"relay-log-index", 0,
-   "File that holds the names for relay log files.",
-   &opt_relaylog_index_name, &opt_relaylog_index_name, 0, GET_STR,
    REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"log-isam", OPT_ISAM_LOG, "Log all MyISAM changes to file.",
    &myisam_log_filename, &myisam_log_filename, 0, GET_STR,
    OPT_ARG, 0, 0, 0, 0, 0, 0},
-  {"log-raw", 0,
-   "Log to general log before any rewriting of the query. For use in debugging, not production as "
-   "sensitive information may be logged.",
-   &opt_log_raw, &opt_log_raw,
-   0, GET_BOOL, NO_ARG, 0, 0, 1, 0, 1, 0 },
   {"log-short-format", 0,
    "Don't log extra information to update and slow-query logs.",
    &opt_short_log_format, &opt_short_log_format,
    0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
+  {"log-slow-admin-statements", 0,
+   "Log slow OPTIMIZE, ANALYZE, ALTER and other administrative statements to "
+   "the slow log if it is open.", &opt_log_slow_admin_statements,
+   &opt_log_slow_admin_statements, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
+ {"log-slow-slave-statements", 0,
+  "Log slow statements executed by slave thread to the slow log if it is open.",
+  &opt_log_slow_slave_statements, &opt_log_slow_slave_statements,
+  0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
+  {"log-slow-queries", OPT_SLOW_QUERY_LOG,
+   "Log slow queries to a table or log file. Defaults logging to table "
+   "mysql.slow_log or hostname-slow.log if --log-output=file is used. "
+   "Must be enabled to activate other slow log options. "
+   "Deprecated option, use --slow-query-log/--slow-query-log-file instead.",
+   &opt_slow_logname, &opt_slow_logname, 0, GET_STR_ALLOC, OPT_ARG,
+   0, 0, 0, 0, 0, 0},
   {"log-tc", 0,
    "Path to transaction coordinator log (used for transactions that affect "
    "more than one storage engine, when binary log is disabled).",
@@ -7230,12 +5997,14 @@ struct my_option my_long_options[]=
    "the I/O replication thread is in the master's binlogs.",
    &master_info_file, &master_info_file, 0, GET_STR,
    REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"master-retry-count", OPT_MASTER_RETRY_COUNT,
-   "The number of tries the slave will make to connect to the master before giving up. "
-   "Deprecated option, use 'CHANGE MASTER TO master_retry_count = <num>' instead.",
+  {"master-retry-count", 0,
+   "The number of tries the slave will make to connect to the master before giving up.",
    &master_retry_count, &master_retry_count, 0, GET_ULONG,
    REQUIRED_ARG, 3600*24, 0, 0, 0, 0, 0},
 #ifdef HAVE_REPLICATION
+  {"init-rpl-role", 0, "Set the replication role.",
+   &rpl_status, &rpl_status, &rpl_role_typelib,
+   GET_ENUM, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"max-binlog-dump-events", 0,
    "Option used by mysql-test for debugging and testing of replication.",
    &max_binlog_dump_events, &max_binlog_dump_events, 0,
@@ -7243,6 +6012,10 @@ struct my_option my_long_options[]=
 #endif /* HAVE_REPLICATION */
   {"memlock", 0, "Lock mysqld in memory.", &locked_in_memory,
    &locked_in_memory, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
+  {"one-thread", OPT_ONE_THREAD,
+   "(Deprecated): Only use one thread (for debugging under Linux). Use "
+   "thread-handling=no-threads instead.",
+   0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"old-style-user-limits", 0,
    "Enable old-style user limits (before 5.0.3, user resources were counted "
    "per each user+host vs. per account).",
@@ -7306,6 +6079,8 @@ struct my_option my_long_options[]=
    "will not do updates to tables in databases that start with foo and whose "
    "table names start with bar.",
    0, 0, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
+  {"safe-mode", OPT_SAFE, "Skip some optimize stages (for testing). Deprecated.",
+   0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"safe-user-create", 0,
    "Don't allow new user creation by the user who has no write privileges to the mysql.user table.",
    &opt_safe_user_create, &opt_safe_user_create, 0, GET_BOOL,
@@ -7314,6 +6089,12 @@ struct my_option my_long_options[]=
    "Show user and password in SHOW SLAVE HOSTS on this master.",
    &opt_show_slave_auth_info, &opt_show_slave_auth_info, 0,
    GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
+#ifndef DISABLE_GRANT_OPTIONS
+  {"skip-grant-tables", 0,
+   "Start without grant tables. This gives all users FULL ACCESS to all tables.",
+   &opt_noacl, &opt_noacl, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0,
+   0},
+#endif
   {"skip-host-cache", OPT_SKIP_HOST_CACHE, "Don't cache host names.", 0, 0, 0,
    GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"skip-new", OPT_SKIP_NEW, "Don't use new, possibly wrong routines.",
@@ -7324,6 +6105,10 @@ struct my_option my_long_options[]=
   {"skip-stack-trace", OPT_SKIP_STACK_TRACE,
    "Don't print a stack trace on failure.", 0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0,
    0, 0, 0, 0},
+  {"skip-thread-priority", OPT_SKIP_PRIOR,
+   "Don't give threads different priorities. This option is deprecated "
+   "because it has no effect; the implied behavior is already the default.",
+   0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0},
 #if defined(_WIN32) && !defined(EMBEDDED_LIBRARY)
   {"slow-start-timeout", 0,
    "Maximum number of milliseconds that the service control manager should wait "
@@ -7389,32 +6174,21 @@ struct my_option my_long_options[]=
    &global_system_variables.tx_isolation,
    &global_system_variables.tx_isolation, &tx_isolation_typelib,
    GET_ENUM, REQUIRED_ARG, ISO_REPEATABLE_READ, 0, 0, 0, 0, 0},
-  {"transaction-read-only", 0,
-   "Default transaction access mode. "
-   "True if transactions are read-only.",
-   &global_system_variables.tx_read_only,
-   &global_system_variables.tx_read_only, 0,
-   GET_BOOL, OPT_ARG, 0, 0, 0, 0, 0, 0},
   {"user", 'u', "Run mysqld daemon as user.", 0, 0, 0, GET_STR, REQUIRED_ARG,
    0, 0, 0, 0, 0, 0},
-  {"plugin-load", OPT_PLUGIN_LOAD,
+  {"verbose", 'v', "Used with --help option for detailed help.",
+   &opt_verbose, &opt_verbose, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
+  {"version", 'V', "Output version information and exit.", 0, 0, 0, GET_NO_ARG,
+   NO_ARG, 0, 0, 0, 0, 0, 0},
+  {"plugin-load", 0,
    "Optional semicolon-separated list of plugins to load, where each plugin is "
    "identified as name=library, where name is the plugin name and library "
    "is the plugin library in plugin_dir.",
-   0, 0, 0,
+   &opt_plugin_load, &opt_plugin_load, 0,
    GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"plugin-load-add", OPT_PLUGIN_LOAD_ADD,
-   "Optional semicolon-separated list of plugins to load, where each plugin is "
-   "identified as name=library, where name is the plugin name and library "
-   "is the plugin library in plugin_dir. This option adds to the list "
-   "speficied by --plugin-load in an incremental way. "
-   "Multiple --plugin-load-add are supported.",
-   0, 0, 0,
-   GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"default_authentication_plugin", OPT_DEFAULT_AUTH,
-   "Defines what password- and authentication algorithm to use per default",
-   0, 0, 0,
-   GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
+  {"table_cache", 0, "Deprecated; use --table-open-cache instead.",
+   &table_cache_size, &table_cache_size, 0, GET_ULONG,
+   REQUIRED_ARG, TABLE_OPEN_CACHE_DEFAULT, 1, 512*1024L, 0, 1, 0},
   {0, 0, 0, 0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0}
 };
 
@@ -7436,30 +6210,39 @@ static int show_net_compression(THD *thd, SHOW_VAR *var, char *buff)
 
 static int show_starttime(THD *thd, SHOW_VAR *var, char *buff)
 {
-  var->type= SHOW_LONGLONG;
+  var->type= SHOW_LONG;
   var->value= buff;
-  *((longlong *)buff)= (longlong) (thd->query_start() - server_start_time);
+  *((long *)buff)= (long) (thd->query_start() - server_start_time);
   return 0;
 }
 
 #ifdef ENABLED_PROFILING
 static int show_flushstatustime(THD *thd, SHOW_VAR *var, char *buff)
 {
-  var->type= SHOW_LONGLONG;
+  var->type= SHOW_LONG;
   var->value= buff;
-  *((longlong *)buff)= (longlong) (thd->query_start() - flush_status_time);
+  *((long *)buff)= (long) (thd->query_start() - flush_status_time);
   return 0;
 }
 #endif
 
 #ifdef HAVE_REPLICATION
+static int show_rpl_status(THD *thd, SHOW_VAR *var, char *buff)
+{
+  var->type= SHOW_CHAR;
+  var->value= const_cast<char*>(rpl_status_type[(int)rpl_status]);
+  return 0;
+}
+
 static int show_slave_running(THD *thd, SHOW_VAR *var, char *buff)
 {
   var->type= SHOW_MY_BOOL;
+  mysql_mutex_lock(&LOCK_active_mi);
   var->value= buff;
-  *((my_bool *)buff)= (my_bool) (active_mi &&
+  *((my_bool *)buff)= (my_bool) (active_mi && 
                                  active_mi->slave_running == MYSQL_SLAVE_RUN_CONNECT &&
-                                 active_mi->rli->slave_running);
+                                 active_mi->rli.slave_running);
+  mysql_mutex_unlock(&LOCK_active_mi);
   return 0;
 }
 
@@ -7469,54 +6252,41 @@ static int show_slave_retried_trans(THD *thd, SHOW_VAR *var, char *buff)
     TODO: with multimaster, have one such counter per line in
     SHOW SLAVE STATUS, and have the sum over all lines here.
   */
+  mysql_mutex_lock(&LOCK_active_mi);
   if (active_mi)
   {
     var->type= SHOW_LONG;
     var->value= buff;
-    *((long *)buff)= (long)active_mi->rli->retried_trans;
+    mysql_mutex_lock(&active_mi->rli.data_lock);
+    *((long *)buff)= (long)active_mi->rli.retried_trans;
+    mysql_mutex_unlock(&active_mi->rli.data_lock);
   }
   else
     var->type= SHOW_UNDEF;
+  mysql_mutex_unlock(&LOCK_active_mi);
   return 0;
 }
 
 static int show_slave_received_heartbeats(THD *thd, SHOW_VAR *var, char *buff)
 {
+  mysql_mutex_lock(&LOCK_active_mi);
   if (active_mi)
   {
     var->type= SHOW_LONGLONG;
     var->value= buff;
+    mysql_mutex_lock(&active_mi->rli.data_lock);
     *((longlong *)buff)= active_mi->received_heartbeats;
+    mysql_mutex_unlock(&active_mi->rli.data_lock);
   }
   else
     var->type= SHOW_UNDEF;
-  return 0;
-}
-
-static int show_slave_last_heartbeat(THD *thd, SHOW_VAR *var, char *buff)
-{
-  MYSQL_TIME received_heartbeat_time;
-  if (active_mi)
-  {
-    var->type= SHOW_CHAR;
-    var->value= buff;
-    if (active_mi->last_heartbeat == 0)
-      buff[0]='\0';
-    else
-    {
-      thd->variables.time_zone->gmt_sec_to_TIME(&received_heartbeat_time, 
-        active_mi->last_heartbeat);
-      my_datetime_to_str(&received_heartbeat_time, buff, 0);
-    }
-  }
-  else
-    var->type= SHOW_UNDEF;
+  mysql_mutex_unlock(&LOCK_active_mi);
   return 0;
 }
 
 static int show_heartbeat_period(THD *thd, SHOW_VAR *var, char *buff)
 {
-  DEBUG_SYNC(thd, "dsync_show_heartbeat_period");
+  mysql_mutex_lock(&LOCK_active_mi);
   if (active_mi)
   {
     var->type= SHOW_CHAR;
@@ -7525,24 +6295,10 @@ static int show_heartbeat_period(THD *thd, SHOW_VAR *var, char *buff)
   }
   else
     var->type= SHOW_UNDEF;
+  mysql_mutex_unlock(&LOCK_active_mi);
   return 0;
 }
 
-#ifndef DBUG_OFF
-static int show_slave_rows_last_search_algorithm_used(THD *thd, SHOW_VAR *var, char *buff)
-{
-  uint res= slave_rows_last_search_algorithm_used;
-  const char* s= ((res == Rows_log_event::ROW_LOOKUP_TABLE_SCAN) ? "TABLE_SCAN" :
-                  ((res == Rows_log_event::ROW_LOOKUP_HASH_SCAN) ? "HASH_SCAN" : 
-                   "INDEX_SCAN"));
-
-  var->type= SHOW_CHAR;
-  var->value= buff;
-  sprintf(buff, "%s", s);
-
-  return 0;
-}
-#endif
 
 #endif /* HAVE_REPLICATION */
 
@@ -7550,7 +6306,7 @@ static int show_open_tables(THD *thd, SHOW_VAR *var, char *buff)
 {
   var->type= SHOW_LONG;
   var->value= buff;
-  *((long *)buff)= (long)table_cache_manager.cached_tables();
+  *((long *)buff)= (long)cached_open_tables();
   return 0;
 }
 
@@ -7736,7 +6492,7 @@ static int show_ssl_ctx_get_session_cache_mode(THD *thd, SHOW_VAR *var, char *bu
 }
 
 /*
-   Functions relying on SSL
+   Functions relying on SSL 
    Note: In the show_ssl_* functions, we need to check if we have a
          valid vio-object since this isn't always true, specifically
          when session_status or global_status is requested from
@@ -7828,110 +6584,6 @@ static int show_ssl_get_cipher_list(THD *thd, SHOW_VAR *var, char *buff)
   return 0;
 }
 
-
-#ifdef HAVE_YASSL
-
-static char *
-my_asn1_time_to_string(ASN1_TIME *time, char *buf, size_t len)
-{
-  return yaSSL_ASN1_TIME_to_string(time, buf, len);
-}
-
-#else /* openssl */
-
-static char *
-my_asn1_time_to_string(ASN1_TIME *time, char *buf, size_t len)
-{
-  int n_read;
-  char *res= NULL;
-  BIO *bio= BIO_new(BIO_s_mem());
-
-  if (bio == NULL)
-    return NULL;
-
-  if (!ASN1_TIME_print(bio, time))
-    goto end;
-
-  n_read= BIO_read(bio, buf, (int) (len - 1));
-
-  if (n_read > 0)
-  {
-    buf[n_read]= 0;
-    res= buf;
-  }
-
-end:
-  BIO_free(bio);
-  return res;
-}
-
-#endif
-
-
-/**
-  Handler function for the 'ssl_get_server_not_before' variable
-
-  @param      thd  the mysql thread structure
-  @param      var  the data for the variable
-  @param[out] buf  the string to put the value of the variable into
-
-  @return          status
-  @retval     0    success
-*/
-
-static int
-show_ssl_get_server_not_before(THD *thd, SHOW_VAR *var, char *buff)
-{
-  var->type= SHOW_CHAR;
-  if(thd->vio_ok() && thd->net.vio->ssl_arg)
-  {
-    SSL *ssl= (SSL*) thd->net.vio->ssl_arg;
-    X509 *cert= SSL_get_certificate(ssl);
-    ASN1_TIME *not_before= X509_get_notBefore(cert);
-
-    var->value= my_asn1_time_to_string(not_before, buff,
-                                       SHOW_VAR_FUNC_BUFF_SIZE);
-    if (!var->value)
-      return 1;
-    var->value= buff;
-  }
-  else
-    var->value= empty_c_string;
-  return 0;
-}
-
-
-/**
-  Handler function for the 'ssl_get_server_not_after' variable
-
-  @param      thd  the mysql thread structure
-  @param      var  the data for the variable
-  @param[out] buf  the string to put the value of the variable into
-
-  @return          status
-  @retval     0    success
-*/
-
-static int
-show_ssl_get_server_not_after(THD *thd, SHOW_VAR *var, char *buff)
-{
-  var->type= SHOW_CHAR;
-  if(thd->vio_ok() && thd->net.vio->ssl_arg)
-  {
-    SSL *ssl= (SSL*) thd->net.vio->ssl_arg;
-    X509 *cert= SSL_get_certificate(ssl);
-    ASN1_TIME *not_after= X509_get_notAfter(cert);
-
-    var->value= my_asn1_time_to_string(not_after, buff,
-                                       SHOW_VAR_FUNC_BUFF_SIZE);
-    if (!var->value)
-      return 1;
-  }
-  else
-    var->value= empty_c_string;
-  return 0;
-}
-
 #endif /* HAVE_OPENSSL && !EMBEDDED_LIBRARY */
 
 
@@ -7951,37 +6603,29 @@ SHOW_VAR status_vars[]= {
   {"Com",                      (char*) com_status_vars, SHOW_ARRAY},
   {"Compression",              (char*) &show_net_compression, SHOW_FUNC},
   {"Connections",              (char*) &thread_id,              SHOW_LONG_NOFLUSH},
-  {"Connection_errors_accept", (char*) &connection_errors_accept, SHOW_LONG},
-  {"Connection_errors_internal", (char*) &connection_errors_internal, SHOW_LONG},
-  {"Connection_errors_max_connections", (char*) &connection_errors_max_connection, SHOW_LONG},
-  {"Connection_errors_peer_address", (char*) &connection_errors_peer_addr, SHOW_LONG},
-  {"Connection_errors_select", (char*) &connection_errors_select, SHOW_LONG},
-  {"Connection_errors_tcpwrap", (char*) &connection_errors_tcpwrap, SHOW_LONG},
-  {"Created_tmp_disk_tables",  (char*) offsetof(STATUS_VAR, created_tmp_disk_tables), SHOW_LONGLONG_STATUS},
-  {"Created_tmp_files",        (char*) &my_tmp_file_created, SHOW_LONG},
-  {"Created_tmp_tables",       (char*) offsetof(STATUS_VAR, created_tmp_tables), SHOW_LONGLONG_STATUS},
+  {"Created_tmp_disk_tables",  (char*) offsetof(STATUS_VAR, created_tmp_disk_tables), SHOW_LONG_STATUS},
+  {"Created_tmp_files",	       (char*) &my_tmp_file_created,	SHOW_LONG},
+  {"Created_tmp_tables",       (char*) offsetof(STATUS_VAR, created_tmp_tables), SHOW_LONG_STATUS},
   {"Delayed_errors",           (char*) &delayed_insert_errors,  SHOW_LONG},
   {"Delayed_insert_threads",   (char*) &delayed_insert_threads, SHOW_LONG_NOFLUSH},
   {"Delayed_writes",           (char*) &delayed_insert_writes,  SHOW_LONG},
   {"Flush_commands",           (char*) &refresh_version,        SHOW_LONG_NOFLUSH},
-  {"Handler_commit",           (char*) offsetof(STATUS_VAR, ha_commit_count), SHOW_LONGLONG_STATUS},
-  {"Handler_delete",           (char*) offsetof(STATUS_VAR, ha_delete_count), SHOW_LONGLONG_STATUS},
-  {"Handler_discover",         (char*) offsetof(STATUS_VAR, ha_discover_count), SHOW_LONGLONG_STATUS},
-  {"Handler_external_lock",    (char*) offsetof(STATUS_VAR, ha_external_lock_count), SHOW_LONGLONG_STATUS},
-  {"Handler_mrr_init",         (char*) offsetof(STATUS_VAR, ha_multi_range_read_init_count),  SHOW_LONGLONG_STATUS},
-  {"Handler_prepare",          (char*) offsetof(STATUS_VAR, ha_prepare_count),  SHOW_LONGLONG_STATUS},
-  {"Handler_read_first",       (char*) offsetof(STATUS_VAR, ha_read_first_count), SHOW_LONGLONG_STATUS},
-  {"Handler_read_key",         (char*) offsetof(STATUS_VAR, ha_read_key_count), SHOW_LONGLONG_STATUS},
-  {"Handler_read_last",        (char*) offsetof(STATUS_VAR, ha_read_last_count), SHOW_LONGLONG_STATUS},
-  {"Handler_read_next",        (char*) offsetof(STATUS_VAR, ha_read_next_count), SHOW_LONGLONG_STATUS},
-  {"Handler_read_prev",        (char*) offsetof(STATUS_VAR, ha_read_prev_count), SHOW_LONGLONG_STATUS},
-  {"Handler_read_rnd",         (char*) offsetof(STATUS_VAR, ha_read_rnd_count), SHOW_LONGLONG_STATUS},
-  {"Handler_read_rnd_next",    (char*) offsetof(STATUS_VAR, ha_read_rnd_next_count), SHOW_LONGLONG_STATUS},
-  {"Handler_rollback",         (char*) offsetof(STATUS_VAR, ha_rollback_count), SHOW_LONGLONG_STATUS},
-  {"Handler_savepoint",        (char*) offsetof(STATUS_VAR, ha_savepoint_count), SHOW_LONGLONG_STATUS},
-  {"Handler_savepoint_rollback",(char*) offsetof(STATUS_VAR, ha_savepoint_rollback_count), SHOW_LONGLONG_STATUS},
-  {"Handler_update",           (char*) offsetof(STATUS_VAR, ha_update_count), SHOW_LONGLONG_STATUS},
-  {"Handler_write",            (char*) offsetof(STATUS_VAR, ha_write_count), SHOW_LONGLONG_STATUS},
+  {"Handler_commit",           (char*) offsetof(STATUS_VAR, ha_commit_count), SHOW_LONG_STATUS},
+  {"Handler_delete",           (char*) offsetof(STATUS_VAR, ha_delete_count), SHOW_LONG_STATUS},
+  {"Handler_discover",         (char*) offsetof(STATUS_VAR, ha_discover_count), SHOW_LONG_STATUS},
+  {"Handler_prepare",          (char*) offsetof(STATUS_VAR, ha_prepare_count),  SHOW_LONG_STATUS},
+  {"Handler_read_first",       (char*) offsetof(STATUS_VAR, ha_read_first_count), SHOW_LONG_STATUS},
+  {"Handler_read_key",         (char*) offsetof(STATUS_VAR, ha_read_key_count), SHOW_LONG_STATUS},
+  {"Handler_read_last",        (char*) offsetof(STATUS_VAR, ha_read_last_count), SHOW_LONG_STATUS},
+  {"Handler_read_next",        (char*) offsetof(STATUS_VAR, ha_read_next_count), SHOW_LONG_STATUS},
+  {"Handler_read_prev",        (char*) offsetof(STATUS_VAR, ha_read_prev_count), SHOW_LONG_STATUS},
+  {"Handler_read_rnd",         (char*) offsetof(STATUS_VAR, ha_read_rnd_count), SHOW_LONG_STATUS},
+  {"Handler_read_rnd_next",    (char*) offsetof(STATUS_VAR, ha_read_rnd_next_count), SHOW_LONG_STATUS},
+  {"Handler_rollback",         (char*) offsetof(STATUS_VAR, ha_rollback_count), SHOW_LONG_STATUS},
+  {"Handler_savepoint",        (char*) offsetof(STATUS_VAR, ha_savepoint_count), SHOW_LONG_STATUS},
+  {"Handler_savepoint_rollback",(char*) offsetof(STATUS_VAR, ha_savepoint_rollback_count), SHOW_LONG_STATUS},
+  {"Handler_update",           (char*) offsetof(STATUS_VAR, ha_update_count), SHOW_LONG_STATUS},
+  {"Handler_write",            (char*) offsetof(STATUS_VAR, ha_write_count), SHOW_LONG_STATUS},
   {"Key_blocks_not_flushed",   (char*) offsetof(KEY_CACHE, global_blocks_changed), SHOW_KEY_CACHE_LONG},
   {"Key_blocks_unused",        (char*) offsetof(KEY_CACHE, blocks_unused), SHOW_KEY_CACHE_LONG},
   {"Key_blocks_used",          (char*) offsetof(KEY_CACHE, blocks_used), SHOW_KEY_CACHE_LONG},
@@ -7990,7 +6634,6 @@ SHOW_VAR status_vars[]= {
   {"Key_write_requests",       (char*) offsetof(KEY_CACHE, global_cache_w_requests), SHOW_KEY_CACHE_LONGLONG},
   {"Key_writes",               (char*) offsetof(KEY_CACHE, global_cache_write), SHOW_KEY_CACHE_LONGLONG},
   {"Last_query_cost",          (char*) offsetof(STATUS_VAR, last_query_cost), SHOW_DOUBLE_STATUS},
-  {"Last_query_partial_plans", (char*) offsetof(STATUS_VAR, last_query_partial_plans), SHOW_LONGLONG_STATUS},
   {"Max_used_connections",     (char*) &max_used_connections,  SHOW_LONG},
   {"Not_flushed_delayed_rows", (char*) &delayed_rows_in_use,    SHOW_LONG_NOFLUSH},
   {"Open_files",               (char*) &my_file_opened,         SHOW_LONG_NOFLUSH},
@@ -7998,8 +6641,8 @@ SHOW_VAR status_vars[]= {
   {"Open_table_definitions",   (char*) &show_table_definitions, SHOW_FUNC},
   {"Open_tables",              (char*) &show_open_tables,       SHOW_FUNC},
   {"Opened_files",             (char*) &my_file_total_opened, SHOW_LONG_NOFLUSH},
-  {"Opened_tables",            (char*) offsetof(STATUS_VAR, opened_tables), SHOW_LONGLONG_STATUS},
-  {"Opened_table_definitions", (char*) offsetof(STATUS_VAR, opened_shares), SHOW_LONGLONG_STATUS},
+  {"Opened_tables",            (char*) offsetof(STATUS_VAR, opened_tables), SHOW_LONG_STATUS},
+  {"Opened_table_definitions", (char*) offsetof(STATUS_VAR, opened_shares), SHOW_LONG_STATUS},
   {"Prepared_stmt_count",      (char*) &show_prepared_stmt_count, SHOW_FUNC},
 #ifdef HAVE_QUERY_CACHE
   {"Qcache_free_blocks",       (char*) &query_cache.free_memory_blocks, SHOW_LONG_NOFLUSH},
@@ -8012,29 +6655,28 @@ SHOW_VAR status_vars[]= {
   {"Qcache_total_blocks",      (char*) &query_cache.total_blocks, SHOW_LONG_NOFLUSH},
 #endif /*HAVE_QUERY_CACHE*/
   {"Queries",                  (char*) &show_queries,            SHOW_FUNC},
-  {"Questions",                (char*) offsetof(STATUS_VAR, questions), SHOW_LONGLONG_STATUS},
-  {"Select_full_join",         (char*) offsetof(STATUS_VAR, select_full_join_count), SHOW_LONGLONG_STATUS},
-  {"Select_full_range_join",   (char*) offsetof(STATUS_VAR, select_full_range_join_count), SHOW_LONGLONG_STATUS},
-  {"Select_range",             (char*) offsetof(STATUS_VAR, select_range_count), SHOW_LONGLONG_STATUS},
-  {"Select_range_check",       (char*) offsetof(STATUS_VAR, select_range_check_count), SHOW_LONGLONG_STATUS},
-  {"Select_scan",	       (char*) offsetof(STATUS_VAR, select_scan_count), SHOW_LONGLONG_STATUS},
-  {"Slave_open_temp_tables",   (char*) &slave_open_temp_tables, SHOW_INT},
+  {"Questions",                (char*) offsetof(STATUS_VAR, questions), SHOW_LONG_STATUS},
+#ifdef HAVE_REPLICATION
+  {"Rpl_status",               (char*) &show_rpl_status,          SHOW_FUNC},
+#endif
+  {"Select_full_join",         (char*) offsetof(STATUS_VAR, select_full_join_count), SHOW_LONG_STATUS},
+  {"Select_full_range_join",   (char*) offsetof(STATUS_VAR, select_full_range_join_count), SHOW_LONG_STATUS},
+  {"Select_range",             (char*) offsetof(STATUS_VAR, select_range_count), SHOW_LONG_STATUS},
+  {"Select_range_check",       (char*) offsetof(STATUS_VAR, select_range_check_count), SHOW_LONG_STATUS},
+  {"Select_scan",	       (char*) offsetof(STATUS_VAR, select_scan_count), SHOW_LONG_STATUS},
+  {"Slave_open_temp_tables",   (char*) &slave_open_temp_tables, SHOW_LONG},
 #ifdef HAVE_REPLICATION
   {"Slave_retried_transactions",(char*) &show_slave_retried_trans, SHOW_FUNC},
   {"Slave_heartbeat_period",   (char*) &show_heartbeat_period, SHOW_FUNC},
   {"Slave_received_heartbeats",(char*) &show_slave_received_heartbeats, SHOW_FUNC},
-  {"Slave_last_heartbeat",     (char*) &show_slave_last_heartbeat, SHOW_FUNC},
-#ifndef DBUG_OFF
-  {"Slave_rows_last_search_algorithm_used",(char*) &show_slave_rows_last_search_algorithm_used, SHOW_FUNC},
-#endif
   {"Slave_running",            (char*) &show_slave_running,     SHOW_FUNC},
 #endif
   {"Slow_launch_threads",      (char*) &slow_launch_threads,    SHOW_LONG},
-  {"Slow_queries",             (char*) offsetof(STATUS_VAR, long_query_count), SHOW_LONGLONG_STATUS},
-  {"Sort_merge_passes",        (char*) offsetof(STATUS_VAR, filesort_merge_passes), SHOW_LONGLONG_STATUS},
-  {"Sort_range",               (char*) offsetof(STATUS_VAR, filesort_range_count), SHOW_LONGLONG_STATUS},
-  {"Sort_rows",                (char*) offsetof(STATUS_VAR, filesort_rows), SHOW_LONGLONG_STATUS},
-  {"Sort_scan",                (char*) offsetof(STATUS_VAR, filesort_scan_count), SHOW_LONGLONG_STATUS},
+  {"Slow_queries",             (char*) offsetof(STATUS_VAR, long_query_count), SHOW_LONG_STATUS},
+  {"Sort_merge_passes",	       (char*) offsetof(STATUS_VAR, filesort_merge_passes), SHOW_LONG_STATUS},
+  {"Sort_range",	       (char*) offsetof(STATUS_VAR, filesort_range_count), SHOW_LONG_STATUS},
+  {"Sort_rows",		       (char*) offsetof(STATUS_VAR, filesort_rows), SHOW_LONG_STATUS},
+  {"Sort_scan",		       (char*) offsetof(STATUS_VAR, filesort_scan_count), SHOW_LONG_STATUS},
 #ifdef HAVE_OPENSSL
 #ifndef EMBEDDED_LIBRARY
   {"Ssl_accept_renegotiates",  (char*) &show_ssl_ctx_sess_accept_renegotiate, SHOW_FUNC},
@@ -8060,29 +6702,19 @@ SHOW_VAR status_vars[]= {
   {"Ssl_verify_depth",         (char*) &show_ssl_get_verify_depth, SHOW_FUNC},
   {"Ssl_verify_mode",          (char*) &show_ssl_get_verify_mode, SHOW_FUNC},
   {"Ssl_version",              (char*) &show_ssl_get_version, SHOW_FUNC},
-  {"Ssl_server_not_before",    (char*) &show_ssl_get_server_not_before,
-    SHOW_FUNC},
-  {"Ssl_server_not_after",     (char*) &show_ssl_get_server_not_after,
-    SHOW_FUNC},
-#ifndef HAVE_YASSL
-  {"Rsa_public_key",           (char*) &show_rsa_public_key, SHOW_FUNC},
-#endif
 #endif
 #endif /* HAVE_OPENSSL */
   {"Table_locks_immediate",    (char*) &locks_immediate,        SHOW_LONG},
   {"Table_locks_waited",       (char*) &locks_waited,           SHOW_LONG},
-  {"Table_open_cache_hits",    (char*) offsetof(STATUS_VAR, table_open_cache_hits), SHOW_LONGLONG_STATUS},
-  {"Table_open_cache_misses",  (char*) offsetof(STATUS_VAR, table_open_cache_misses), SHOW_LONGLONG_STATUS},
-  {"Table_open_cache_overflows",(char*) offsetof(STATUS_VAR, table_open_cache_overflows), SHOW_LONGLONG_STATUS},
 #ifdef HAVE_MMAP
   {"Tc_log_max_pages_used",    (char*) &tc_log_max_pages_used,  SHOW_LONG},
   {"Tc_log_page_size",         (char*) &tc_log_page_size,       SHOW_LONG},
   {"Tc_log_page_waits",        (char*) &tc_log_page_waits,      SHOW_LONG},
 #endif
-  {"Threads_cached",           (char*) &blocked_pthread_count,    SHOW_LONG_NOFLUSH},
+  {"Threads_cached",           (char*) &cached_thread_count,    SHOW_LONG_NOFLUSH},
   {"Threads_connected",        (char*) &connection_count,       SHOW_INT},
-  {"Threads_created",        (char*) &thread_created,   SHOW_LONG_NOFLUSH},
-  {"Threads_running",          (char*) &num_thread_running,     SHOW_INT},
+  {"Threads_created",	       (char*) &thread_created,		SHOW_LONG_NOFLUSH},
+  {"Threads_running",          (char*) &thread_running,         SHOW_INT},
   {"Uptime",                   (char*) &show_starttime,         SHOW_FUNC},
 #ifdef ENABLED_PROFILING
   {"Uptime_since_flush_status",(char*) &show_flushstatustime,   SHOW_FUNC},
@@ -8090,11 +6722,10 @@ SHOW_VAR status_vars[]= {
   {NullS, NullS, SHOW_LONG}
 };
 
-void add_terminator(vector<my_option> *options)
+bool add_terminator(DYNAMIC_ARRAY *options)
 {
-  my_option empty_element=
-    {0, 0, 0, 0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0};
-  options->push_back(empty_element);
+  my_option empty_element= {0, 0, 0, 0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0};
+  return insert_dynamic(options, (uchar *)&empty_element);
 }
 
 #ifndef EMBEDDED_LIBRARY
@@ -8103,14 +6734,14 @@ static void print_version(void)
   set_server_version();
 
   printf("%s  Ver %s for %s on %s (%s)\n",my_progname,
-   server_version,SYSTEM_TYPE,MACHINE_TYPE, MYSQL_COMPILATION_COMMENT);
+	 server_version,SYSTEM_TYPE,MACHINE_TYPE, MYSQL_COMPILATION_COMMENT);
 }
 
 /** Compares two options' names, treats - and _ the same */
-static bool operator<(const my_option &a, const my_option &b)
+static int option_cmp(my_option *a, my_option *b)
 {
-  const char *sa= a.name;
-  const char *sb= b.name;
+  const char *sa= a->name;
+  const char *sb= b->name;
   for (; *sa || *sb; sa++, sb++)
   {
     if (*sa < *sb)
@@ -8118,18 +6749,18 @@ static bool operator<(const my_option &a, const my_option &b)
       if (*sa == '-' && *sb == '_')
         continue;
       else
-        return true;
+        return -1;
     }
     if (*sa > *sb)
     {
       if (*sa == '_' && *sb == '-')
         continue;
       else
-        return false;
+        return 1;
     }
   }
-  DBUG_ASSERT(a.name == b.name);
-  return false;
+  DBUG_ASSERT(a->name == b->name);
+  return 0;
 }
 
 static void print_help()
@@ -8137,31 +6768,25 @@ static void print_help()
   MEM_ROOT mem_root;
   init_alloc_root(&mem_root, 4096, 4096);
 
-  all_options.pop_back();
+  pop_dynamic(&all_options);
   sys_var_add_options(&all_options, sys_var::PARSE_EARLY);
-  for (my_option *opt= my_long_early_options;
-       opt->name != NULL;
-       opt++)
-  {
-    all_options.push_back(*opt);
-  }
   add_plugin_options(&all_options, &mem_root);
-  std::sort(all_options.begin(), all_options.end(), std::less<my_option>());
+  sort_dynamic(&all_options, (qsort_cmp) option_cmp);
   add_terminator(&all_options);
 
-  my_print_help(&all_options[0]);
-  my_print_variables(&all_options[0]);
+  my_print_help((my_option*) all_options.buffer);
+  my_print_variables((my_option*) all_options.buffer);
 
   free_root(&mem_root, MYF(0));
-  vector<my_option>().swap(all_options);  // Deletes the vector contents.
+  delete_dynamic(&all_options);
 }
 
 static void usage(void)
 {
   DBUG_ENTER("usage");
   if (!(default_charset_info= get_charset_by_csname(default_character_set_name,
-                     MY_CS_PRIMARY,
-               MYF(MY_WME))))
+					           MY_CS_PRIMARY,
+						   MYF(MY_WME))))
     exit(1);
   if (!default_collation_name)
     default_collation_name= (char*) default_charset_info->name;
@@ -8235,15 +6860,15 @@ static int mysql_init_variables(void)
   opt_logname= opt_update_logname= opt_binlog_index_name= opt_slow_logname= 0;
   opt_tc_log_file= (char *)"tc.log";      // no hostname in tc_log file name !
   opt_secure_auth= 0;
-  opt_myisam_log= 0;
+  opt_bootstrap= opt_myisam_log= 0;
   mqh_used= 0;
   kill_in_progress= 0;
   cleanup_done= 0;
   server_id_supplied= 0;
   test_flags= select_errors= dropping_tables= ha_open_options=0;
-  global_thread_count= num_thread_running= kill_blocked_pthreads_flag= wake_pthread=0;
+  thread_count= thread_running= kill_cached_threads= wake_thread=0;
   slave_open_temp_tables= 0;
-  blocked_pthread_count= 0;
+  cached_thread_count= 0;
   opt_endinfo= using_udf_functions= 0;
   opt_using_transactions= 0;
   abort_loop= select_thread_in_use= signal_thread_in_use= 0;
@@ -8257,15 +6882,14 @@ static int mysql_init_variables(void)
   mysqld_user= mysqld_chroot= opt_init_file= opt_bin_logname = 0;
   prepared_stmt_count= 0;
   mysqld_unix_port= opt_mysql_tmpdir= my_bind_addr_str= NullS;
-  memset(&mysql_tmpdir_list, 0, sizeof(mysql_tmpdir_list));
-  memset(&global_status_var, 0, sizeof(global_status_var));
+  bzero((uchar*) &mysql_tmpdir_list, sizeof(mysql_tmpdir_list));
+  bzero((char *) &global_status_var, sizeof(global_status_var));
   opt_large_pages= 0;
   opt_super_large_pages= 0;
 #if defined(ENABLED_DEBUG_SYNC)
   opt_debug_sync_timeout= 0;
 #endif /* defined(ENABLED_DEBUG_SYNC) */
   key_map_full.set_all();
-  server_uuid[0]= 0;
 
   /* Character sets */
   system_charset_info= &my_charset_utf8_general_ci;
@@ -8275,22 +6899,20 @@ static int mysql_init_variables(void)
   character_set_filesystem= &my_charset_bin;
 
   opt_specialflag= SPECIAL_ENGLISH;
-  unix_sock= MYSQL_INVALID_SOCKET;
-  ip_sock= MYSQL_INVALID_SOCKET;
+  unix_sock= ip_sock= INVALID_SOCKET;
   mysql_home_ptr= mysql_home;
   pidfile_name_ptr= pidfile_name;
   log_error_file_ptr= log_error_file;
   lc_messages_dir_ptr= lc_messages_dir;
   protocol_version= PROTOCOL_VERSION;
   what_to_log= ~ (1L << (uint) COM_TIME);
-  refresh_version= 1L;  /* Increments on each reload */
+  refresh_version= 1L;	/* Increments on each reload */
   global_query_id= thread_id= 1L;
-  my_atomic_rwlock_init(&opt_binlog_max_flush_queue_time_lock);
   my_atomic_rwlock_init(&global_query_id_lock);
   my_atomic_rwlock_init(&thread_running_lock);
   strmov(server_version, MYSQL_SERVER_VERSION);
-  global_thread_list= new std::set<THD*>;
-  waiting_thd_list= new std::list<THD*>;
+  threads.empty();
+  thread_cache.empty();
   key_caches.empty();
   if (!(dflt_key_cache= get_or_create_key_cache(default_key_cache_base.str,
                                                 default_key_cache_base.length)))
@@ -8308,14 +6930,9 @@ static int mysql_init_variables(void)
   /* Replication parameters */
   master_info_file= (char*) "master.info",
     relay_log_info_file= (char*) "relay-log.info";
-  report_user= report_password = report_host= 0;  /* TO BE DELETED */
+  report_user= report_password = report_host= 0;	/* TO BE DELETED */
   opt_relay_logname= opt_relaylog_index_name= 0;
-  log_bin_basename= NULL;
-  log_bin_index= NULL;
 
-  /* Handler variables */
-  total_ha= 0;
-  total_ha_2pc= 0;
   /* Variables in libraries */
   charsets_dir= 0;
   default_character_set_name= (char*) MYSQL_DEFAULT_CHARSET_NAME;
@@ -8323,11 +6940,11 @@ static int mysql_init_variables(void)
   character_set_filesystem_name= (char*) "binary";
   lc_messages= (char*) "en_US";
   lc_time_names_name= (char*) "en_US";
-
+  
   /* Variables that depends on compile options */
 #ifndef DBUG_OFF
   default_dbug_option=IF_WIN("d:t:i:O,\\mysqld.trace",
-           "d:t:i:o,/tmp/mysqld.trace");
+			     "d:t:i:o,/tmp/mysqld.trace");
 #endif
   opt_error_log= IF_WIN(1,0);
 #ifdef ENABLED_PROFILING
@@ -8404,7 +7021,7 @@ static int mysql_init_variables(void)
     }
     else
       my_path(prg_dev, my_progname, "mysql/bin");
-    strcat(prg_dev,"/../");     // Remove 'bin' to get base dir
+    strcat(prg_dev,"/../");			// Remove 'bin' to get base dir
     cleanup_dirname(mysql_home,prg_dev);
   }
 #else
@@ -8418,7 +7035,7 @@ static int mysql_init_variables(void)
 
 my_bool
 mysqld_get_one_option(int optid,
-                      const struct my_option *opt MY_ATTRIBUTE((unused)),
+                      const struct my_option *opt __attribute__((unused)),
                       char *argument)
 {
   switch(optid) {
@@ -8426,7 +7043,7 @@ mysqld_get_one_option(int optid,
 #ifndef DBUG_OFF
     DBUG_SET_INITIAL(argument ? argument : default_dbug_option);
 #endif
-    opt_endinfo=1;        /* unireg: memory allocation */
+    opt_endinfo=1;				/* unireg: memory allocation */
     break;
   case 'a':
     global_system_variables.sql_mode= MODE_ANSI;
@@ -8434,11 +7051,14 @@ mysqld_get_one_option(int optid,
     break;
   case 'b':
     strmake(mysql_home,argument,sizeof(mysql_home)-1);
-    mysql_home_ptr= mysql_home;
     break;
   case 'C':
     if (default_collation_name == compiled_default_collation_name)
       default_collation_name= 0;
+    break;
+  case 'l':
+    WARN_DEPRECATED(NULL, 7, 0, "--log", "'--general-log'/'--general-log-file'");
+    opt_log=1;
     break;
   case 'h':
     strmake(mysql_real_data_home,argument, sizeof(mysql_real_data_home)-1);
@@ -8452,22 +7072,11 @@ mysqld_get_one_option(int optid,
       sql_print_warning("Ignoring user change to '%s' because the user was set to '%s' earlier on the command line\n", argument, mysqld_user);
     break;
   case 'L':
-    WARN_DEPRECATED(NULL, "--language/-l", "'--lc-messages-dir'");
-    /* Note:  fall-through */
-  case OPT_LC_MESSAGES_DIRECTORY:
     strmake(lc_messages_dir, argument, sizeof(lc_messages_dir)-1);
     lc_messages_dir_ptr= lc_messages_dir;
     break;
   case OPT_BINLOG_FORMAT:
     binlog_format_used= true;
-    break;
-  case OPT_BINLOGGING_IMPOSSIBLE_MODE:
-    WARN_DEPRECATED(NULL, "--binlogging_impossible_mode",
-                    "'--binlog_error_action'");
-    break;
-  case OPT_SIMPLIFIED_BINLOG_GTID_RECOVERY:
-    WARN_DEPRECATED(NULL, "--simplified_binlog_gtid_recovery",
-                    "'--binlog_gtid_simple_recovery'");
     break;
 #include <sslopt-case.h>
 #ifndef EMBEDDED_LIBRARY
@@ -8477,11 +7086,11 @@ mysqld_get_one_option(int optid,
 #endif /*EMBEDDED_LIBRARY*/
   case 'W':
     if (!argument)
-      log_warnings++;
+      global_system_variables.log_warnings++;
     else if (argument == disabled_my_option)
-      log_warnings= 0L;
+      global_system_variables.log_warnings= 0L;
     else
-      log_warnings= atoi(argument);
+      global_system_variables.log_warnings= atoi(argument);
     break;
   case 'T':
     test_flags= argument ? (uint) atoi(argument) : 0;
@@ -8494,7 +7103,7 @@ mysqld_get_one_option(int optid,
     opt_myisam_log=1;
     break;
   case (int) OPT_BIN_LOG:
-    opt_bin_log= MY_TEST(argument != disabled_my_option);
+    opt_bin_log= test(argument != disabled_my_option);
     break;
 #ifdef HAVE_REPLICATION
   case (int)OPT_REPLICATE_IGNORE_DB:
@@ -8516,15 +7125,16 @@ mysqld_get_one_option(int optid,
       sql_print_error("Bad syntax in replicate-rewrite-db - missing '->'!\n");
       return 1;
     }
-    val= p + 2;
-    while(p > argument && my_isspace(mysqld_charset, p[-1]))
-      p--;
-    *p= 0;
-    if (!*key)
+    val= p--;
+    while (my_isspace(mysqld_charset, *p) && p > argument)
+      *p-- = 0;
+    if (p == argument)
     {
       sql_print_error("Bad syntax in replicate-rewrite-db - empty FROM db!\n");
       return 1;
     }
+    *val= 0;
+    val+= 2;
     while (*val && my_isspace(mysqld_charset, *val))
       val++;
     if (!*val)
@@ -8549,7 +7159,7 @@ mysqld_get_one_option(int optid,
   }
   case (int)OPT_REPLICATE_DO_TABLE:
   {
-    if (rpl_filter->add_do_table_array(argument))
+    if (rpl_filter->add_do_table(argument))
     {
       sql_print_error("Could not add do table rule '%s'!\n", argument);
       return 1;
@@ -8576,7 +7186,7 @@ mysqld_get_one_option(int optid,
   }
   case (int)OPT_REPLICATE_IGNORE_TABLE:
   {
-    if (rpl_filter->add_ignore_table_array(argument))
+    if (rpl_filter->add_ignore_table(argument))
     {
       sql_print_error("Could not add ignore table rule '%s'!\n", argument);
       return 1;
@@ -8584,8 +7194,9 @@ mysqld_get_one_option(int optid,
     break;
   }
 #endif /* HAVE_REPLICATION */
-  case (int) OPT_MASTER_RETRY_COUNT:
-    WARN_DEPRECATED(NULL, "--master-retry-count", "'CHANGE MASTER TO master_retry_count = <num>'");
+  case (int) OPT_SLOW_QUERY_LOG:
+    WARN_DEPRECATED(NULL, 7, 0, "--log-slow-queries", "'--slow-query-log'/'--slow-query-log-file'");
+    opt_slow_log= 1;
     break;
   case (int) OPT_SKIP_NEW:
     opt_specialflag|= SPECIAL_NO_NEW_FUNC;
@@ -8598,6 +7209,20 @@ mysqld_get_one_option(int optid,
 #ifdef HAVE_QUERY_CACHE
     query_cache_size=0;
 #endif
+    break;
+  case (int) OPT_SAFE:
+    opt_specialflag|= SPECIAL_SAFE_MODE;
+    delay_key_write_options= DELAY_KEY_WRITE_NONE;
+    myisam_recover_options= HA_RECOVER_DEFAULT;
+    ha_open_options&= ~(HA_OPEN_DELAY_KEY_WRITE);
+    sql_print_warning("The syntax '--safe-mode' is deprecated and will be "
+                      "removed in a future release.");
+    break;
+  case (int) OPT_SKIP_PRIOR:
+    opt_specialflag|= SPECIAL_NO_PRIOR;
+    sql_print_warning("The --skip-thread-priority startup option is deprecated "
+                      "and will be removed in MySQL 7.0. This option has no effect "
+                      "as the implied behavior is already the default.");
     break;
   case (int) OPT_SKIP_HOST_CACHE:
     opt_specialflag|= SPECIAL_NO_HOST_CACHE;
@@ -8614,13 +7239,16 @@ mysqld_get_one_option(int optid,
     break;
   case OPT_CONSOLE:
     if (opt_console)
-      opt_error_log= 0;     // Force logs to stdout
+      opt_error_log= 0;			// Force logs to stdout
     break;
   case OPT_BOOTSTRAP:
-    opt_bootstrap=1;
+    opt_noacl=opt_bootstrap=1;
     break;
   case OPT_SERVER_ID:
     server_id_supplied = 1;
+    break;
+  case OPT_ONE_THREAD:
+    thread_handling= SCHEDULER_ONE_THREAD_PER_CONNECTION;
     break;
   case OPT_LOWER_CASE_TABLE_NAMES:
     lower_case_table_names_used= 1;
@@ -8661,162 +7289,9 @@ mysqld_get_one_option(int optid,
     if (argument == NULL) /* no argument */
       log_error_file_ptr= const_cast<char*>("");
     break;
-
-  case OPT_IGNORE_DB_DIRECTORY:
-    if (*argument == 0)
-      ignore_db_dirs_reset();
-    else
-    {
-      if (push_ignored_db_dir(argument))
-      {
-        sql_print_error("Can't start server: "
-                        "cannot process --ignore-db-dir=%.*s", 
-                        FN_REFLEN, argument);
-        return 1;
-      }
-    }
-    break;
-
-
-  case OPT_PLUGIN_LOAD:
-    free_list(opt_plugin_load_list_ptr);
-    /* fall through */
-  case OPT_PLUGIN_LOAD_ADD:
-    opt_plugin_load_list_ptr->push_back(new i_string(argument));
-    break;
-  case OPT_DEFAULT_AUTH:
-    if (set_default_auth_plugin(argument, strlen(argument)))
-    {
-      sql_print_error("Can't start server: "
-                      "Invalid value for --default-authentication-plugin");
-      return 1;
-    }
-    break;
-  case OPT_SECURE_AUTH:
-    if (opt_secure_auth == 0)
-      WARN_DEPRECATED(NULL, "pre-4.1 password hash", "post-4.1 password hash");
-    break;
-  case OPT_PFS_INSTRUMENT:
-    {
-#ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
-#ifndef EMBEDDED_LIBRARY
-
-      /*
-        Parse instrument name and value from argument string. Handle leading
-        and trailing spaces. Also handle single quotes.
-
-        Acceptable:
-          performance_schema_instrument = ' foo/%/bar/  =  ON  '
-          performance_schema_instrument = '%=OFF'
-        Not acceptable:
-          performance_schema_instrument = '' foo/%/bar = ON ''
-          performance_schema_instrument = '%='OFF''
-      */
-      char *name= argument,*p= NULL, *val= NULL;
-      my_bool quote= false; /* true if quote detected */
-      my_bool error= true;  /* false if no errors detected */
-      const int PFS_BUFFER_SIZE= 128;
-      char orig_argument[PFS_BUFFER_SIZE+1];
-      orig_argument[0]= 0;
-
-      if (!argument)
-        goto pfs_error;
-
-      /* Save original argument string for error reporting */
-      strncpy(orig_argument, argument, PFS_BUFFER_SIZE);
-
-      /* Split instrument name and value at the equal sign */
-      if (!(p= strchr(argument, '=')))
-        goto pfs_error;
-
-      /* Get option value */
-      val= p + 1;
-      if (!*val)
-        goto pfs_error;
-
-      /* Trim leading spaces and quote from the instrument name */
-      while (*name && (my_isspace(mysqld_charset, *name) || (*name == '\'')))
-      {
-        /* One quote allowed */
-        if (*name == '\'')
-        {
-          if (!quote)
-            quote= true;
-          else
-            goto pfs_error;
-        }
-        name++;
-      }
-
-      /* Trim trailing spaces from instrument name */
-      while ((p > name) && my_isspace(mysqld_charset, p[-1]))
-        p--;
-      *p= 0;
-
-      /* Remove trailing slash from instrument name */
-      if (p > name && (p[-1] == '/'))
-        p[-1]= 0;
-
-      if (!*name)
-        goto pfs_error;
-
-      /* Trim leading spaces from option value */
-      while (*val && my_isspace(mysqld_charset, *val))
-        val++;
-
-      /* Trim trailing spaces and matching quote from value */
-      p= val + strlen(val);
-      while (p > val && (my_isspace(mysqld_charset, p[-1]) || p[-1] == '\''))
-      {
-        /* One matching quote allowed */
-        if (p[-1] == '\'')
-        {
-          if (quote)
-            quote= false;
-          else
-            goto pfs_error;
-        }
-        p--;
-      }
-
-      *p= 0;
-
-      if (!*val)
-        goto pfs_error;
-
-      /* Add instrument name and value to array of configuration options */
-      if (add_pfs_instr_to_array(name, val))
-        goto pfs_error;
-
-      error= false;
-
-pfs_error:
-      if (error)
-      {
-        my_getopt_error_reporter(WARNING_LEVEL,
-                                 "Invalid instrument name or value for "
-                                 "performance_schema_instrument '%s'",
-                                 orig_argument);
-        return 0;
-      }
-#endif /* EMBEDDED_LIBRARY */
-#endif /* WITH_PERFSCHEMA_STORAGE_ENGINE */
-      break;
-    }
-  case OPT_THREAD_CACHE_SIZE:
-    thread_cache_size_specified= true;
-    break;
-  case OPT_HOST_CACHE_SIZE:
-    host_cache_size_specified= true;
-    break;
-  case OPT_TABLE_DEFINITION_CACHE:
-    table_definition_cache_specified= true;
-    break;
-  case OPT_AVOID_TEMPORAL_UPGRADE:
-    WARN_DEPRECATED_NO_REPLACEMENT(NULL, "avoid_temporal_upgrade");
-    break;
-  case OPT_SHOW_OLD_TEMPORALS:
-    WARN_DEPRECATED_NO_REPLACEMENT(NULL, "show_old_temporals");
+  case OPT_MAX_LONG_DATA_SIZE:
+    max_long_data_size_used= true;
+    WARN_DEPRECATED(NULL, 5, 6, "--max_long_data_size", "'--max_allowed_packet'");
     break;
   }
   return 0;
@@ -8829,7 +7304,7 @@ C_MODE_START
 
 static void*
 mysql_getopt_value(const char *keyname, uint key_length,
-       const struct my_option *option, int *error)
+		   const struct my_option *option, int *error)
 {
   if (error)
     *error= 0;
@@ -8868,7 +7343,7 @@ static void option_error_reporter(enum loglevel level, const char *format, ...)
 
   /* Don't print warnings for --loose options during bootstrap */
   if (level == ERROR_LEVEL || !opt_bootstrap ||
-      log_warnings)
+      global_system_variables.log_warnings)
   {
     vprint_msg_to_log(level, format, args);
   }
@@ -8895,25 +7370,25 @@ static int get_options(int *argc_ptr, char ***argv_ptr)
   my_getopt_error_reporter= option_error_reporter;
 
   /* prepare all_options array */
-  all_options.reserve(array_elements(my_long_options));
+  my_init_dynamic_array(&all_options, sizeof(my_option),
+                        array_elements(my_long_options),
+                        array_elements(my_long_options)/4);
   for (my_option *opt= my_long_options;
        opt < my_long_options + array_elements(my_long_options) - 1;
        opt++)
-  {
-    all_options.push_back(*opt);
-  }
+    insert_dynamic(&all_options, (uchar*) opt);
   sys_var_add_options(&all_options, sys_var::PARSE_NORMAL);
   add_terminator(&all_options);
 
   /* Skip unknown options so that they may be processed later by plugins */
   my_getopt_skip_unknown= TRUE;
 
-  if ((ho_error= handle_options(argc_ptr, argv_ptr, &all_options[0],
+  if ((ho_error= handle_options(argc_ptr, argv_ptr, (my_option*)(all_options.buffer),
                                 mysqld_get_one_option)))
     return ho_error;
 
   if (!opt_help)
-    vector<my_option>().swap(all_options);  // Deletes the vector contents.
+    delete_dynamic(&all_options);
 
   /* Add back the program name handle_options removes */
   (*argc_ptr)++;
@@ -8929,29 +7404,15 @@ static int get_options(int *argc_ptr, char ***argv_ptr)
   if ((opt_log_slow_admin_statements || opt_log_queries_not_using_indexes ||
        opt_log_slow_slave_statements) &&
       !opt_slow_log)
-    sql_print_warning("options --log-slow-admin-statements, "
-                      "--log-queries-not-using-indexes and "
-                      "--log-slow-slave-statements have no effect if "
-                      "--slow-query-log is not set");
-  if (global_system_variables.net_buffer_length >
+    sql_print_warning("options --log-slow-admin-statements, --log-queries-not-using-indexes and --log-slow-slave-statements have no effect if --log_slow_queries is not set");
+  if (global_system_variables.net_buffer_length > 
       global_system_variables.max_allowed_packet)
   {
     sql_print_warning("net_buffer_length (%lu) is set to be larger "
                       "than max_allowed_packet (%lu). Please rectify.",
-                      global_system_variables.net_buffer_length,
+                      global_system_variables.net_buffer_length, 
                       global_system_variables.max_allowed_packet);
   }
-
-  /*
-    TIMESTAMP columns get implicit DEFAULT values when
-    --explicit_defaults_for_timestamp is not set. 
-    This behavior is deprecated now.
-  */
-  if (!opt_help && !global_system_variables.explicit_defaults_for_timestamp)
-    sql_print_warning("TIMESTAMP with implicit DEFAULT value is deprecated. "
-                      "Please use --explicit_defaults_for_timestamp server "
-                      "option (see documentation for more details).");
-
 
   if (log_error_file_ptr != disabled_my_option)
     opt_error_log= 1;
@@ -8982,7 +7443,7 @@ static int get_options(int *argc_ptr, char ***argv_ptr)
 
 #ifdef HAVE_REPLICATION
   if (opt_slave_skip_errors)
-    add_slave_skip_errors(opt_slave_skip_errors);
+    init_slave_skip_errors(opt_slave_skip_errors);
 #endif
 
   if (global_system_variables.max_join_size == HA_POS_ERROR)
@@ -9034,7 +7495,7 @@ static int get_options(int *argc_ptr, char ***argv_ptr)
     Set some global variables from the global_system_variables
     In most cases the global variables will not be used
   */
-  my_disable_locking= myisam_single_user= MY_TEST(opt_external_locking == 0);
+  my_disable_locking= myisam_single_user= test(opt_external_locking == 0);
   my_default_record_cache_size=global_system_variables.read_buff_size;
 
   global_system_variables.long_query_time= (ulonglong)
@@ -9061,10 +7522,17 @@ static int get_options(int *argc_ptr, char ***argv_ptr)
 #endif
 
   global_system_variables.engine_condition_pushdown=
-    MY_TEST(global_system_variables.optimizer_switch &
-            OPTIMIZER_SWITCH_ENGINE_CONDITION_PUSHDOWN);
+    test(global_system_variables.optimizer_switch &
+         OPTIMIZER_SWITCH_ENGINE_CONDITION_PUSHDOWN);
 
   opt_readonly= read_only;
+
+  /*
+    If max_long_data_size is not specified explicitly use
+    value of max_allowed_packet.
+  */
+  if (!max_long_data_size_used)
+    max_long_data_size= global_system_variables.max_allowed_packet;
 
   return 0;
 }
@@ -9116,24 +7584,24 @@ static char *get_relative_path(const char *path)
 
 bool
 fn_format_relative_to_data_home(char * to, const char *name,
-        const char *dir, const char *extension)
+				const char *dir, const char *extension)
 {
   char tmp_path[FN_REFLEN];
   if (!test_if_hard_path(dir))
   {
     strxnmov(tmp_path,sizeof(tmp_path)-1, mysql_real_data_home,
-       dir, NullS);
+	     dir, NullS);
     dir=tmp_path;
   }
   return !fn_format(to, name, dir, extension,
-        MY_APPEND_EXT | MY_UNPACK_FILENAME | MY_SAFE_PATH);
+		    MY_APPEND_EXT | MY_UNPACK_FILENAME | MY_SAFE_PATH);
 }
 
 
 /**
   Test a file path to determine if the path is compatible with the secure file
   path restriction.
-
+ 
   @param path null terminated character string
 
   @return
@@ -9190,40 +7658,6 @@ bool is_secure_file_path(char *path)
   return TRUE;
 }
 
-
-/**
-  Test a file path whether it is same as mysql data directory path.
-
-  @param path null terminated character string
-
-  @return
-    @retval TRUE The path is different from mysql data directory.
-    @retval FALSE The path is same as mysql data directory.
-*/
-bool is_mysql_datadir_path(const char *path)
-{
-  if (path == NULL)
-    return false;
-
-  char mysql_data_dir[FN_REFLEN], path_dir[FN_REFLEN];
-  convert_dirname(path_dir, path, NullS);
-  convert_dirname(mysql_data_dir, mysql_unpacked_real_data_home, NullS);
-  size_t mysql_data_home_len= dirname_length(mysql_data_dir);
-  size_t path_len = dirname_length(path_dir);
-
-  if (path_len < mysql_data_home_len)
-    return true;
-
-  if (!lower_case_file_system)
-    return(memcmp(mysql_data_dir, path_dir, mysql_data_home_len));
-
-  return(files_charset_info->coll->strnncoll(files_charset_info,
-                                            (uchar *) path_dir, path_len,
-                                            (uchar *) mysql_data_dir,
-                                            mysql_data_home_len,
-                                            TRUE));
-
-}
 
 /**
   check_secure_file_priv_path : Checks path specified through
@@ -9398,6 +7832,7 @@ bool check_secure_file_priv_path()
   return true;
 }
 
+
 static int fix_paths(void)
 {
   char buff[FN_REFLEN],*pos;
@@ -9424,14 +7859,14 @@ static int fix_paths(void)
   opt_plugin_dir_ptr= opt_plugin_dir;
 
   my_realpath(mysql_unpacked_real_data_home, mysql_real_data_home, MYF(0));
-  mysql_unpacked_real_data_home_len=
+  mysql_unpacked_real_data_home_len= 
     (int) strlen(mysql_unpacked_real_data_home);
   if (mysql_unpacked_real_data_home[mysql_unpacked_real_data_home_len-1] == FN_LIBCHAR)
     --mysql_unpacked_real_data_home_len;
 
   char *sharedir=get_relative_path(SHAREDIR);
   if (test_if_hard_path(sharedir))
-    strmake(buff,sharedir,sizeof(buff)-1);    /* purecov: tested */
+    strmake(buff,sharedir,sizeof(buff)-1);		/* purecov: tested */
   else
     strxnmov(buff,sizeof(buff)-1,mysql_home,sharedir,NullS);
   convert_dirname(buff,buff,NullS);
@@ -9442,7 +7877,7 @@ static int fix_paths(void)
     strmake(mysql_charsets_dir, charsets_dir, sizeof(mysql_charsets_dir)-1);
   else
     strxnmov(mysql_charsets_dir, sizeof(mysql_charsets_dir)-1, buff,
-       CHARSET_DIR, NullS);
+	     CHARSET_DIR, NullS);
   (void) my_load_path(mysql_charsets_dir, mysql_charsets_dir, buff);
   convert_dirname(mysql_charsets_dir, mysql_charsets_dir, NullS);
   charsets_dir=mysql_charsets_dir;
@@ -9458,7 +7893,7 @@ static int fix_paths(void)
   /*
     Convert the secure-file-priv option to system format, allowing
     a quick strcmp to check if read or write is in an allowed dir
-  */
+   */
   if (opt_bootstrap)
     opt_secure_file_priv= EMPTY_STR.str;
   secure_file_priv_nonempty= opt_secure_file_priv[0] ? true : false;
@@ -9515,7 +7950,7 @@ static int fix_paths(void)
 /**
   Check if file system used for databases is case insensitive.
 
-  @param dir_name     Directory to test
+  @param dir_name			Directory to test
 
   @retval
     -1  Don't know (Test failed)
@@ -9534,9 +7969,9 @@ static int test_if_case_insensitive(const char *dir_name)
   DBUG_ENTER("test_if_case_insensitive");
 
   fn_format(buff, glob_hostname, dir_name, ".lower-test",
-      MY_UNPACK_FILENAME | MY_REPLACE_EXT | MY_REPLACE_DIR);
+	    MY_UNPACK_FILENAME | MY_REPLACE_EXT | MY_REPLACE_DIR);
   fn_format(buff2, glob_hostname, dir_name, ".LOWER-TEST",
-      MY_UNPACK_FILENAME | MY_REPLACE_EXT | MY_REPLACE_DIR);
+	    MY_UNPACK_FILENAME | MY_REPLACE_EXT | MY_REPLACE_DIR);
   mysql_file_delete(key_file_casetest, buff2, MYF(0));
   if ((file= mysql_file_create(key_file_casetest,
                                buff, 0666, O_RDWR, MYF(0))) < 0)
@@ -9546,7 +7981,7 @@ static int test_if_case_insensitive(const char *dir_name)
   }
   mysql_file_close(file, MYF(0));
   if (mysql_file_stat(key_file_casetest, buff2, &stat_info, MYF(0)))
-    result= 1;          // Can access file
+    result= 1;					// Can access file
   mysql_file_delete(key_file_casetest, buff, MYF(MY_WME));
   DBUG_PRINT("exit", ("result: %d", result));
   DBUG_RETURN(result);
@@ -9561,6 +7996,40 @@ static int test_if_case_insensitive(const char *dir_name)
 static void create_pid_file()
 {
   File file;
+  bool check_parent_path= 1, is_path_accessible= 1;
+  char pid_filepath[FN_REFLEN], *pos= NULL;
+  /* Copy pid file name to get pid file path */
+  strcpy(pid_filepath, pidfile_name);
+
+  /* Iterate through the entire path to check if even one of the sub-dirs
+     is world-writable */
+  while (check_parent_path && (pos= strrchr(pid_filepath, FN_LIBCHAR))
+         && (pos != pid_filepath)) /* shouldn't check root */
+  {
+    *pos= '\0';  /* Trim the inner-most dir */
+    switch (is_file_or_dir_world_writable(pid_filepath))
+    {
+      case -2:
+        is_path_accessible= 0;
+        break;
+      case -1:
+        sql_perror("Can't start server: can't check PID filepath");
+        exit(1);
+      case 1:
+        sql_print_warning("Insecure configuration for --pid-file: Location "
+                          "'%s' in the path is accessible to all OS users. "
+                          "Consider choosing a different directory.",
+                          pid_filepath);
+        check_parent_path= 0;
+        break;
+      case 0:
+        continue; /* Keep checking the parent dir */
+    }
+  }
+  if (!is_path_accessible)
+  {
+    sql_print_warning("Few location(s) are inaccessible while checking PID filepath.");
+  }
   if ((file= mysql_file_create(key_file_pid, pidfile_name, 0664,
                                O_WRONLY | O_TRUNC, MYF(MY_WME))) >= 0)
   {
@@ -9623,7 +8092,7 @@ void refresh_status(THD *thd)
   add_to_status(&global_status_var, &thd->status_var);
 
   /* Reset thread's status variables */
-  memset(&thd->status_var, 0, sizeof(thd->status_var));
+  bzero((uchar*) &thd->status_var, sizeof(thd->status_var));
 
   /* Reset some global variables */
   reset_status_vars();
@@ -9640,7 +8109,7 @@ void refresh_status(THD *thd)
     not exact anyway.
   */
   mysql_mutex_lock(&LOCK_thread_count);
-  max_used_connections= get_thread_count() - delayed_insert_threads;
+  max_used_connections= thread_count-delayed_insert_threads;
   mysql_mutex_unlock(&LOCK_thread_count);
 }
 
@@ -9649,6 +8118,20 @@ void refresh_status(THD *thd)
   Instantiate variables for missing storage engines
   This section should go away soon
 *****************************************************************************/
+
+/*****************************************************************************
+  Instantiate templates
+*****************************************************************************/
+
+#ifdef HAVE_EXPLICIT_TEMPLATE_INSTANTIATION
+/* Used templates */
+template class I_List<THD>;
+template class I_List_iterator<THD>;
+template class I_List<i_string>;
+template class I_List<i_string_pair>;
+template class I_List<Statement>;
+template class I_List_iterator<Statement>;
+#endif
 
 #ifdef HAVE_PSI_INTERFACE
 #ifdef HAVE_MMAP
@@ -9659,50 +8142,26 @@ PSI_mutex_key key_PAGE_lock, key_LOCK_sync, key_LOCK_active, key_LOCK_pool;
 PSI_mutex_key key_LOCK_des_key_file;
 #endif /* HAVE_OPENSSL */
 
-PSI_mutex_key key_BINLOG_LOCK_commit;
-PSI_mutex_key key_BINLOG_LOCK_commit_queue;
-PSI_mutex_key key_BINLOG_LOCK_done;
-PSI_mutex_key key_BINLOG_LOCK_flush_queue;
-PSI_mutex_key key_BINLOG_LOCK_index;
-PSI_mutex_key key_BINLOG_LOCK_log;
-PSI_mutex_key key_BINLOG_LOCK_sync;
-PSI_mutex_key key_BINLOG_LOCK_sync_queue;
-PSI_mutex_key key_BINLOG_LOCK_xids;
-PSI_mutex_key
+PSI_mutex_key key_BINLOG_LOCK_index, key_BINLOG_LOCK_prep_xids,
   key_delayed_insert_mutex, key_hash_filo_lock, key_LOCK_active_mi,
   key_LOCK_connection_count, key_LOCK_crypt, key_LOCK_delayed_create,
   key_LOCK_delayed_insert, key_LOCK_delayed_status, key_LOCK_error_log,
   key_LOCK_gdl, key_LOCK_global_system_variables,
   key_LOCK_manager,
   key_LOCK_prepared_stmt_count,
-  key_LOCK_sql_slave_skip_counter,
-  key_LOCK_slave_net_timeout,
-  key_LOCK_server_started, key_LOCK_status,
+  key_LOCK_rpl_status, key_LOCK_server_started, key_LOCK_status,
   key_LOCK_system_variables_hash, key_LOCK_table_share, key_LOCK_thd_data,
   key_LOCK_user_conn, key_LOCK_uuid_generator, key_LOG_LOCK_log,
   key_master_info_data_lock, key_master_info_run_lock,
   key_master_info_sleep_lock,
   key_mutex_slave_reporting_capability_err_lock, key_relay_log_info_data_lock,
-  key_relay_log_info_sleep_lock,
   key_relay_log_info_log_space_lock, key_relay_log_info_run_lock,
-  key_mutex_slave_parallel_pend_jobs, key_mutex_mts_temp_tables_lock,
-  key_mutex_slave_parallel_worker_count,
-  key_mutex_slave_parallel_worker,
+  key_relay_log_info_sleep_lock,
   key_structure_guard_mutex, key_TABLE_SHARE_LOCK_ha_data,
   key_LOCK_error_messages, key_LOG_INFO_lock, key_LOCK_thread_count,
-  key_LOCK_log_throttle_qni;
+  key_PARTITION_LOCK_auto_inc;
 PSI_mutex_key key_LOCK_thd_remove;
-PSI_mutex_key key_RELAYLOG_LOCK_commit;
-PSI_mutex_key key_RELAYLOG_LOCK_commit_queue;
-PSI_mutex_key key_RELAYLOG_LOCK_done;
-PSI_mutex_key key_RELAYLOG_LOCK_flush_queue;
 PSI_mutex_key key_RELAYLOG_LOCK_index;
-PSI_mutex_key key_RELAYLOG_LOCK_log;
-PSI_mutex_key key_RELAYLOG_LOCK_sync;
-PSI_mutex_key key_RELAYLOG_LOCK_sync_queue;
-PSI_mutex_key key_RELAYLOG_LOCK_xids;
-PSI_mutex_key key_LOCK_sql_rand;
-PSI_mutex_key key_gtid_ensure_index_mutex;
 PSI_mutex_key key_LOCK_thread_created;
 
 static PSI_mutex_info all_server_mutexes[]=
@@ -9718,24 +8177,9 @@ static PSI_mutex_info all_server_mutexes[]=
   { &key_LOCK_des_key_file, "LOCK_des_key_file", PSI_FLAG_GLOBAL},
 #endif /* HAVE_OPENSSL */
 
-  { &key_BINLOG_LOCK_commit, "MYSQL_BIN_LOG::LOCK_commit", 0 },
-  { &key_BINLOG_LOCK_commit_queue, "MYSQL_BIN_LOG::LOCK_commit_queue", 0 },
-  { &key_BINLOG_LOCK_done, "MYSQL_BIN_LOG::LOCK_done", 0 },
-  { &key_BINLOG_LOCK_flush_queue, "MYSQL_BIN_LOG::LOCK_flush_queue", 0 },
   { &key_BINLOG_LOCK_index, "MYSQL_BIN_LOG::LOCK_index", 0},
-  { &key_BINLOG_LOCK_log, "MYSQL_BIN_LOG::LOCK_log", 0},
-  { &key_BINLOG_LOCK_sync, "MYSQL_BIN_LOG::LOCK_sync", 0},
-  { &key_BINLOG_LOCK_sync_queue, "MYSQL_BIN_LOG::LOCK_sync_queue", 0 },
-  { &key_BINLOG_LOCK_xids, "MYSQL_BIN_LOG::LOCK_xids", 0 },
-  { &key_RELAYLOG_LOCK_commit, "MYSQL_RELAY_LOG::LOCK_commit", 0},
-  { &key_RELAYLOG_LOCK_commit_queue, "MYSQL_RELAY_LOG::LOCK_commit_queue", 0 },
-  { &key_RELAYLOG_LOCK_done, "MYSQL_RELAY_LOG::LOCK_done", 0 },
-  { &key_RELAYLOG_LOCK_flush_queue, "MYSQL_RELAY_LOG::LOCK_flush_queue", 0 },
+  { &key_BINLOG_LOCK_prep_xids, "MYSQL_BIN_LOG::LOCK_prep_xids", 0},
   { &key_RELAYLOG_LOCK_index, "MYSQL_RELAY_LOG::LOCK_index", 0},
-  { &key_RELAYLOG_LOCK_log, "MYSQL_RELAY_LOG::LOCK_log", 0},
-  { &key_RELAYLOG_LOCK_sync, "MYSQL_RELAY_LOG::LOCK_sync", 0},
-  { &key_RELAYLOG_LOCK_sync_queue, "MYSQL_RELAY_LOG::LOCK_sync_queue", 0 },
-  { &key_RELAYLOG_LOCK_xids, "MYSQL_RELAY_LOG::LOCK_xids", 0},
   { &key_delayed_insert_mutex, "Delayed_insert::mutex", 0},
   { &key_hash_filo_lock, "hash_filo::lock", 0},
   { &key_LOCK_active_mi, "LOCK_active_mi", PSI_FLAG_GLOBAL},
@@ -9749,8 +8193,7 @@ static PSI_mutex_info all_server_mutexes[]=
   { &key_LOCK_global_system_variables, "LOCK_global_system_variables", PSI_FLAG_GLOBAL},
   { &key_LOCK_manager, "LOCK_manager", PSI_FLAG_GLOBAL},
   { &key_LOCK_prepared_stmt_count, "LOCK_prepared_stmt_count", PSI_FLAG_GLOBAL},
-  { &key_LOCK_sql_slave_skip_counter, "LOCK_sql_slave_skip_counter", PSI_FLAG_GLOBAL},
-  { &key_LOCK_slave_net_timeout, "LOCK_slave_net_timeout", PSI_FLAG_GLOBAL},
+  { &key_LOCK_rpl_status, "LOCK_rpl_status", PSI_FLAG_GLOBAL},
   { &key_LOCK_server_started, "LOCK_server_started", PSI_FLAG_GLOBAL},
   { &key_LOCK_status, "LOCK_status", PSI_FLAG_GLOBAL},
   { &key_LOCK_system_variables_hash, "LOCK_system_variables_hash", PSI_FLAG_GLOBAL},
@@ -9758,87 +8201,59 @@ static PSI_mutex_info all_server_mutexes[]=
   { &key_LOCK_thd_data, "THD::LOCK_thd_data", 0},
   { &key_LOCK_user_conn, "LOCK_user_conn", PSI_FLAG_GLOBAL},
   { &key_LOCK_uuid_generator, "LOCK_uuid_generator", PSI_FLAG_GLOBAL},
-  { &key_LOCK_sql_rand, "LOCK_sql_rand", PSI_FLAG_GLOBAL},
   { &key_LOG_LOCK_log, "LOG::LOCK_log", 0},
   { &key_master_info_data_lock, "Master_info::data_lock", 0},
   { &key_master_info_run_lock, "Master_info::run_lock", 0},
   { &key_master_info_sleep_lock, "Master_info::sleep_lock", 0},
   { &key_mutex_slave_reporting_capability_err_lock, "Slave_reporting_capability::err_lock", 0},
   { &key_relay_log_info_data_lock, "Relay_log_info::data_lock", 0},
-  { &key_relay_log_info_sleep_lock, "Relay_log_info::sleep_lock", 0},
   { &key_relay_log_info_log_space_lock, "Relay_log_info::log_space_lock", 0},
   { &key_relay_log_info_run_lock, "Relay_log_info::run_lock", 0},
-  { &key_mutex_slave_parallel_pend_jobs, "Relay_log_info::pending_jobs_lock", 0},
-  { &key_mutex_slave_parallel_worker_count, "Relay_log_info::exit_count_lock", 0},
-  { &key_mutex_mts_temp_tables_lock, "Relay_log_info::temp_tables_lock", 0},
-  { &key_mutex_slave_parallel_worker, "Worker_info::jobs_lock", 0},
+  { &key_relay_log_info_sleep_lock, "Relay_log_info::sleep_lock", 0},
   { &key_structure_guard_mutex, "Query_cache::structure_guard_mutex", 0},
   { &key_TABLE_SHARE_LOCK_ha_data, "TABLE_SHARE::LOCK_ha_data", 0},
   { &key_LOCK_error_messages, "LOCK_error_messages", PSI_FLAG_GLOBAL},
   { &key_LOG_INFO_lock, "LOG_INFO::lock", 0},
   { &key_LOCK_thread_count, "LOCK_thread_count", PSI_FLAG_GLOBAL},
-  { &key_LOCK_thd_remove, "LOCK_thd_remove", PSI_FLAG_GLOBAL},
-  { &key_LOCK_log_throttle_qni, "LOCK_log_throttle_qni", PSI_FLAG_GLOBAL},
-  { &key_gtid_ensure_index_mutex, "Gtid_state", PSI_FLAG_GLOBAL},
-  { &key_LOCK_thread_created, "LOCK_thread_created", PSI_FLAG_GLOBAL }
+  { &key_PARTITION_LOCK_auto_inc, "HA_DATA_PARTITION::LOCK_auto_inc", 0},
+  { &key_LOCK_thread_created, "LOCK_thread_created", PSI_FLAG_GLOBAL },
+  { &key_LOCK_thd_remove, "LOCK_thd_remove", PSI_FLAG_GLOBAL}
 };
 
 PSI_rwlock_key key_rwlock_LOCK_grant, key_rwlock_LOCK_logger,
   key_rwlock_LOCK_sys_init_connect, key_rwlock_LOCK_sys_init_slave,
-  key_rwlock_LOCK_system_variables_hash, key_rwlock_query_cache_query_lock,
-  key_rwlock_global_sid_lock;
-
-PSI_rwlock_key key_rwlock_Trans_delegate_lock;
-PSI_rwlock_key key_rwlock_Binlog_storage_delegate_lock;
-#ifdef HAVE_REPLICATION
-PSI_rwlock_key key_rwlock_Binlog_transmit_delegate_lock;
-PSI_rwlock_key key_rwlock_Binlog_relay_IO_delegate_lock;
-#endif
+  key_rwlock_LOCK_system_variables_hash, key_rwlock_query_cache_query_lock;
 
 static PSI_rwlock_info all_server_rwlocks[]=
 {
 #if defined (HAVE_OPENSSL) && !defined(HAVE_YASSL)
   { &key_rwlock_openssl, "CRYPTO_dynlock_value::lock", 0},
 #endif
-#ifdef HAVE_REPLICATION
-  { &key_rwlock_Binlog_transmit_delegate_lock, "Binlog_transmit_delegate::lock", PSI_FLAG_GLOBAL},
-  { &key_rwlock_Binlog_relay_IO_delegate_lock, "Binlog_relay_IO_delegate::lock", PSI_FLAG_GLOBAL},
-#endif
   { &key_rwlock_LOCK_grant, "LOCK_grant", PSI_FLAG_GLOBAL},
   { &key_rwlock_LOCK_logger, "LOGGER::LOCK_logger", 0},
   { &key_rwlock_LOCK_sys_init_connect, "LOCK_sys_init_connect", PSI_FLAG_GLOBAL},
   { &key_rwlock_LOCK_sys_init_slave, "LOCK_sys_init_slave", PSI_FLAG_GLOBAL},
   { &key_rwlock_LOCK_system_variables_hash, "LOCK_system_variables_hash", PSI_FLAG_GLOBAL},
-  { &key_rwlock_query_cache_query_lock, "Query_cache_query::lock", 0},
-  { &key_rwlock_global_sid_lock, "gtid_commit_rollback", PSI_FLAG_GLOBAL},
-  { &key_rwlock_Trans_delegate_lock, "Trans_delegate::lock", PSI_FLAG_GLOBAL},
-  { &key_rwlock_Binlog_storage_delegate_lock, "Binlog_storage_delegate::lock", PSI_FLAG_GLOBAL}
+  { &key_rwlock_query_cache_query_lock, "Query_cache_query::lock", 0}
 };
 
 #ifdef HAVE_MMAP
 PSI_cond_key key_PAGE_cond, key_COND_active, key_COND_pool;
 #endif /* HAVE_MMAP */
 
-PSI_cond_key key_BINLOG_update_cond,
+PSI_cond_key key_BINLOG_COND_prep_xids, key_BINLOG_update_cond,
   key_COND_cache_status_changed, key_COND_manager,
-  key_COND_server_started,
+  key_COND_rpl_status, key_COND_server_started,
   key_delayed_insert_cond, key_delayed_insert_cond_client,
   key_item_func_sleep_cond, key_master_info_data_cond,
   key_master_info_start_cond, key_master_info_stop_cond,
   key_master_info_sleep_cond,
   key_relay_log_info_data_cond, key_relay_log_info_log_space_cond,
   key_relay_log_info_start_cond, key_relay_log_info_stop_cond,
-  key_relay_log_info_sleep_cond, key_cond_slave_parallel_pend_jobs,
-  key_cond_slave_parallel_worker,
+  key_relay_log_info_sleep_cond,
   key_TABLE_SHARE_cond, key_user_level_lock_cond,
-  key_COND_thread_count, key_COND_thread_cache, key_COND_flush_thread_cache,
-  key_COND_connection_count;
+  key_COND_thread_count, key_COND_thread_cache, key_COND_flush_thread_cache;
 PSI_cond_key key_RELAYLOG_update_cond;
-PSI_cond_key key_BINLOG_COND_done;
-PSI_cond_key key_RELAYLOG_COND_done;
-PSI_cond_key key_BINLOG_prep_xids_cond;
-PSI_cond_key key_RELAYLOG_prep_xids_cond;
-PSI_cond_key key_gtid_ensure_index_cond;
 
 static PSI_cond_info all_server_conds[]=
 {
@@ -9850,14 +8265,12 @@ static PSI_cond_info all_server_conds[]=
   { &key_COND_active, "TC_LOG_MMAP::COND_active", 0},
   { &key_COND_pool, "TC_LOG_MMAP::COND_pool", 0},
 #endif /* HAVE_MMAP */
-  { &key_BINLOG_COND_done, "MYSQL_BIN_LOG::COND_done", 0},
+  { &key_BINLOG_COND_prep_xids, "MYSQL_BIN_LOG::COND_prep_xids", 0},
   { &key_BINLOG_update_cond, "MYSQL_BIN_LOG::update_cond", 0},
-  { &key_BINLOG_prep_xids_cond, "MYSQL_BIN_LOG::prep_xids_cond", 0},
-  { &key_RELAYLOG_COND_done, "MYSQL_RELAY_LOG::COND_done", 0},
   { &key_RELAYLOG_update_cond, "MYSQL_RELAY_LOG::update_cond", 0},
-  { &key_RELAYLOG_prep_xids_cond, "MYSQL_RELAY_LOG::prep_xids_cond", 0},
   { &key_COND_cache_status_changed, "Query_cache::COND_cache_status_changed", 0},
   { &key_COND_manager, "COND_manager", PSI_FLAG_GLOBAL},
+  { &key_COND_rpl_status, "COND_rpl_status", PSI_FLAG_GLOBAL},
   { &key_COND_server_started, "COND_server_started", PSI_FLAG_GLOBAL},
   { &key_delayed_insert_cond, "Delayed_insert::cond", 0},
   { &key_delayed_insert_cond_client, "Delayed_insert::cond_client", 0},
@@ -9871,15 +8284,11 @@ static PSI_cond_info all_server_conds[]=
   { &key_relay_log_info_start_cond, "Relay_log_info::start_cond", 0},
   { &key_relay_log_info_stop_cond, "Relay_log_info::stop_cond", 0},
   { &key_relay_log_info_sleep_cond, "Relay_log_info::sleep_cond", 0},
-  { &key_cond_slave_parallel_pend_jobs, "Relay_log_info::pending_jobs_cond", 0},
-  { &key_cond_slave_parallel_worker, "Worker_info::jobs_cond", 0},
   { &key_TABLE_SHARE_cond, "TABLE_SHARE::cond", 0},
   { &key_user_level_lock_cond, "User_level_lock::cond", 0},
   { &key_COND_thread_count, "COND_thread_count", PSI_FLAG_GLOBAL},
   { &key_COND_thread_cache, "COND_thread_cache", PSI_FLAG_GLOBAL},
-  { &key_COND_flush_thread_cache, "COND_flush_thread_cache", PSI_FLAG_GLOBAL},
-  { &key_gtid_ensure_index_cond, "Gtid_state", PSI_FLAG_GLOBAL},
-  { &key_COND_connection_count, "COND_connection_count", PSI_FLAG_GLOBAL}
+  { &key_COND_flush_thread_cache, "COND_flush_thread_cache", PSI_FLAG_GLOBAL}
 };
 
 PSI_thread_key key_thread_bootstrap, key_thread_delayed_insert,
@@ -9960,222 +8369,6 @@ static PSI_file_info all_server_files[]=
   { &key_file_trn, "trigger", 0},
   { &key_file_init, "init", 0}
 };
-#endif /* HAVE_PSI_INTERFACE */
-
-PSI_stage_info stage_after_create= { 0, "After create", 0};
-PSI_stage_info stage_allocating_local_table= { 0, "allocating local table", 0};
-PSI_stage_info stage_alter_inplace_prepare= { 0, "preparing for alter table", 0};
-PSI_stage_info stage_alter_inplace= { 0, "altering table", 0};
-PSI_stage_info stage_alter_inplace_commit= { 0, "committing alter table to storage engine", 0};
-PSI_stage_info stage_changing_master= { 0, "Changing master", 0};
-PSI_stage_info stage_checking_master_version= { 0, "Checking master version", 0};
-PSI_stage_info stage_checking_permissions= { 0, "checking permissions", 0};
-PSI_stage_info stage_checking_privileges_on_cached_query= { 0, "checking privileges on cached query", 0};
-PSI_stage_info stage_checking_query_cache_for_query= { 0, "checking query cache for query", 0};
-PSI_stage_info stage_cleaning_up= { 0, "cleaning up", 0};
-PSI_stage_info stage_closing_tables= { 0, "closing tables", 0};
-PSI_stage_info stage_connecting_to_master= { 0, "Connecting to master", 0};
-PSI_stage_info stage_converting_heap_to_myisam= { 0, "converting HEAP to MyISAM", 0};
-PSI_stage_info stage_copying_to_group_table= { 0, "Copying to group table", 0};
-PSI_stage_info stage_copying_to_tmp_table= { 0, "Copying to tmp table", 0};
-PSI_stage_info stage_copy_to_tmp_table= { 0, "copy to tmp table", 0};
-PSI_stage_info stage_creating_delayed_handler= { 0, "Creating delayed handler", 0};
-PSI_stage_info stage_creating_sort_index= { 0, "Creating sort index", 0};
-PSI_stage_info stage_creating_table= { 0, "creating table", 0};
-PSI_stage_info stage_creating_tmp_table= { 0, "Creating tmp table", 0};
-PSI_stage_info stage_deleting_from_main_table= { 0, "deleting from main table", 0};
-PSI_stage_info stage_deleting_from_reference_tables= { 0, "deleting from reference tables", 0};
-PSI_stage_info stage_discard_or_import_tablespace= { 0, "discard_or_import_tablespace", 0};
-PSI_stage_info stage_end= { 0, "end", 0};
-PSI_stage_info stage_executing= { 0, "executing", 0};
-PSI_stage_info stage_execution_of_init_command= { 0, "Execution of init_command", 0};
-PSI_stage_info stage_explaining= { 0, "explaining", 0};
-PSI_stage_info stage_finished_reading_one_binlog_switching_to_next_binlog= { 0, "Finished reading one binlog; switching to next binlog", 0};
-PSI_stage_info stage_flushing_relay_log_and_master_info_repository= { 0, "Flushing relay log and master info repository.", 0};
-PSI_stage_info stage_flushing_relay_log_info_file= { 0, "Flushing relay-log info file.", 0};
-PSI_stage_info stage_freeing_items= { 0, "freeing items", 0};
-PSI_stage_info stage_fulltext_initialization= { 0, "FULLTEXT initialization", 0};
-PSI_stage_info stage_got_handler_lock= { 0, "got handler lock", 0};
-PSI_stage_info stage_got_old_table= { 0, "got old table", 0};
-PSI_stage_info stage_init= { 0, "init", 0};
-PSI_stage_info stage_insert= { 0, "insert", 0};
-PSI_stage_info stage_invalidating_query_cache_entries_table= { 0, "invalidating query cache entries (table)", 0};
-PSI_stage_info stage_invalidating_query_cache_entries_table_list= { 0, "invalidating query cache entries (table list)", 0};
-PSI_stage_info stage_killing_slave= { 0, "Killing slave", 0};
-PSI_stage_info stage_logging_slow_query= { 0, "logging slow query", 0};
-PSI_stage_info stage_making_temp_file_append_before_load_data= { 0, "Making temporary file (append) before replaying LOAD DATA INFILE.", 0};
-PSI_stage_info stage_making_temp_file_create_before_load_data= { 0, "Making temporary file (create) before replaying LOAD DATA INFILE.", 0};
-PSI_stage_info stage_manage_keys= { 0, "manage keys", 0};
-PSI_stage_info stage_master_has_sent_all_binlog_to_slave= { 0, "Master has sent all binlog to slave; waiting for binlog to be updated", 0};
-PSI_stage_info stage_opening_tables= { 0, "Opening tables", 0};
-PSI_stage_info stage_optimizing= { 0, "optimizing", 0};
-PSI_stage_info stage_preparing= { 0, "preparing", 0};
-PSI_stage_info stage_purging_old_relay_logs= { 0, "Purging old relay logs", 0};
-PSI_stage_info stage_query_end= { 0, "query end", 0};
-PSI_stage_info stage_queueing_master_event_to_the_relay_log= { 0, "Queueing master event to the relay log", 0};
-PSI_stage_info stage_reading_event_from_the_relay_log= { 0, "Reading event from the relay log", 0};
-PSI_stage_info stage_registering_slave_on_master= { 0, "Registering slave on master", 0};
-PSI_stage_info stage_removing_duplicates= { 0, "Removing duplicates", 0};
-PSI_stage_info stage_removing_tmp_table= { 0, "removing tmp table", 0};
-PSI_stage_info stage_rename= { 0, "rename", 0};
-PSI_stage_info stage_rename_result_table= { 0, "rename result table", 0};
-PSI_stage_info stage_requesting_binlog_dump= { 0, "Requesting binlog dump", 0};
-PSI_stage_info stage_reschedule= { 0, "reschedule", 0};
-PSI_stage_info stage_searching_rows_for_update= { 0, "Searching rows for update", 0};
-PSI_stage_info stage_sending_binlog_event_to_slave= { 0, "Sending binlog event to slave", 0};
-PSI_stage_info stage_sending_cached_result_to_client= { 0, "sending cached result to client", 0};
-PSI_stage_info stage_sending_data= { 0, "Sending data", 0};
-PSI_stage_info stage_setup= { 0, "setup", 0};
-PSI_stage_info stage_slave_has_read_all_relay_log= { 0, "Slave has read all relay log; waiting for the slave I/O thread to update it", 0};
-PSI_stage_info stage_sorting_for_group= { 0, "Sorting for group", 0};
-PSI_stage_info stage_sorting_for_order= { 0, "Sorting for order", 0};
-PSI_stage_info stage_sorting_result= { 0, "Sorting result", 0};
-PSI_stage_info stage_statistics= { 0, "statistics", 0};
-PSI_stage_info stage_sql_thd_waiting_until_delay= { 0, "Waiting until MASTER_DELAY seconds after master executed event", 0 };
-PSI_stage_info stage_storing_result_in_query_cache= { 0, "storing result in query cache", 0};
-PSI_stage_info stage_storing_row_into_queue= { 0, "storing row into queue", 0};
-PSI_stage_info stage_system_lock= { 0, "System lock", 0};
-PSI_stage_info stage_update= { 0, "update", 0};
-PSI_stage_info stage_updating= { 0, "updating", 0};
-PSI_stage_info stage_updating_main_table= { 0, "updating main table", 0};
-PSI_stage_info stage_updating_reference_tables= { 0, "updating reference tables", 0};
-PSI_stage_info stage_upgrading_lock= { 0, "upgrading lock", 0};
-PSI_stage_info stage_user_lock= { 0, "User lock", 0};
-PSI_stage_info stage_user_sleep= { 0, "User sleep", 0};
-PSI_stage_info stage_verifying_table= { 0, "verifying table", 0};
-PSI_stage_info stage_waiting_for_delay_list= { 0, "waiting for delay_list", 0};
-PSI_stage_info stage_waiting_for_gtid_to_be_written_to_binary_log= { 0, "waiting for GTID to be written to binary log", 0};
-PSI_stage_info stage_waiting_for_handler_insert= { 0, "waiting for handler insert", 0};
-PSI_stage_info stage_waiting_for_handler_lock= { 0, "waiting for handler lock", 0};
-PSI_stage_info stage_waiting_for_handler_open= { 0, "waiting for handler open", 0};
-PSI_stage_info stage_waiting_for_insert= { 0, "Waiting for INSERT", 0};
-PSI_stage_info stage_waiting_for_master_to_send_event= { 0, "Waiting for master to send event", 0};
-PSI_stage_info stage_waiting_for_master_update= { 0, "Waiting for master update", 0};
-PSI_stage_info stage_waiting_for_relay_log_space= { 0, "Waiting for the slave SQL thread to free enough relay log space", 0};
-PSI_stage_info stage_waiting_for_slave_mutex_on_exit= { 0, "Waiting for slave mutex on exit", 0};
-PSI_stage_info stage_waiting_for_slave_thread_to_start= { 0, "Waiting for slave thread to start", 0};
-PSI_stage_info stage_waiting_for_table_flush= { 0, "Waiting for table flush", 0};
-PSI_stage_info stage_waiting_for_query_cache_lock= { 0, "Waiting for query cache lock", 0};
-PSI_stage_info stage_waiting_for_the_next_event_in_relay_log= { 0, "Waiting for the next event in relay log", 0};
-PSI_stage_info stage_waiting_for_the_slave_thread_to_advance_position= { 0, "Waiting for the slave SQL thread to advance position", 0};
-PSI_stage_info stage_waiting_to_finalize_termination= { 0, "Waiting to finalize termination", 0};
-PSI_stage_info stage_waiting_to_get_readlock= { 0, "Waiting to get readlock", 0};
-PSI_stage_info stage_slave_waiting_workers_to_exit= { 0, "Waiting for workers to exit", 0};
-PSI_stage_info stage_slave_waiting_worker_to_release_partition= { 0, "Waiting for Slave Worker to release partition", 0};
-PSI_stage_info stage_slave_waiting_worker_to_free_events= { 0, "Waiting for Slave Workers to free pending events", 0};
-PSI_stage_info stage_slave_waiting_worker_queue= { 0, "Waiting for Slave Worker queue", 0};
-PSI_stage_info stage_slave_waiting_event_from_coordinator= { 0, "Waiting for an event from Coordinator", 0};
-
-#ifdef HAVE_PSI_INTERFACE
-
-PSI_stage_info *all_server_stages[]=
-{
-  & stage_after_create,
-  & stage_allocating_local_table,
-  & stage_alter_inplace_prepare,
-  & stage_alter_inplace,
-  & stage_alter_inplace_commit,
-  & stage_changing_master,
-  & stage_checking_master_version,
-  & stage_checking_permissions,
-  & stage_checking_privileges_on_cached_query,
-  & stage_checking_query_cache_for_query,
-  & stage_cleaning_up,
-  & stage_closing_tables,
-  & stage_connecting_to_master,
-  & stage_converting_heap_to_myisam,
-  & stage_copying_to_group_table,
-  & stage_copying_to_tmp_table,
-  & stage_copy_to_tmp_table,
-  & stage_creating_delayed_handler,
-  & stage_creating_sort_index,
-  & stage_creating_table,
-  & stage_creating_tmp_table,
-  & stage_deleting_from_main_table,
-  & stage_deleting_from_reference_tables,
-  & stage_discard_or_import_tablespace,
-  & stage_end,
-  & stage_executing,
-  & stage_execution_of_init_command,
-  & stage_explaining,
-  & stage_finished_reading_one_binlog_switching_to_next_binlog,
-  & stage_flushing_relay_log_and_master_info_repository,
-  & stage_flushing_relay_log_info_file,
-  & stage_freeing_items,
-  & stage_fulltext_initialization,
-  & stage_got_handler_lock,
-  & stage_got_old_table,
-  & stage_init,
-  & stage_insert,
-  & stage_invalidating_query_cache_entries_table,
-  & stage_invalidating_query_cache_entries_table_list,
-  & stage_killing_slave,
-  & stage_logging_slow_query,
-  & stage_making_temp_file_append_before_load_data,
-  & stage_making_temp_file_create_before_load_data,
-  & stage_manage_keys,
-  & stage_master_has_sent_all_binlog_to_slave,
-  & stage_opening_tables,
-  & stage_optimizing,
-  & stage_preparing,
-  & stage_purging_old_relay_logs,
-  & stage_query_end,
-  & stage_queueing_master_event_to_the_relay_log,
-  & stage_reading_event_from_the_relay_log,
-  & stage_registering_slave_on_master,
-  & stage_removing_duplicates,
-  & stage_removing_tmp_table,
-  & stage_rename,
-  & stage_rename_result_table,
-  & stage_requesting_binlog_dump,
-  & stage_reschedule,
-  & stage_searching_rows_for_update,
-  & stage_sending_binlog_event_to_slave,
-  & stage_sending_cached_result_to_client,
-  & stage_sending_data,
-  & stage_setup,
-  & stage_slave_has_read_all_relay_log,
-  & stage_sorting_for_group,
-  & stage_sorting_for_order,
-  & stage_sorting_result,
-  & stage_sql_thd_waiting_until_delay,
-  & stage_statistics,
-  & stage_storing_result_in_query_cache,
-  & stage_storing_row_into_queue,
-  & stage_system_lock,
-  & stage_update,
-  & stage_updating,
-  & stage_updating_main_table,
-  & stage_updating_reference_tables,
-  & stage_upgrading_lock,
-  & stage_user_lock,
-  & stage_user_sleep,
-  & stage_verifying_table,
-  & stage_waiting_for_delay_list,
-  & stage_waiting_for_handler_insert,
-  & stage_waiting_for_handler_lock,
-  & stage_waiting_for_handler_open,
-  & stage_waiting_for_insert,
-  & stage_waiting_for_master_to_send_event,
-  & stage_waiting_for_master_update,
-  & stage_waiting_for_slave_mutex_on_exit,
-  & stage_waiting_for_slave_thread_to_start,
-  & stage_waiting_for_table_flush,
-  & stage_waiting_for_query_cache_lock,
-  & stage_waiting_for_the_next_event_in_relay_log,
-  & stage_waiting_for_the_slave_thread_to_advance_position,
-  & stage_waiting_to_finalize_termination,
-  & stage_waiting_to_get_readlock
-};
-
-PSI_socket_key key_socket_tcpip, key_socket_unix, key_socket_client_connection;
-
-static PSI_socket_info all_server_sockets[]=
-{
-  { &key_socket_tcpip, "server_tcpip_socket", PSI_FLAG_GLOBAL},
-  { &key_socket_unix, "server_unix_socket", PSI_FLAG_GLOBAL},
-  { &key_socket_client_connection, "client_connection", 0}
-};
 
 /**
   Initialise all the performance schema instrumentation points
@@ -10186,78 +8379,23 @@ void init_server_psi_keys(void)
   const char* category= "sql";
   int count;
 
+  if (PSI_server == NULL)
+    return;
+
   count= array_elements(all_server_mutexes);
-  mysql_mutex_register(category, all_server_mutexes, count);
+  PSI_server->register_mutex(category, all_server_mutexes, count);
 
   count= array_elements(all_server_rwlocks);
-  mysql_rwlock_register(category, all_server_rwlocks, count);
+  PSI_server->register_rwlock(category, all_server_rwlocks, count);
 
   count= array_elements(all_server_conds);
-  mysql_cond_register(category, all_server_conds, count);
+  PSI_server->register_cond(category, all_server_conds, count);
 
   count= array_elements(all_server_threads);
-  mysql_thread_register(category, all_server_threads, count);
+  PSI_server->register_thread(category, all_server_threads, count);
 
   count= array_elements(all_server_files);
-  mysql_file_register(category, all_server_files, count);
-
-  count= array_elements(all_server_stages);
-  mysql_stage_register(category, all_server_stages, count);
-
-  count= array_elements(all_server_sockets);
-  mysql_socket_register(category, all_server_sockets, count);
-
-#ifdef HAVE_PSI_STATEMENT_INTERFACE
-  init_sql_statement_info();
-  count= array_elements(sql_statement_info);
-  mysql_statement_register(category, sql_statement_info, count);
-
-  category= "com";
-  init_com_statement_info();
-
-  /*
-    Register [0 .. COM_QUERY - 1] as "statement/com/..."
-  */
-  count= (int) COM_QUERY;
-  mysql_statement_register(category, com_statement_info, count);
-
-  /*
-    Register [COM_QUERY + 1 .. COM_END] as "statement/com/..."
-  */
-  count= (int) COM_END - (int) COM_QUERY;
-  mysql_statement_register(category, & com_statement_info[(int) COM_QUERY + 1], count);
-
-  category= "abstract";
-  /*
-    Register [COM_QUERY] as "statement/abstract/com_query"
-  */
-  mysql_statement_register(category, & com_statement_info[(int) COM_QUERY], 1);
-
-  /*
-    When a new packet is received,
-    it is instrumented as "statement/abstract/new_packet".
-    Based on the packet type found, it later mutates to the
-    proper narrow type, for example
-    "statement/abstract/query" or "statement/com/ping".
-    In cases of "statement/abstract/query", SQL queries are given to
-    the parser, which mutates the statement type to an even more
-    narrow classification, for example "statement/sql/select".
-  */
-  stmt_info_new_packet.m_key= 0;
-  stmt_info_new_packet.m_name= "new_packet";
-  stmt_info_new_packet.m_flags= PSI_FLAG_MUTABLE;
-  mysql_statement_register(category, &stmt_info_new_packet, 1);
-
-  /*
-    Statements processed from the relay log are initially instrumented as
-    "statement/abstract/relay_log". The parser will mutate the statement type to
-    a more specific classification, for example "statement/sql/insert".
-  */
-  stmt_info_rpl.m_key= 0;
-  stmt_info_rpl.m_name= "relay_log";
-  stmt_info_rpl.m_flags= PSI_FLAG_MUTABLE;
-  mysql_statement_register(category, &stmt_info_rpl, 1);
-#endif
+  PSI_server->register_file(category, all_server_files, count);
 }
 
 #endif /* HAVE_PSI_INTERFACE */

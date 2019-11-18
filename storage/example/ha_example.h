@@ -1,4 +1,4 @@
-/* Copyright (c) 2004, 2012, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2004, 2010, Oracle and/or its affiliates. All rights reserved.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -31,26 +31,25 @@
   /sql/handler.h and /storage/example/ha_example.cc
 */
 
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface			/* gcc class implementation */
+#endif
+
 #include "my_global.h"                   /* ulonglong */
 #include "thr_lock.h"                    /* THR_LOCK, THR_LOCK_DATA */
 #include "handler.h"                     /* handler */
 #include "my_base.h"                     /* ha_rows */
 
 /** @brief
-  Example_share is a class that will be shared among all open handlers.
+  EXAMPLE_SHARE is a structure that will be shared among all open handlers.
   This example implements the minimum of what you will probably need.
 */
-class Example_share : public Handler_share {
-public:
+typedef struct st_example_share {
+  char *table_name;
+  uint table_name_length,use_count;
   mysql_mutex_t mutex;
   THR_LOCK lock;
-  Example_share();
-  ~Example_share()
-  {
-    thr_lock_delete(&lock);
-    mysql_mutex_destroy(&mutex);
-  }
-};
+} EXAMPLE_SHARE;
 
 /** @brief
   Class definition for the storage engine
@@ -58,8 +57,7 @@ public:
 class ha_example: public handler
 {
   THR_LOCK_DATA lock;      ///< MySQL lock
-  Example_share *share;    ///< Shared lock info
-  Example_share *get_share(); ///< Get the share
+  EXAMPLE_SHARE *share;    ///< Shared lock info
 
 public:
   ha_example(handlerton *hton, TABLE_SHARE *table_arg);

@@ -36,6 +36,7 @@
 #############################################################
 
 SET @start_global_value = @@global.slave_transaction_retries;
+SELECT @start_global_value;
 
 --echo '#--------------------FN_DYNVARS_149_01-------------------------#'
 ###################################################################
@@ -178,6 +179,7 @@ SET global slave_transaction_retries = 99;
 ####################################
 
 SET @@global.slave_transaction_retries = @start_global_value;
+SELECT @@global.slave_transaction_retries;
 
 ########################################################
 #              END OF slave_transaction_retries TESTS  #

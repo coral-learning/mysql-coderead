@@ -1,7 +1,7 @@
 #ifndef SQL_ANALYSE_INCLUDED
 #define SQL_ANALYSE_INCLUDED
 
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,11 +13,15 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 
 /* Analyse database */
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface				/* gcc class implementation */
+#endif
 
 #include "procedure.h"                          /* Procedure */
 
@@ -53,17 +57,19 @@ uint check_ulonglong(const char *str, uint length);
 bool get_ev_num_info(EV_NUM_INFO *ev_info, NUM_INFO *info, const char *num);
 bool test_if_number(NUM_INFO *info, const char *str, uint str_len);
 int compare_double(const double *s, const double *t);
-int compare_double2(void* cmp_arg MY_ATTRIBUTE((unused)),
+int compare_double2(void* cmp_arg __attribute__((unused)),
 		    const double *s, const double *t);
 int compare_longlong(const longlong *s, const longlong *t);
-int compare_longlong2(void* cmp_arg MY_ATTRIBUTE((unused)),
+int compare_longlong2(void* cmp_arg __attribute__((unused)),
 		      const longlong *s, const longlong *t);
 int compare_ulonglong(const ulonglong *s, const ulonglong *t);
-int compare_ulonglong2(void* cmp_arg MY_ATTRIBUTE((unused)),
+int compare_ulonglong2(void* cmp_arg __attribute__((unused)),
 		       const ulonglong *s, const ulonglong *t);
 int compare_decimal2(int* len, const char *s, const char *t);
+Procedure *proc_analyse_init(THD *thd, ORDER *param, select_result *result,
+			     List<Item> &field_list);
 void free_string(String*);
-class select_analyse;
+class analyse;
 
 class field_info :public Sql_alloc
 {
@@ -73,11 +79,10 @@ protected:
   my_bool found;
   TREE	  tree;
   Item	  *item;
-  select_analyse *pc;
+  analyse *pc;
 
 public:
-  field_info(Item* a, select_analyse* b)
-  : treemem(0), tree_elements(0), empty(0),
+  field_info(Item* a, analyse* b) : treemem(0), tree_elements(0), empty(0),
     nulls(0), min_length(0), max_length(0), room_in_tree(1),
     found(0),item(a), pc(b) {};
 
@@ -90,14 +95,14 @@ public:
   virtual String *std(String*, ha_rows) = 0;
   virtual tree_walk_action collect_enum() = 0;
   virtual uint decimals() { return 0; }
-  friend  class select_analyse;
+  friend  class analyse;
 };
 
 
 int collect_string(String *element, element_count count,
 		   TREE_INFO *info);
 
-int sortcmp2(void* cmp_arg MY_ATTRIBUTE((unused)),
+int sortcmp2(void* cmp_arg __attribute__((unused)),
 	     const String *a,const String *b);
 
 class field_str :public field_info
@@ -110,7 +115,7 @@ class field_str :public field_info
   EV_NUM_INFO ev_num_info;
 
 public:
-  field_str(Item* a, select_analyse* b) :field_info(a,b), 
+  field_str(Item* a, analyse* b) :field_info(a,b), 
     min_arg("",default_charset_info),
     max_arg("",default_charset_info), sum(0),
     must_be_blob(0), was_zero_fill(0),
@@ -120,9 +125,9 @@ public:
 
   void	 add();
   void	 get_opt_type(String*, ha_rows);
-  String *get_min_arg(String *not_used MY_ATTRIBUTE((unused)))
+  String *get_min_arg(String *not_used __attribute__((unused)))
   { return &min_arg; }
-  String *get_max_arg(String *not_used MY_ATTRIBUTE((unused)))
+  String *get_max_arg(String *not_used __attribute__((unused)))
   { return &max_arg; }
   String *avg(String *s, ha_rows rows)
   {
@@ -137,8 +142,8 @@ public:
 			    TREE_INFO *info);
   tree_walk_action collect_enum()
   { return (tree_walk_action) collect_string; }
-  String *std(String *s MY_ATTRIBUTE((unused)),
-	      ha_rows rows MY_ATTRIBUTE((unused)))
+  String *std(String *s __attribute__((unused)),
+	      ha_rows rows __attribute__((unused)))
   { return (String*) 0; }
 };
 
@@ -153,7 +158,7 @@ class field_decimal :public field_info
   int cur_sum;
   int bin_size;
 public:
-  field_decimal(Item* a, select_analyse* b) :field_info(a,b)
+  field_decimal(Item* a, analyse* b) :field_info(a,b)
   {
     bin_size= my_decimal_get_binary_size(a->max_length, a->decimals);
     init_tree(&tree, 0, 0, bin_size, (qsort_cmp2)compare_decimal2,
@@ -182,7 +187,7 @@ class field_real: public field_info
   uint	 max_notzero_dec_len;
 
 public:
-  field_real(Item* a, select_analyse* b) :field_info(a,b),
+  field_real(Item* a, analyse* b) :field_info(a,b),
     min_arg(0), max_arg(0),  sum(0), sum_sqr(0), max_notzero_dec_len(0)
     { init_tree(&tree, 0, 0, sizeof(double),
 		(qsort_cmp2) compare_double2, 0, NULL, NULL); }
@@ -236,7 +241,7 @@ class field_longlong: public field_info
   longlong sum, sum_sqr;
 
 public:
-  field_longlong(Item* a, select_analyse* b) :field_info(a,b), 
+  field_longlong(Item* a, analyse* b) :field_info(a,b), 
     min_arg(0), max_arg(0), sum(0), sum_sqr(0)
     { init_tree(&tree, 0, 0, sizeof(longlong),
 		(qsort_cmp2) compare_longlong2, 0, NULL, NULL); }
@@ -281,7 +286,7 @@ class field_ulonglong: public field_info
   ulonglong sum, sum_sqr;
 
 public:
-  field_ulonglong(Item* a, select_analyse * b) :field_info(a,b),
+  field_ulonglong(Item* a, analyse * b) :field_info(a,b),
     min_arg(0), max_arg(0), sum(0),sum_sqr(0)
     { init_tree(&tree, 0, 0, sizeof(ulonglong),
 		(qsort_cmp2) compare_ulonglong2, 0, NULL, NULL); }
@@ -319,47 +324,41 @@ public:
 };
 
 
-/**
-  Interceptor class to form SELECT ... PROCEDURE ANALYSE() output rows
-*/
+Procedure *proc_analyse_init(THD *thd, ORDER *param,
+			     select_result *result,
+			     List<Item> &field_list);
 
-class select_analyse : public select_send
+class analyse: public Procedure
 {
-  select_result *result; //< real output stream
-  
-  Item_proc    *func_items[10]; //< items for output metadata and column data
-  List<Item>   result_fields; //< same as func_items but capable for send_data()
-  field_info   **f_info, **f_end; //< bounds for column data accumulator array
-  
-  ha_rows      rows; //< counter of original SELECT query output rows
-  uint	       output_str_length; //< max.width for the Optimal_fieldtype column
+protected:
+  Item_proc    *func_items[10];
+  List<Item>   fields, result_fields;
+  field_info   **f_info, **f_end;
+  ha_rows      rows;
+  uint	       output_str_length;
 
 public:
-  const uint max_tree_elements; //< maximum number of distinct values per column
-  const uint max_treemem; //< maximum amount of memory to allocate per column
+  uint max_tree_elements, max_treemem;
 
-public:
-  select_analyse(select_result *result, const Proc_analyse_params *params)
-  : result(result), f_info(NULL), f_end(NULL), rows(0), output_str_length(0),
-    max_tree_elements(params->max_tree_elements),
-    max_treemem(params->max_treemem)
-  {}
+  analyse(select_result *res) :Procedure(res, PROC_NO_SORT), f_info(0),
+    rows(0), output_str_length(0) {}
 
-  ~select_analyse() { cleanup(); }
-
-  virtual void cleanup();
-  virtual uint field_count(List<Item> &) const
-  { return array_elements(func_items); }
-  virtual int prepare(List<Item> &list, SELECT_LEX_UNIT *u)
-  { return result->prepare(list, u); }
-  virtual bool send_result_set_metadata(List<Item> &fields, uint flag);
-  virtual bool send_data(List<Item> &items);
-  virtual bool send_eof();
-  virtual void abort_result_set();
-
-private:
-  bool init(List<Item> &field_list);
-  bool change_columns();
+  ~analyse()
+  {
+    if (f_info)
+    {
+      for (field_info **f=f_info; f != f_end; f++)
+	delete (*f);
+    }
+  }
+  virtual void add() {}
+  virtual bool change_columns(List<Item> &fields);
+  virtual int  send_row(List<Item> &field_list);
+  virtual void end_group(void) {}
+  virtual int end_of_records(void);
+  friend Procedure *proc_analyse_init(THD *thd, ORDER *param,
+				      select_result *result,
+				      List<Item> &field_list);
 };
 
 bool append_escaped(String *to_str, String *from_str);

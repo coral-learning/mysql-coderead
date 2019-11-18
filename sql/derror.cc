@@ -10,9 +10,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
-
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 /**
   @file
@@ -130,25 +129,20 @@ bool read_texts(const char *file_name, const char *language,
                                O_RDONLY | O_SHARE | O_BINARY,
                                MYF(0))) < 0)
       goto err;
-
-    sql_print_warning("Using pre 5.5 semantics to load error messages from %s.",
-                      lc_messages_dir);
-    
-    sql_print_warning("If this is not intended, refer to the documentation for "
-                      "valid usage of --lc-messages-dir and --language "
-                      "parameters.");
+    sql_print_error("An old style --language value with language specific part detected: %s", lc_messages_dir);
+    sql_print_error("Use --lc-messages-dir without language specific part instead.");
   }
 
   funktpos=1;
   if (mysql_file_read(file, (uchar*) head, 32, MYF(MY_NABP)))
     goto err;
   if (head[0] != (uchar) 254 || head[1] != (uchar) 254 ||
-      head[2] != 3 || head[3] != 1)
+      head[2] != 2 || head[3] != 1)
     goto err; /* purecov: inspected */
   textcount=head[4];
 
   error_message_charset_info= system_charset_info;
-  length=uint4korr(head+6); count=uint4korr(head+10);
+  length=uint2korr(head+6); count=uint2korr(head+8);
 
   if (count < error_messages)
   {
@@ -171,12 +165,12 @@ Check that the above file is the right version for this program!",
   }
   buff= (uchar*) (*point + count);
 
-  if (mysql_file_read(file, buff, (size_t) count*4, MYF(MY_NABP)))
+  if (mysql_file_read(file, buff, (size_t) count*2, MYF(MY_NABP)))
     goto err;
   for (i=0, pos= buff ; i< count ; i++)
   {
-    (*point)[i]= (char*) buff+uint4korr(pos);
-    pos+=4;
+    (*point)[i]= (char*) buff+uint2korr(pos);
+    pos+=2;
   }
   if (mysql_file_read(file, buff, length, MYF(MY_NABP)))
     goto err;

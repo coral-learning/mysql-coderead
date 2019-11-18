@@ -10,8 +10,8 @@
    GNU General Public License for more details.
    
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 
 #ifndef CLIENT_SETTINGS_INCLUDED
@@ -34,9 +34,7 @@
                              CLIENT_TRANSACTIONS |  \
                              CLIENT_PROTOCOL_41 |   \
                              CLIENT_SECURE_CONNECTION | \
-                             CLIENT_PLUGIN_AUTH | \
-                             CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA | \
-                             CLIENT_CONNECT_ATTRS)
+                             CLIENT_PLUGIN_AUTH)
 
 #define read_user_name(A) {}
 #undef HAVE_SMEM

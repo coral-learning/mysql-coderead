@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -20,9 +20,6 @@
 #include "unireg.h"                     // REQUIRED: by includes later
 #include "key.h"                                // key_rec_cmp
 #include "field.h"                              // Field
-
-using std::min;
-using std::max;
 
 /*
   Search after a key that starts with 'field'
@@ -81,7 +78,7 @@ int find_ref_key(KEY *key, uint key_count, uchar *record, Field *field,
     KEY_PART_INFO *key_part;
     *key_length=0;
     for (j=0, key_part=key_info->key_part ;
-	 j < key_info->user_defined_key_parts ;
+	 j < key_info->key_parts ;
 	 j++, key_part++)
     {
       if (key_part->offset == fieldpos)
@@ -123,52 +120,29 @@ void key_copy(uchar *to_key, uchar *from_record, KEY *key_info,
   {
     if (key_part->null_bit)
     {
-      *to_key++= MY_TEST(from_record[key_part->null_offset] &
-                         key_part->null_bit);
+      *to_key++= test(from_record[key_part->null_offset] &
+		   key_part->null_bit);
       key_length--;
     }
     if (key_part->key_part_flag & HA_BLOB_PART ||
         key_part->key_part_flag & HA_VAR_LENGTH_PART)
     {
       key_length-= HA_KEY_BLOB_LENGTH;
-      length= min<uint>(key_length, key_part->length);
+      length= min(key_length, key_part->length);
       key_part->field->get_key_image(to_key, length, Field::itRAW);
       to_key+= HA_KEY_BLOB_LENGTH;
     }
     else
     {
-      length= min<uint>(key_length, key_part->length);
+      length= min(key_length, key_part->length);
       Field *field= key_part->field;
-      const CHARSET_INFO *cs= field->charset();
+      CHARSET_INFO *cs= field->charset();
       uint bytes= field->get_key_image(to_key, length, Field::itRAW);
       if (bytes < length)
         cs->cset->fill(cs, (char*) to_key + bytes, length - bytes, ' ');
     }
     to_key+= length;
     key_length-= length;
-  }
-}
-
-
-/**
-  Zero the null components of key tuple
-  SYNOPSIS
-    key_zero_nulls()
-      tuple
-      key_info
-
-  DESCRIPTION
-*/
-
-void key_zero_nulls(uchar *tuple, KEY *key_info)
-{
-  KEY_PART_INFO *key_part= key_info->key_part;
-  KEY_PART_INFO *key_part_end= key_part + key_info->user_defined_key_parts;
-  for (; key_part != key_part_end; key_part++)
-  {
-    if (key_part->null_bit && *tuple)
-      memset(tuple+1, 0, key_part->store_length-1);
-    tuple+= key_part->store_length;
   }
 }
 
@@ -244,7 +218,7 @@ void key_restore(uchar *to_record, uchar *from_key, KEY *key_info,
       my_ptrdiff_t ptrdiff= to_record - field->table->record[0];
       field->move_field_offset(ptrdiff);
       key_length-= HA_KEY_BLOB_LENGTH;
-      length= min<uint>(key_length, key_part->length);
+      length= min(key_length, key_part->length);
       old_map= dbug_tmp_use_all_columns(field->table, field->table->write_set);
       field->set_key_image(from_key, length);
       dbug_tmp_restore_column_map(field->table->write_set, old_map);
@@ -253,7 +227,7 @@ void key_restore(uchar *to_record, uchar *from_key, KEY *key_info,
     }
     else
     {
-      length= min<uint>(key_length, key_part->length);
+      length= min(key_length, key_part->length);
       /* skip the byte with 'uneven' bits, if used */
       memcpy(to_record + key_part->offset, from_key + used_uneven_bits
              , (size_t) length - used_uneven_bits);
@@ -299,8 +273,8 @@ bool key_cmp_if_same(TABLE *table,const uchar *key,uint idx,uint key_length)
 
     if (key_part->null_bit)
     {
-      if (*key != MY_TEST(table->record[0][key_part->null_offset] & 
-                          key_part->null_bit))
+      if (*key != test(table->record[0][key_part->null_offset] & 
+		       key_part->null_bit))
 	return 1;
       if (*key)
 	continue;
@@ -318,7 +292,7 @@ bool key_cmp_if_same(TABLE *table,const uchar *key,uint idx,uint key_length)
     if (!(key_part->key_type & (FIELDFLAG_NUMBER+FIELDFLAG_BINARY+
                                 FIELDFLAG_PACK)))
     {
-      const CHARSET_INFO *cs= key_part->field->charset();
+      CHARSET_INFO *cs= key_part->field->charset();
       uint char_length= key_part->length / cs->mbmaxlen;
       const uchar *pos= table->record[0] + key_part->offset;
       if (length > char_length)
@@ -364,7 +338,7 @@ void field_unpack(String *to, Field *field, const uchar *rec, uint max_length,
       to->append(STRING_WITH_LEN("NULL"));
       DBUG_VOID_RETURN;
     }
-    const CHARSET_INFO *cs= field->charset();
+    CHARSET_INFO *cs= field->charset();
     field->val_str(&tmp);
     /*
       For BINARY(N) strip trailing zeroes to make
@@ -413,17 +387,18 @@ void field_unpack(String *to, Field *field, const uchar *rec, uint max_length,
   @param
      table	Table to use
   @param
-     key	Key
+     idx	Key number
 */
 
-void key_unpack(String *to, TABLE *table, KEY *key)
+void key_unpack(String *to,TABLE *table,uint idx)
 {
+  KEY_PART_INFO *key_part,*key_part_end;
   my_bitmap_map *old_map= dbug_tmp_use_all_columns(table, table->read_set);
   DBUG_ENTER("key_unpack");
 
   to->length(0);
-  KEY_PART_INFO *key_part_end= key->key_part + key->user_defined_key_parts;
-  for (KEY_PART_INFO *key_part= key->key_part;
+  for (key_part=table->key_info[idx].key_part,key_part_end=key_part+
+	 table->key_info[idx].key_parts ;
        key_part < key_part_end;
        key_part++)
   {
@@ -438,8 +413,8 @@ void key_unpack(String *to, TABLE *table, KEY *key)
       }
     }
     field_unpack(to, key_part->field, table->record[0], key_part->length,
-                 MY_TEST(key_part->key_part_flag & HA_PART_KEY_SEG));
-  }
+                 test(key_part->key_part_flag & HA_PART_KEY_SEG));
+ }
   dbug_tmp_restore_column_map(table->read_set, old_map);
   DBUG_VOID_RETURN;
 }
@@ -493,7 +468,6 @@ bool is_key_used(TABLE *table, uint idx, const MY_BITMAP *fields)
     -   0		Key is equal to range or 'range' == 0 (no range)
     -  -1		Key is less than range
     -   1		Key is larger than range
-  @note: keep this function and key_cmp2() in sync
 */
 
 int key_cmp(KEY_PART_INFO *key_part, const uchar *key, uint key_length)
@@ -533,87 +507,6 @@ int key_cmp(KEY_PART_INFO *key_part, const uchar *key, uint key_length)
 
 
 /**
-  Compare two given keys
-
-  @param key_part		Key part handler
-  @param key1			Key to be compared with key2
-  @param key1_length		length of 'key1'
-  @param key2                   Key to be compared with key1
-  @param key2_length		length of 'key2'
-
-  @return
-    The return value is an integral value indicating the
-    relationship between the two keys:
-    -   0                       key1 = key2
-    -  -1                       Key1 < Key2
-    -   1                       Key1 > Key2
-  @note: keep this function and key_cmp() in sync
-
-  Below comparison code is under the assumption
-  that key1_length and key2_length are same and
-  key1_length, key2_length are non zero value.
-*/
-int key_cmp2(KEY_PART_INFO *key_part,
-                 const uchar *key1, uint key1_length,
-                 const uchar *key2, uint key2_length)
-{
-  DBUG_ASSERT(key_part && key1 && key2);
-  DBUG_ASSERT((key1_length == key2_length) && key1_length != 0 );
-  uint store_length;
-
-  /* Compare all the subkeys (if it is a composite key) */
-  for (const uchar *end= key1 + key1_length; key1 < end;
-       key1+= store_length, key2+= store_length, key_part++)
-  {
-    store_length= key_part->store_length;
-    /* This key part allows null values; NULL is lower than everything */
-    if (key_part->null_bit)
-    {
-      if (*key1 != *key2)
-      {
-        /*
-          Key Format= "1 byte (NULL Indicator flag) + Key value"
-          If NULL Indicator flag is '1' that means the key is NULL value
-          and If the flag is '0' that means the key is Non-NULL value.
-
-          If null indicating flag in key1 and key2 are not same, then
-            > if key1's null flag is '1' (i.e., key1 is NULL), return -1
-            > if key1's null flag is '0' (i.e., key1 is NOT NULL), then
-              key2's null flag is '1' (since *key1 != *key2) then return 1;
-        */
-        return (*key1) ? -1 : 1;
-      }
-      else
-      {
-        /*
-          If null indicating flag in key1 and key2 are same and
-            > if it is '1' , both are NULLs and both are same, continue with
-              next key in key_part.
-            > if it is '0', then go ahead and compare the content using
-              field->key_cmp.
-        */
-        if (*key1)
-          continue;
-      }
-      /*
-        Increment the key1 and key2 pointers to point them to the actual
-        key values
-      */
-      key1++;
-      key2++;
-      store_length--;
-    }
-    /* Compare two keys using field->key_cmp */
-    int cmp;
-    if ((cmp= key_part->field->key_cmp(key1, key2)) < 0)
-      return -1;
-    if (cmp > 0)
-      return 1;
-  }
-  return 0; /* Keys are equal */
-}
-
-/**
   Compare two records in index order.
 
   This method is set-up such that it can be called directly from the
@@ -632,8 +525,6 @@ int key_cmp2(KEY_PART_INFO *key_part,
 
   key is a null terminated array, since in some cases (clustered
   primary key) it must compare more than one index.
-  We only compare the fields that are specified in table->read_set and
-  stop at the first non set field. The first must be set!
 
   @param key                    Null terminated array of index information
   @param first_rec              Pointer to record compare with
@@ -657,13 +548,10 @@ int key_rec_cmp(void *key_p, uchar *first_rec, uchar *second_rec)
   Field *field;
   DBUG_ENTER("key_rec_cmp");
 
-  /* Assert that at least the first key part is read. */
-  DBUG_ASSERT(bitmap_is_set(key_info->table->read_set,
-                            key_info->key_part->field->field_index));
   /* loop over all given keys */
   do
   {
-    key_parts= key_info->user_defined_key_parts;
+    key_parts= key_info->key_parts;
     key_part= key_info->key_part;
     key_part_num= 0;
 
@@ -672,15 +560,11 @@ int key_rec_cmp(void *key_p, uchar *first_rec, uchar *second_rec)
     {
       field= key_part->field;
 
-      /* If not read, compare is done and equal! */
-      if (!bitmap_is_set(field->table->read_set, field->field_index))
-        DBUG_RETURN(0);
-
       if (key_part->null_bit)
       {
         /* The key_part can contain NULL values */
-        bool first_is_null= field->is_real_null(first_diff);
-        bool sec_is_null= field->is_real_null(sec_diff);
+        bool first_is_null= field->is_null_in_record_with_offset(first_diff);
+        bool sec_is_null= field->is_null_in_record_with_offset(sec_diff);
         /*
           NULL is smaller then everything so if first is NULL and the other
           not then we know that we should return -1 and for the opposite

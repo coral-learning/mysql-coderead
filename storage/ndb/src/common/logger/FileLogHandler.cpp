@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003-2006 MySQL AB, 2008, 2009 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,16 +12,26 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include <ndb_global.h>
 #include <FileLogHandler.hpp>
-#include <util/File.hpp>
+#include <File.hpp>
 
 //
 // PUBLIC
 //
+
+FileLogHandler::FileLogHandler() : 
+  LogHandler(),
+  m_maxNoFiles(MAX_NO_FILES), 
+  m_maxFileSize(MAX_FILE_SIZE),
+  m_maxLogEntries(MAX_LOG_ENTRIES)
+
+{
+  m_pLogFile = new File_class("logger.log", "a+");
+}
+
 FileLogHandler::FileLogHandler(const char* aFileName, 
 			       int maxNoFiles, 
 			       long maxFileSize,
@@ -63,12 +72,6 @@ FileLogHandler::open()
   }
 
   return rc;
-}
-
-bool
-FileLogHandler::is_open()
-{
-  return m_pLogFile->is_open();
 }
 
 bool
@@ -136,11 +139,6 @@ FileLogHandler::isTimeForNewFile()
   return (m_pLogFile->size() >= m_maxFileSize); 
 }
 
-off_t FileLogHandler::getCurrentSize()
-{
-  return m_pLogFile->size();
-}
-
 bool
 FileLogHandler::createNewFile()
 {
@@ -198,15 +196,6 @@ FileLogHandler::setParam(const BaseString &param, const BaseString &value){
     return setMaxFiles(value);
   setErrorStr("Invalid parameter");
   return false;
-}
-
-bool FileLogHandler::getParams(BaseString &config)
-{
-  config.assfmt("FILE:filename=%s,maxsize=%lu,maxfiles=%u",
-                m_pLogFile->getName(),
-                m_maxFileSize,
-                m_maxNoFiles);
-  return true;
 }
 
 bool

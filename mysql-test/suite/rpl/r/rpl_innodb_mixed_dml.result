@@ -1,7 +1,4 @@
 include/master-slave.inc
-Warnings:
-Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
 [connection master]
 ==========MASTER==========
 show global variables like 'binlog_format%';
@@ -829,7 +826,7 @@ DELETE FROM t2;
 
 
 ******************** SHOW BINLOG EVENTS ********************
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	CREATE DATABASE test_rpl
 master-bin.000001	#	Query	#	#	use `test_rpl`; CREATE TABLE t1 (a int auto_increment not null, b char(254), PRIMARY KEY(a)) ENGINE=innodb
@@ -992,7 +989,6 @@ master-bin.000001	#	Query	#	#	use `test_rpl`; INSERT INTO t1 VALUES (1, 'start')
 master-bin.000001	#	Xid	#	#	COMMIT /* XID */
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test_rpl`; INSERT INTO t1 VALUES (3, 'before savepoint s1')
-master-bin.000001	#	Query	#	#	SAVEPOINT `s1`
 master-bin.000001	#	Xid	#	#	COMMIT /* XID */
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test_rpl`; INSERT INTO t1 VALUES (5, 'before savepoint s2')

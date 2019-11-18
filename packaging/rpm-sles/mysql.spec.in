@@ -1,4 +1,4 @@
-# Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2000, 2018, Oracle and/or its affiliates. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -24,7 +24,6 @@
 # Regression tests may take a long time, override the default to skip them
 %{!?runselftest:%global runselftest 0}
 
-%{!?with_systemd:                %global systemd 0}
 %{!?with_debuginfo:              %global nodebuginfo 1}
 %{!?product_suffix:              %global product_suffix community}
 %{!?feature_set:                 %global feature_set community}
@@ -52,21 +51,12 @@
 %global license_type          GPLv2
 %endif
 
-%if 0%{?suse_version} == 1110
+%if 0%{?sles_version} == 011
 %global dist                  .sles11
 %global sles11                1
 %endif
 
-%if 0%{?suse_version} == 1315
-%global dist                  .sles12
-%global sles12                1
-%endif
-
-# https://en.opensuse.org/openSUSE:Systemd_packaging_guidelines
-%{?sles12:                %global systemd 1}
-%{!?_tmpfilesdir:         %global _tmpfilesdir /usr/lib/tmpfiles.d}
-
-%global min                   5.6.10
+%global min                   5.5.8
 
 Name:           mysql-%{product_suffix}
 Summary:        A very fast and reliable SQL database server
@@ -78,24 +68,15 @@ Source0:        https://cdn.mysql.com/Downloads/MySQL-@MYSQL_BASE_VERSION@/%{src
 URL:            http://www.mysql.com/
 Packager:       MySQL Release Engineering <mysql-build@oss.oracle.com>
 Vendor:         %{mysql_vendor}
-Source1:        mysql-systemd-start
-Source2:        mysqld.service
-Source3:        mysql.conf
 Source4:        my_config.h
 Source90:       filter-provides.sh
 Source91:       filter-requires.sh
 BuildRequires:  cmake
 BuildRequires:  perl
 BuildRequires:  libaio-devel
-BuildRequires:  libnuma-devel
 BuildRequires:  ncurses-devel
 BuildRequires:  openssl-devel
 BuildRequires:  zlib-devel
-%if 0%{?systemd}
-BuildRequires:  systemd
-BuildRequires:  pkgconfig(systemd)
-BuildRequires:  systemd-rpm-macros
-%endif
 BuildRoot:      %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 %if 0%{?rhel} > 6
@@ -132,6 +113,7 @@ Group:          Applications/Databases
 Requires:       coreutils
 Requires:       grep
 Requires:       procps
+Requires:       shadow-utils
 Requires:       net-tools
 Requires:       perl-base
 %if 0%{?commercial}
@@ -152,11 +134,7 @@ Obsoletes:      mariadb-server
 Obsoletes:      mariadb-galera-server
 Provides:       mysql = %{version}-%{release}
 Provides:       mysql-tools = %{version}-%{release}
-%if 0%{?systemd}
-%{?systemd_requires}
-%else
 PreReq:         insserv
-%endif
 PreReq:         sed
 PreReq:         pwdutils
 Conflicts:      otherproviders(mysql)
@@ -380,16 +358,16 @@ mkdir debug
 (
   cd debug
   # Attempt to remove any optimisation flags from the debug build
-  optflags=$(echo "%{optflags}" | sed -e 's/-O2 / /' -e 's/-D_FORTIFY_SOURCE=2/ /' -e 's/-Wp, / /')
+  optflags=$(echo "%{optflags}" | sed -e 's/-O2 / /' -e 's/-Wp,-D_FORTIFY_SOURCE=2/ /')
   cmake ../%{src_dir} \
            -DBUILD_CONFIG=mysql_release \
            -DINSTALL_LAYOUT=RPM \
            -DCMAKE_BUILD_TYPE=Debug \
+           -DENABLE_DTRACE=OFF \
            -DCMAKE_C_FLAGS="$optflags" \
            -DCMAKE_CXX_FLAGS="$optflags" \
-           -DWITH_INNODB_MEMCACHED=1 \
            -DINSTALL_LIBDIR="%{_lib}/mysql" \
-           -DINSTALL_PLUGINDIR="%{_lib}/mysql/plugin" \
+           -DINSTALL_PLUGINDIR="%{_lib}/mysql/plugin/debug" \
            -DINSTALL_SQLBENCHDIR=share \
            -DMYSQL_UNIX_ADDR="%{mysqldatadir}/mysql.sock" \
            -DFEATURE_SET="%{feature_set}" \
@@ -410,9 +388,9 @@ mkdir release
            -DBUILD_CONFIG=mysql_release \
            -DINSTALL_LAYOUT=RPM \
            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+           -DENABLE_DTRACE=OFF \
            -DCMAKE_C_FLAGS="%{optflags}" \
            -DCMAKE_CXX_FLAGS="%{optflags}" \
-           -DWITH_INNODB_MEMCACHED=1 \
            -DINSTALL_LIBDIR="%{_lib}/mysql" \
            -DINSTALL_PLUGINDIR="%{_lib}/mysql/plugin" \
            -DINSTALL_SQLBENCHDIR=share \
@@ -444,13 +422,7 @@ make DESTDIR=%{buildroot} install
 install -D -m 0644 $MBD/release/support-files/mysql-log-rotate %{buildroot}%{_sysconfdir}/logrotate.d/mysql
 install -D -m 0644 $MBD/release/packaging/rpm-sles/my.cnf %{buildroot}%{_sysconfdir}/my.cnf
 install -d %{buildroot}%{_sysconfdir}/my.cnf.d
-%if 0%{?systemd}
-install -D -m 0755 %{SOURCE1} %{buildroot}%{_bindir}/mysql-systemd-start
-install -D -m 0644 %{SOURCE2} %{buildroot}%{_unitdir}/mysql.service
-%else
 install -D -m 0755 $MBD/release/packaging/rpm-sles/mysql.init %{buildroot}%{_sysconfdir}/init.d/mysql
-%endif
-install -D -m 0644 %{SOURCE3} %{buildroot}%{_prefix}/lib/tmpfiles.d/mysql.conf
 
 # Make library links
 install -d -m 0755 %{buildroot}%{_sysconfdir}/ld.so.conf.d
@@ -468,21 +440,15 @@ rm -rf %{buildroot}%{_infodir}/mysql.info*
 rm -rf %{buildroot}%{_datadir}/mysql/binary-configure
 rm -rf %{buildroot}%{_datadir}/mysql/mysql.server
 rm -rf %{buildroot}%{_datadir}/mysql/mysqld_multi.server
-%if 0%{?systemd}
-rm -rf %{buildroot}%{_sysconfdir}/init.d/mysql
-%endif
+rm -f  %{buildroot}%{_datadir}/mysql/{ndb-config-2-node,config*}.ini
+rm -f  %{buildroot}%{_datadir}/mysql/my-*.cnf
 rm -rf %{buildroot}%{_bindir}/mysql_embedded
 rm -rf %{buildroot}%{_bindir}/mysql_setpermission
 rm -rf %{buildroot}%{_mandir}/man1/mysql_setpermission.1*
-rm -f %{buildroot}%{_datadir}/mysql/win_install_firewall.sql 
 
 # rcmysql symlink
 install -d %{buildroot}%{_sbindir}
-%if 0%{?systemd}
-ln -sf %{_sbindir}/service %{buildroot}%{_sbindir}/rcmysql
-%else
 ln -sf %{_initrddir}/mysql %{buildroot}%{_sbindir}/rcmysql
-%endif
 
 %check
 %if 0%{?runselftest}
@@ -502,41 +468,24 @@ rm -r $(readlink var) var
 /usr/sbin/groupadd -r mysql >/dev/null 2>&1 || :
 /usr/sbin/useradd -g mysql -o -r -d /var/lib/mysql -s /bin/false \
     -c "MySQL Server" -u 60 mysql >/dev/null 2>&1 || :
-%if 0%{?systemd}
-%service_add_pre mysql.service
-%endif
 
 %post server
 datadir=$(/usr/bin/my_print_defaults server mysqld | grep '^--datadir=' | sed -n 's/--datadir=//p' | tail -n 1)
 /bin/chmod 0755 "$datadir"
 /bin/touch /var/log/mysql/mysqld.log
 /bin/chown mysql:mysql /var/log/mysql/mysqld.log >/dev/null 2>&1 || :
-%if 0%{?systemd}
-%service_add_post mysql.service
-/usr/bin/systemd-tmpfiles --create %{_tmpfilesdir}/mysql.conf >/dev/null 2>&1 || :
-/bin/systemctl enable mysql.service >/dev/null 2>&1 || :
-%else
 /sbin/insserv /etc/init.d/mysql
-%endif
 
 %preun server
-%if 0%{?systemd}
-%service_del_preun mysql.service
-%else
 if [ "$1" -eq 0 ]; then
     /usr/sbin/rcmysql stop >/dev/null 2>&1 || :
     /sbin/insserv /etc/init.d
 fi
-%endif
 
 %postun server
-%if 0%{?systemd}
-%service_del_postun mysql.service
-%else
 if [ $1 -ge 1 ]; then
     /usr/sbin/rcmysql condrestart >/dev/null 2>&1 || :
 fi
-%endif
 
 %post libs -p /sbin/ldconfig
 
@@ -557,7 +506,6 @@ fi
 %doc %{?license_files_server} %{src_dir}/Docs/ChangeLog
 %doc %{src_dir}/Docs/INFO_SRC*
 %doc release/Docs/INFO_BIN*
-%doc release/support-files/my-default.cnf
 %attr(644, root, root) %{_mandir}/man1/innochecksum.1*
 %attr(644, root, root) %{_mandir}/man1/my_print_defaults.1*
 %attr(644, root, root) %{_mandir}/man1/myisam_ftdump.1*
@@ -577,7 +525,6 @@ fi
 %attr(644, root, root) %{_mandir}/man1/mysqlhotcopy.1*
 %attr(644, root, root) %{_mandir}/man1/mysqlman.1*
 %attr(644, root, root) %{_mandir}/man1/mysql.server.1*
-%attr(644, root, root) %{_mandir}/man1/mysqltest.1*
 %attr(644, root, root) %{_mandir}/man1/mysql_tzinfo_to_sql.1*
 %attr(644, root, root) %{_mandir}/man1/mysql_zap.1*
 %attr(644, root, root) %{_mandir}/man1/mysqlbug.1*
@@ -613,9 +560,6 @@ fi
 %attr(755, root, root) %{_bindir}/replace
 %attr(755, root, root) %{_bindir}/resolve_stack_dump
 %attr(755, root, root) %{_bindir}/resolveip
-%if 0%{?systemd}
-%attr(755, root, root) %{_bindir}/mysql-systemd-start
-%endif
 %attr(755, root, root) %{_sbindir}/mysqld
 %attr(755, root, root) %{_sbindir}/mysqld-debug
 %attr(755, root, root) %{_sbindir}/rcmysql
@@ -623,54 +567,30 @@ fi
 %dir %{_libdir}/mysql/plugin
 %attr(755, root, root) %{_libdir}/mysql/plugin/adt_null.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/auth_socket.so
-%attr(755, root, root) %{_libdir}/mysql/plugin/connection_control.so
-%attr(755, root, root) %{_libdir}/mysql/plugin/innodb_engine.so
-%attr(755, root, root) %{_libdir}/mysql/plugin/libmemcached.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/mypluglib.so
-%attr(755, root, root) %{_libdir}/mysql/plugin/mysql_no_login.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/semisync_master.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/semisync_slave.so
-%attr(755, root, root) %{_libdir}/mysql/plugin/validate_password.so
 %dir %{_libdir}/mysql/plugin/debug
 %attr(755, root, root) %{_libdir}/mysql/plugin/debug/adt_null.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/debug/auth_socket.so
-%attr(755, root, root) %{_libdir}/mysql/plugin/debug/connection_control.so
-%attr(755, root, root) %{_libdir}/mysql/plugin/debug/innodb_engine.so
-%attr(755, root, root) %{_libdir}/mysql/plugin/debug/libmemcached.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/debug/mypluglib.so
-%attr(755, root, root) %{_libdir}/mysql/plugin/debug/mysql_no_login.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/debug/semisync_master.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/debug/semisync_slave.so
-%attr(755, root, root) %{_libdir}/mysql/plugin/debug/validate_password.so
 %if 0%{?commercial}
 %attr(755, root, root) %{_libdir}/mysql/plugin/audit_log.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/authentication_pam.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/thread_pool.so
-%attr(755, root, root) %{_libdir}/mysql/plugin/openssl_udf.so
-%attr(755, root, root) %{_libdir}/mysql/plugin/firewall.so 
-%attr(644, root, root) %{_datadir}/mysql/linux_install_firewall.sql 
 %attr(755, root, root) %{_libdir}/mysql/plugin/debug/audit_log.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/debug/authentication_pam.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/debug/thread_pool.so
-%attr(755, root, root) %{_libdir}/mysql/plugin/debug/openssl_udf.so
-%attr(755, root, root) %{_libdir}/mysql/plugin/debug/firewall.so 
 %endif
 %attr(644, root, root) %{_datadir}/mysql/fill_help_tables.sql
 %attr(644, root, root) %{_datadir}/mysql/mysql_system_tables.sql
 %attr(644, root, root) %{_datadir}/mysql/mysql_system_tables_data.sql
 %attr(644, root, root) %{_datadir}/mysql/mysql_test_data_timezone.sql
-%attr(644, root, root) %{_datadir}/mysql/my-*.cnf
 %attr(644, root, root) %{_datadir}/mysql/mysql-log-rotate
-%attr(644, root, root) %{_datadir}/mysql/mysql_security_commands.sql
-%attr(644, root, root) %{_datadir}/mysql/dictionary.txt
-%attr(644, root, root) %{_datadir}/mysql/innodb_memcached_config.sql
 %attr(644, root, root) %{_datadir}/mysql/magic
-%attr(644, root, root) %{_prefix}/lib/tmpfiles.d/mysql.conf
-%if 0%{?systemd}
-%attr(644, root, root) %{_unitdir}/mysql.service
-%else
 %attr(755, root, root) %{_sysconfdir}/init.d/mysql
-%endif
 %attr(644, root, root) %config(noreplace,missingok) %{_sysconfdir}/logrotate.d/mysql
 %dir %attr(755, mysql, mysql) /var/lib/mysql
 %dir %attr(755, mysql, mysql) /var/run/mysql
@@ -682,7 +602,6 @@ fi
 %doc %{?license_files_server}
 %{_datadir}/mysql/charsets/
 %{_datadir}/mysql/errmsg-utf8.txt
-%{_datadir}/mysql/bulgarian/
 %{_datadir}/mysql/czech/
 %{_datadir}/mysql/danish/
 %{_datadir}/mysql/dutch/
@@ -724,7 +643,6 @@ fi
 %attr(755, root, root) %{_bindir}/mysqlimport
 %attr(755, root, root) %{_bindir}/mysqlshow
 %attr(755, root, root) %{_bindir}/mysqlslap
-%attr(755, root, root) %{_bindir}/mysql_config_editor
 
 %attr(644, root, root) %{_mandir}/man1/msql2mysql.1*
 %attr(644, root, root) %{_mandir}/man1/mysql.1*
@@ -738,7 +656,6 @@ fi
 %attr(644, root, root) %{_mandir}/man1/mysqlimport.1*
 %attr(644, root, root) %{_mandir}/man1/mysqlshow.1*
 %attr(644, root, root) %{_mandir}/man1/mysqlslap.1*
-%attr(644, root, root) %{_mandir}/man1/mysql_config_editor.1*
 
 %files devel
 %defattr(-, root, root, -)
@@ -787,24 +704,15 @@ fi
 %attr(755, root, root) %{_libdir}/mysql/plugin/auth_test_plugin.so
 %attr(644, root, root) %{_libdir}/mysql/plugin/daemon_example.ini
 %attr(755, root, root) %{_libdir}/mysql/plugin/libdaemon_example.so
-%attr(755, root, root) %{_libdir}/mysql/plugin/test_udf_services.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/qa_auth_client.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/qa_auth_interface.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/qa_auth_server.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/debug/auth.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/debug/auth_test_plugin.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/debug/libdaemon_example.so
-%attr(755, root, root) %{_libdir}/mysql/plugin/debug/test_udf_services.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/debug/qa_auth_client.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/debug/qa_auth_interface.so
 %attr(755, root, root) %{_libdir}/mysql/plugin/debug/qa_auth_server.so
-
-%attr(644, root, root) %{_mandir}/man1/mysql_client_test.1*
-%attr(644, root, root) %{_mandir}/man1/mysql-stress-test.pl.1*
-%attr(644, root, root) %{_mandir}/man1/mysql-test-run.pl.1*
-%attr(644, root, root) %{_mandir}/man1/mysql_client_test_embedded.1*
-%attr(644, root, root) %{_mandir}/man1/mysqltest.1*
-%attr(644, root, root) %{_mandir}/man1/mysqltest_embedded.1*
 
 %files bench
 %defattr(-, root, root, -)
@@ -826,23 +734,20 @@ fi
 %attr(755, root, root) %{_libdir}/mysql/libmysqld.so
 
 %changelog
-* Mon Oct 31 2016 Balasubramanian Kandasamy <balasubramanian.kandasamy@oracle.com> - 5.6.35-1
-- Add connection_control.so to server subpackage
+* Wed Jan 10 2018 Bjorn Munch <bjorn.munch@oracle.com> - 5.5.60-1
+- No longer need to remove obsoleted mysqltest man pages
 
-* Mon Sep 26 2016 Balasubramanian Kandasamy <balasubramanian.kandasamy@oracle.com> - 5.6.34-1
+* Tue Oct 31 2017 Bjorn Munch <bjorn.munch@oracle.com> - 5.5.59-1
+- Remove obsoleted mysqltest man pages
+
+* Mon Sep 26 2016 Balasubramanian Kandasamy <balasubramanian.kandasamy@oracle.com> - 5.5.53-1
 - Include mysql-files directory
 
-* Mon Mar 14 2016 Georgi Kodinov <georgi.kodinov@oracle.com> - 5.6.31-1
-- Add test_udf_services.so plugin
-
-* Tue Sep 29 2015 Balasubramanian Kandasamy <balasubramanian.kandasamy@oracle.com> - 5.6.28-1
+* Tue Sep 29 2015 Balasubramanian Kandasamy <balasubramanian.kandasamy@oracle.com> - 5.5.47-1
 - Added conflicts to mysql-connector-c-shared dependencies
 
-* Wed Jan 14 2015 Balasubramanian Kandasamy <balasubramanian.kandasamy@oracle.com> - 5.6.24-1
-- Add mysql_no_login.so plugin
-
-* Mon Oct 06 2014 Balasubramanian Kandasamy <balasubramanian.kandasamy@oracle.com> - 5.6.22-1
-- Backport to 5.6.22
+* Mon Oct 06 2014 Balasubramanian Kandasamy <balasubramanian.kandasamy@oracle.com> - 5.5.41-1
+- Backport to 5.5.41
 
 * Mon Oct 06 2014 Balasubramanian Kandasamy <balasubramanian.kandasamy@oracle.com> - 5.7.6-0.2.m16
 - Include boost sources

@@ -38,9 +38,9 @@ USER_HOST	select 'events_logs_test' as inside_event
 Check slow query log
 
 Ensure that slow logging is on
-show variables like 'slow_query_log';
+show variables like 'log_slow_queries';
 Variable_name	Value
-slow_query_log	ON
+log_slow_queries	ON
 
 Demonstrate that session value has no effect
 

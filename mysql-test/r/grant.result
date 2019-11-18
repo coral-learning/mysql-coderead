@@ -2,7 +2,6 @@ SET @old_log_bin_trust_function_creators= @@global.log_bin_trust_function_creato
 SET GLOBAL log_bin_trust_function_creators = 1;
 drop table if exists t1;
 drop database if exists mysqltest;
-call mtr.add_suppression("Did not write failed .* ");
 SET NAMES binary;
 delete from mysql.user where user='mysqltest_1';
 delete from mysql.db where user='mysqltest_1';
@@ -54,9 +53,8 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
-authentication_string	
-password_expired	N
+plugin	
+authentication_string	NULL
 show grants for mysqltest_1@localhost;
 Grants for mysqltest_1@localhost
 GRANT USAGE ON *.* TO 'mysqltest_1'@'localhost' REQUIRE CIPHER 'EDH-RSA-DES-CBC3-SHA'
@@ -126,9 +124,8 @@ max_questions	10
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
-authentication_string	
-password_expired	N
+plugin	
+authentication_string	NULL
 show grants for mysqltest_1@localhost;
 Grants for mysqltest_1@localhost
 GRANT USAGE ON *.* TO 'mysqltest_1'@'localhost' WITH MAX_QUERIES_PER_HOUR 10
@@ -174,9 +171,8 @@ max_questions	10
 max_updates	20
 max_connections	30
 max_user_connections	0
-plugin	mysql_native_password
-authentication_string	
-password_expired	N
+plugin	
+authentication_string	NULL
 show grants for mysqltest_1@localhost;
 Grants for mysqltest_1@localhost
 GRANT USAGE ON *.* TO 'mysqltest_1'@'localhost' WITH MAX_QUERIES_PER_HOUR 10 MAX_UPDATES_PER_HOUR 20 MAX_CONNECTIONS_PER_HOUR 30
@@ -615,7 +611,7 @@ create database mysqltest;
 create table mysqltest.t1 (a int,b int,c int);
 grant all on mysqltest.t1 to mysqltest_1@localhost;
 alter table t1 rename t2;
-ERROR 42000: INSERT, CREATE command denied to user 'mysqltest_1'@'localhost' for table 't2'
+ERROR 42000: INSERT,CREATE command denied to user 'mysqltest_1'@'localhost' for table 't2'
 revoke all privileges on mysqltest.t1 from mysqltest_1@localhost;
 delete from mysql.user where user=_binary'mysqltest_1';
 drop database mysqltest;
@@ -1109,9 +1105,9 @@ Grants for mysqltest_1@localhost
 GRANT USAGE ON *.* TO 'mysqltest_1'@'localhost'
 GRANT SELECT ON `mysqltest1`.`t1` TO 'mysqltest_1'@'localhost'
 RENAME TABLE t1 TO t2;
-ERROR 42000: DROP, ALTER command denied to user 'mysqltest_1'@'localhost' for table 't1'
+ERROR 42000: DROP,ALTER command denied to user 'mysqltest_1'@'localhost' for table 't1'
 ALTER TABLE t1 RENAME TO t2;
-ERROR 42000: DROP, ALTER command denied to user 'mysqltest_1'@'localhost' for table 't1'
+ERROR 42000: DROP,ALTER command denied to user 'mysqltest_1'@'localhost' for table 't1'
 GRANT DROP ON mysqltest1.t1 TO mysqltest_1@localhost;
 RENAME TABLE t1 TO t2;
 ERROR 42000: ALTER command denied to user 'mysqltest_1'@'localhost' for table 't1'
@@ -1123,9 +1119,9 @@ Grants for mysqltest_1@localhost
 GRANT USAGE ON *.* TO 'mysqltest_1'@'localhost'
 GRANT SELECT, DROP, ALTER ON `mysqltest1`.`t1` TO 'mysqltest_1'@'localhost'
 RENAME TABLE t1 TO t2;
-ERROR 42000: INSERT, CREATE command denied to user 'mysqltest_1'@'localhost' for table 't2'
+ERROR 42000: INSERT,CREATE command denied to user 'mysqltest_1'@'localhost' for table 't2'
 ALTER TABLE t1 RENAME TO t2;
-ERROR 42000: INSERT, CREATE command denied to user 'mysqltest_1'@'localhost' for table 't2'
+ERROR 42000: INSERT,CREATE command denied to user 'mysqltest_1'@'localhost' for table 't2'
 GRANT INSERT, CREATE ON mysqltest1.t1 TO mysqltest_1@localhost;
 SHOW GRANTS;
 Grants for mysqltest_1@localhost
@@ -1356,7 +1352,7 @@ FLUSH PRIVILEGES;
 DROP TABLE mysql.user;
 drop table if exists test;
 Warnings:
-Note	1051	Unknown table 'test.test'
+Note	1051	Unknown table 'test'
 drop function if exists test_function;
 Warnings:
 Note	1305	FUNCTION test.test_function does not exist
@@ -1705,7 +1701,6 @@ Assigning privileges without procs_priv table.
 CREATE DATABASE mysqltest1;
 CREATE PROCEDURE mysqltest1.test() SQL SECURITY DEFINER
 SELECT 1;
-CREATE FUNCTION mysqltest1.test() RETURNS INT RETURN 1;
 GRANT EXECUTE ON FUNCTION mysqltest1.test TO mysqltest_1@localhost;
 ERROR 42S02: Table 'mysql.procs_priv' doesn't exist
 GRANT ALL PRIVILEGES ON test.* TO mysqltest_1@localhost;
@@ -1767,10 +1762,10 @@ GRANT CREATE, CREATE ROUTINE ON `db1`.* TO 'user1'@'localhost'
 ** the current user user1@localhost. 
 SELECT @@GLOBAL.sql_mode;
 @@GLOBAL.sql_mode
-NO_ENGINE_SUBSTITUTION
+
 SELECT @@SESSION.sql_mode;
 @@SESSION.sql_mode
-NO_ENGINE_SUBSTITUTION
+
 CREATE DATABASE db1;
 CREATE PROCEDURE db1.proc1(p1 INT)
 BEGIN
@@ -1786,8 +1781,6 @@ BEGIN
 SET @x = 0;
 REPEAT SET @x = @x + 1; UNTIL @x > p1 END REPEAT;
 END ;||
-Warnings:
-Warning	1404	Failed to grant EXECUTE and ALTER ROUTINE privileges
 SHOW GRANTS FOR 'user1'@'localhost';
 Grants for user1@localhost
 GRANT USAGE ON *.* TO 'user1'@'localhost'
@@ -1797,6 +1790,7 @@ SHOW GRANTS FOR 'user2';
 Grants for user2@%
 GRANT USAGE ON *.* TO 'user2'@'%'
 GRANT CREATE, CREATE ROUTINE ON `db1`.* TO 'user2'@'%'
+GRANT EXECUTE, ALTER ROUTINE ON PROCEDURE `db1`.`proc2` TO 'user2'@'%'
 DROP PROCEDURE db1.proc1;
 DROP PROCEDURE db1.proc2;
 REVOKE ALL ON db1.* FROM 'user1'@'localhost';
@@ -2542,77 +2536,3 @@ DROP USER mysqltest_u1@localhost;
 
 # End of Bug#38347.
 
-#
-# BUG#11759114 - '51401: GRANT TREATS NONEXISTENT FUNCTIONS/PRIVILEGES
-#                 DIFFERENTLY'.
-#
-drop database if exists mysqltest_db1;
-create database mysqltest_db1;
-create user mysqltest_u1;
-# Both GRANT statements below should fail with the same error.
-grant execute on function mysqltest_db1.f1 to mysqltest_u1;
-ERROR 42000: FUNCTION or PROCEDURE f1 does not exist
-grant execute on procedure mysqltest_db1.p1 to mysqltest_u1;
-ERROR 42000: FUNCTION or PROCEDURE p1 does not exist
-# Let us show that GRANT behaviour for routines is consistent
-# with GRANT behaviour for tables. Attempt to grant privilege
-# on non-existent table also results in an error.
-grant select on mysqltest_db1.t1 to mysqltest_u1;
-ERROR 42S02: Table 'mysqltest_db1.t1' doesn't exist
-show grants for mysqltest_u1;
-Grants for mysqltest_u1@%
-GRANT USAGE ON *.* TO 'mysqltest_u1'@'%'
-drop database mysqltest_db1;
-drop user mysqltest_u1;
-#
-# Bug#11756966 - 48958: STORED PROCEDURES CAN BE LEVERAGED TO BYPASS
-#                DATABASE SECURITY
-#
-DROP DATABASE IF EXISTS secret;
-DROP DATABASE IF EXISTS no_such_db;
-CREATE DATABASE secret;
-GRANT USAGE ON *.* TO 'untrusted'@localhost;
-# Connection con1
-SHOW GRANTS;
-Grants for untrusted@localhost
-GRANT USAGE ON *.* TO 'untrusted'@'localhost'
-SHOW DATABASES;
-Database
-information_schema
-test
-# Both statements below should fail with the same error.
-# They used to give different errors, thereby
-# hinting that the secret database exists.
-CREATE PROCEDURE no_such_db.foo() BEGIN END;
-ERROR 42000: Access denied for user 'untrusted'@'localhost' to database 'no_such_db'
-CREATE PROCEDURE secret.peek_at_secret() BEGIN END;
-ERROR 42000: Access denied for user 'untrusted'@'localhost' to database 'secret'
-# Connection default
-DROP USER 'untrusted'@localhost;
-DROP DATABASE secret;
-#
-# Bug#12766319 - 61865: RENAME USER DOES NOT WORK CORRECTLY - 
-#                       REQUIRES FLUSH PRIVILEGES
-#
-CREATE USER foo@'127.0.0.1';
-GRANT ALL ON *.* TO foo@'127.0.0.1';
-# First attempt, should connect successfully 
-SELECT user(), current_user();
-user()	current_user()
-foo@localhost	foo@127.0.0.1
-# Rename the user
-RENAME USER foo@'127.0.0.1' to foo@'127.0.0.0/255.0.0.0';
-# Second attempt, should connect successfully as its valid mask
-# This was failing without fix 
-SELECT user(), current_user();
-user()	current_user()
-foo@localhost	foo@127.0.0.0/255.0.0.0
-# Rename the user back to original
-RENAME USER foo@'127.0.0.0/255.0.0.0' to foo@'127.0.0.1';
-# Third attempt, should connect successfully 
-SELECT user(), current_user();
-user()	current_user()
-foo@localhost	foo@127.0.0.1
-# Clean-up
-DROP USER foo@'127.0.0.1';
-# End of Bug#12766319

@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003, 2005, 2006, 2008 MySQL AB, 2008, 2009 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef LCP_SIGNAL_DATA_HPP
 #define LCP_SIGNAL_DATA_HPP
@@ -22,7 +20,7 @@
 #include "SignalData.hpp"
 #include <NodeBitmask.hpp>
 
-struct StartLcpReq {
+class StartLcpReq {
   /**
    * Sender(s)
    */
@@ -41,6 +39,7 @@ struct StartLcpReq {
 public:
 
   STATIC_CONST( SignalLength = 2 + 2 * NdbNodeBitmask::Size );
+private:
   Uint32 senderRef;
   Uint32 lcpId;
   
@@ -94,8 +93,6 @@ class LcpFragOrd {
    * Receiver(s)
    */
   friend class Dblqh;
-  friend class DblqhProxy;
-  friend class PgmanProxy;
 
   friend bool printLCP_FRAG_ORD(FILE *, const Uint32 *, Uint32, Uint16);  
 public:
@@ -111,7 +108,7 @@ private:
 };
 
 
-struct LcpFragRep {
+class LcpFragRep {
   /**
    * Sender(s) and receiver(s)
    */
@@ -121,13 +118,12 @@ struct LcpFragRep {
    * Sender(s)
    */
   friend class Dblqh;
-  friend class DblqhProxy;
 
   friend bool printLCP_FRAG_REP(FILE *, const Uint32 *, Uint32, Uint16);  
-
+public:
   STATIC_CONST( SignalLength = 7 );
-  STATIC_CONST( BROADCAST_REQ = 0 );
 
+private:
   Uint32 nodeId;
   Uint32 lcpId;
   Uint32 lcpNo;
@@ -147,7 +143,6 @@ class LcpCompleteRep {
    * Sender(s)
    */
   friend class Dblqh;
-  friend class DblqhProxy;
 
   friend bool printLCP_COMPLETE_REP(FILE *, const Uint32 *, Uint32, Uint16);  
 public:
@@ -200,8 +195,6 @@ struct EndLcpReq
   Uint32 senderRef;
   Uint32 backupPtr;
   Uint32 backupId;
-  // extra word for LQH worker to proxy
-  Uint32 proxyBlockNo;
 
   STATIC_CONST( SignalLength = 4 );
 };

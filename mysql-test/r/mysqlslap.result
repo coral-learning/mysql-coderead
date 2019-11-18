@@ -248,9 +248,12 @@ performance_schema
 test
 DROP DATABASE bug58090;
 #
-# Bug#12688860 : SECURITY RECOMMENDATION: PASSWORDS ON CLI
+# Bug #11766072 - 59107: MYSQLSLAP CRASHES IF STARTED WITH NO ARGUMENTS ON WINDOWS
 #
-Executing mysqlslap with password.
-Warning: Using a password on the command line interface can be insecure.
+Benchmark
+	Average number of seconds to run all queries: TIME seconds
+	Minimum number of seconds to run all queries: TIME seconds
+	Maximum number of seconds to run all queries: TIME seconds
+	Number of clients running queries: 1
+	Average number of queries per client: 0
 
-End of tests

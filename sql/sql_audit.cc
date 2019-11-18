@@ -1,4 +1,4 @@
-/* Copyright (c) 2007, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2007, 2013, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -10,8 +10,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #include "sql_priv.h"
 #include "sql_audit.h"
@@ -120,10 +120,8 @@ static audit_handler_t audit_handlers[] =
   general_class_handler, connection_class_handler
 };
 
-#ifndef DBUG_OFF
 static const uint audit_handlers_count=
   (sizeof(audit_handlers) / sizeof(audit_handler_t));
-#endif /* DBUG_OFF */
 
 
 /**
@@ -167,7 +165,7 @@ static my_bool acquire_plugins(THD *thd, plugin_ref plugin, void *arg)
   
   /* lock the plugin and add it to the list */
   plugin= my_plugin_lock(NULL, &plugin);
-  insert_dynamic(&thd->audit_class_plugins, &plugin);
+  insert_dynamic(&thd->audit_class_plugins, (uchar*) &plugin);
 
   return 0;
 }
@@ -253,7 +251,7 @@ void mysql_audit_release(THD *thd)
   
   /* Reset the state of thread values */
   reset_dynamic(&thd->audit_class_plugins);
-  memset(thd->audit_class_mask, 0, sizeof(thd->audit_class_mask));
+  bzero(thd->audit_class_mask, sizeof(thd->audit_class_mask));
 }
 
 
@@ -266,8 +264,8 @@ void mysql_audit_release(THD *thd)
 
 void mysql_audit_init_thd(THD *thd)
 {
-  memset(&thd->audit_class_plugins, 0, sizeof(thd->audit_class_plugins));
-  memset(thd->audit_class_mask, 0, sizeof(thd->audit_class_mask));
+  bzero(&thd->audit_class_plugins, sizeof(thd->audit_class_plugins));
+  bzero(thd->audit_class_mask, sizeof(thd->audit_class_mask));
 }
 
 
@@ -301,8 +299,11 @@ static void init_audit_psi_keys(void)
   const char* category= "sql";
   int count;
 
+  if (PSI_server == NULL)
+    return;
+
   count= array_elements(all_audit_mutexes);
-  mysql_mutex_register(category, all_audit_mutexes, count);
+  PSI_server->register_mutex(category, all_audit_mutexes, count);
 }
 #endif /* HAVE_PSI_INTERFACE */
 
@@ -317,7 +318,7 @@ void mysql_audit_initialize()
 #endif
 
   mysql_mutex_init(key_LOCK_audit_mask, &LOCK_audit_mask, MY_MUTEX_INIT_FAST);
-  memset(mysql_global_audit_mask, 0, sizeof(mysql_global_audit_mask));
+  bzero(mysql_global_audit_mask, sizeof(mysql_global_audit_mask));
 }
 
 
@@ -344,14 +345,15 @@ int initialize_audit_plugin(st_plugin_int *plugin)
 {
   st_mysql_audit *data= (st_mysql_audit*) plugin->plugin->info;
   
-  if (!data->event_notify || !data->class_mask[0])
+  if (!data->class_mask || !data->event_notify ||
+      !data->class_mask[0])
   {
     sql_print_error("Plugin '%s' has invalid data.",
                     plugin->name.str);
     return 1;
   }
   
-  if (plugin->plugin->init && plugin->plugin->init(plugin))
+  if (plugin->plugin->init && plugin->plugin->init(NULL))
   {
     sql_print_error("Plugin '%s' init function returned error.",
                     plugin->name.str);
@@ -408,7 +410,7 @@ int finalize_audit_plugin(st_plugin_int *plugin)
   }
   
   plugin->data= NULL;
-  memset(&event_class_mask, 0, sizeof(event_class_mask));
+  bzero(&event_class_mask, sizeof(event_class_mask));
 
   /* Iterate through all the installed plugins to create new mask */
 
@@ -492,12 +494,6 @@ static void event_class_dispatch(THD *thd, unsigned int event_class,
   }
 }
 
-
-/**  There's at least one active audit plugin tracking the general events */
-bool is_any_audit_plugin_active(THD *thd MY_ATTRIBUTE((unused)))
-{
-  return (mysql_global_audit_mask[0] & MYSQL_AUDIT_GENERAL_CLASSMASK);
-}
 
 #else /* EMBEDDED_LIBRARY */
 

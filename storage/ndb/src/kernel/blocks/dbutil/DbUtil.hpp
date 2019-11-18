@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef DBUTIL_H
 #define DBUTIL_H
@@ -37,8 +36,6 @@
 #include <signaldata/UtilLock.hpp>
 #include <SimpleProperties.hpp>
 #include <Array.hpp>
-
-#include <LockQueue.hpp>
 
 #define UTIL_WORDS_PER_PAGE 1023
 
@@ -76,9 +73,7 @@ protected:
   void execSTTOR(Signal* signal);
   void execNDB_STTOR(Signal* signal);
   void execDUMP_STATE_ORD(Signal* signal);
-  void execDBINFO_SCANREQ(Signal* signal);
   void execCONTINUEB(Signal* signal);
-  void execNODE_FAILREP(Signal* signal);
 
   /**
    * Sequence Service : Public interface
@@ -150,12 +145,7 @@ public:
    * @brief   For storing SimpleProperties objects and similar temporary data
    */
   struct Page32 {
-    union {
-      Uint32 data[UTIL_WORDS_PER_PAGE];
-      Uint32 chunkSize;
-      Uint32 nextChunk;
-      Uint32 lastChunk;
-    };
+    Uint32  data[UTIL_WORDS_PER_PAGE];
     Uint32  nextPool;                  // Note: This used as data when seized
   };
 
@@ -173,7 +163,6 @@ public:
     /*** Client info ***/
     Uint32 clientRef;
     Uint32 clientData;
-    Uint32 schemaTransId;
 
     /** 
      * SimpleProp sent in UTIL_PREPARE_REQ 
@@ -221,6 +210,7 @@ public:
     }
 
     /*** Various Operation Info ***/
+    Uint32    keyLen;          // Length of primary key (fixed size is assumed)
     Uint32    rsLen;           // Size of result set
     Uint32    noOfKeyAttr;     // Number of key attributes
     Uint32    noOfAttr;        // Number of attributes
@@ -242,7 +232,7 @@ public:
     AttrMappingBuffer    attrMapping;
 
     /*** First signal in tckeyreq train ***/
-    Uint32    tckeyLen;           // TcKeyReq total signal length
+    Uint32    tckeyLenInBytes;    // TcKeyReq total signal length (in bytes)
     Uint32    keyDataPos;         // Where to store keydata[] in tckey signal
                                   // (in #words from base in tckey signal)
     TcKeyReq  tckey;              // Signaldata for first signal in train
@@ -263,10 +253,11 @@ public:
     
     void print() const {
       ndbout << "[-PreparedOperation-" << endl
+	     << " keyLen: " << keyLen
 	     << ", rsLen: " << rsLen
 	     << ", noOfKeyAttr: " << noOfKeyAttr 
 	     << ", noOfAttr: " << noOfAttr 
-	     << ", tckeyLen: " << tckeyLen 
+	     << ", tckeyLenInBytes: " << tckeyLenInBytes 
 	     << ", keyDataPos: " << keyDataPos << endl
 	     << "-AttrMapping- (AttrId, KeyPos)-pairs "
 	     << "(Pos=3fff if non-key attr):" << endl;
@@ -296,10 +287,10 @@ public:
     KeyInfoBuffer                        keyInfo;
     AttrInfoBuffer                       attrInfo;
     ResultSetBuffer                      rs;
+    ResultSetBuffer::DataBufferIterator  rsIterator;
     
     Uint32 transPtrI;
     
-    Uint32 m_scanTakeOver;
     Uint32 rsRecv;
     Uint32 rsExpect;
     inline bool complete() const { return rsRecv == rsExpect; }
@@ -347,14 +338,11 @@ public:
     };
     
     Uint32 connectPtr;
-    Uint32 connectRef;
     Uint32 transId[2];
     SLList<Operation> operations;
 
     Uint32 errorCode;
     Uint32 noOfRetries;
-    Uint32 gci_hi;
-    Uint32 gci_lo;
     Uint32 sent;        // No of operations sent
     Uint32 recv;        // No of completed operations received
     inline bool complete() const { return sent == recv; };
@@ -408,11 +396,11 @@ public:
   void initResultSet(ResultSetBuffer &, const ResultSetInfoBuffer &);
   void runTransaction(Signal* signal, TransactionPtr);
   void runOperation(Signal* signal, TransactionPtr &, OperationPtr &, Uint32);
-  void sendKeyInfo(Signal* signal, Uint32 ref,
+  void sendKeyInfo(Signal* signal, 
 		   KeyInfo* keyInfo,
 		   const KeyInfoBuffer & keyBuf,
 		   KeyInfoIterator & kit);
-  void sendAttrInfo(Signal*, Uint32 ref,
+  void sendAttrInfo(Signal*, 
 		    AttrInfo* attrInfo, 
 		    const AttrInfoBuffer &,
 		    AttrInfoIterator & ait);
@@ -420,16 +408,14 @@ public:
 		   struct LinearSectionPtr sectionsPtr[]);
   void finishTransaction(Signal*, TransactionPtr);
   void releaseTransaction(TransactionPtr transPtr);
-  void get_systab_tableid(Signal*);
-  void hardcodedPrepare(Signal*, Uint32 SYSTAB_0);
+  void hardcodedPrepare();
   void connectTc(Signal* signal);
   void reportSequence(Signal*, const Transaction *);
   void readPrepareProps(Signal* signal, 
 			SimpleProperties::Reader* reader, 
-			PreparePtr);
-  void prepareOperation(Signal*, PreparePtr, SegmentedSectionPtr);
-  void sendUtilPrepareRef(Signal*, UtilPrepareRef::ErrorCode, Uint32, Uint32,
-                          Uint32 extraError = 0);
+			Uint32 senderData);
+  void prepareOperation(Signal*, PreparePtr);
+  void sendUtilPrepareRef(Signal*, UtilPrepareRef::ErrorCode, Uint32, Uint32);
   void sendUtilExecuteRef(Signal*, UtilExecuteRef::ErrorCode, 
 			  Uint32, Uint32, Uint32);
   void releasePrepare(PreparePtr);
@@ -438,15 +424,26 @@ public:
   /***************************************************************************
    * Lock manager
    */
-  struct LockQueueInstance {
-    LockQueueInstance(){}
-    LockQueueInstance(Uint32 id) : m_queue() { m_lockId = id; }
+  struct LockQueueElement {
+    Uint32 m_senderData;
+    Uint32 m_senderRef;
+    union {
+      Uint32 nextPool;
+      Uint32 nextList;
+    };
+    Uint32 prevList;
+  };
+  typedef Ptr<LockQueueElement> LockQueueElementPtr;
+
+  struct LockQueue {
+    LockQueue(){}
+    LockQueue(Uint32 id) : m_queue() { m_lockId = id; m_lockKey = 0;}
     union {
       Uint32 m_lockId;
       Uint32 key;
     };
-    
-    LockQueue m_queue;
+    Uint32 m_lockKey;
+    DLFifoList<LockQueueElement>::Head m_queue;
     union {
       Uint32 nextHash;
       Uint32 nextPool;
@@ -456,15 +453,16 @@ public:
     Uint32 hashValue() const {
       return m_lockId;
     }
-    bool equal(const LockQueueInstance & rec) const {
+    bool equal(const LockQueue & rec) const {
       return m_lockId == rec.m_lockId;
     }
   };
-  typedef Ptr<LockQueueInstance> LockQueuePtr;
+  typedef Ptr<LockQueue> LockQueuePtr;
   
-  ArrayPool<LockQueueInstance> c_lockQueuePool;
-  KeyTable<LockQueueInstance> c_lockQueues;
-  LockQueue::Pool c_lockElementPool;
+  
+  ArrayPool<LockQueue> c_lockQueuePool;
+  ArrayPool<LockQueueElement> c_lockElementPool;
+  KeyTable<LockQueue> c_lockQueues;
   
   void execUTIL_CREATE_LOCK_REQ(Signal* signal);
   void execUTIL_DESTORY_LOCK_REQ(Signal* signal);
@@ -472,9 +470,10 @@ public:
   void execUTIL_UNLOCK_REQ(Signal* signal);
   
   void sendLOCK_REF(Signal*, const UtilLockReq * req, UtilLockRef::ErrorCode);
-  void sendLOCK_CONF(Signal*, const UtilLockReq * req);
+  void sendLOCK_CONF(Signal*, LockQueue *, LockQueueElement *);
 
   void sendUNLOCK_REF(Signal*, const UtilUnlockReq*, UtilUnlockRef::ErrorCode);
+  void sendUNLOCK_CONF(Signal*, LockQueue *, LockQueueElement *);
 
   // For testing of mutex:es
   void mutex_created(Signal* signal, Uint32 mutexId, Uint32 retVal);

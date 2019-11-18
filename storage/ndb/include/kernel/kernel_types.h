@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003, 2005, 2006, 2008 MySQL AB, 2010 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,19 +12,17 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef NDB_KERNEL_TYPES_H
 #define NDB_KERNEL_TYPES_H
 
-#include <my_global.h>
+#include <my_config.h>
 #include <ndb_types.h>
 #include "ndb_limits.h"
 
 typedef Uint16 NodeId; 
 typedef Uint16 BlockNumber;
-typedef Uint16 BlockInstance;
 typedef Uint32 BlockReference;
 typedef Uint16 GlobalSignalNumber;
 
@@ -36,8 +33,9 @@ enum Operation_t {
   ,ZDELETE  = 3
   ,ZWRITE   = 4
   ,ZREAD_EX = 5
-  ,ZREFRESH = 6
-  ,ZUNLOCK  = 7
+#if 0
+  ,ZREAD_CONSISTENT = 6
+#endif
 };
 
 /**
@@ -59,23 +57,12 @@ struct Local_key
   bool isNull() const { return m_page_no == RNIL; }
   void setNull() { m_page_no= RNIL; m_file_no= m_page_idx= ~0;}
 
-  Uint32 ref() const { return ref(m_page_no,m_page_idx) ;}
+  Uint32 ref() const { return (m_page_no << MAX_TUPLES_BITS) | m_page_idx ;}
   
-  Local_key& assref (Uint32 ref) {
-    m_page_no = ref2page_id(ref);
-    m_page_idx = ref2page_idx(ref);
+  Local_key& assref (Uint32 ref) { 
+    m_page_no =ref >> MAX_TUPLES_BITS;
+    m_page_idx = ref & MAX_TUPLES_PER_PAGE;
     return *this;
-  }
-
-  static Uint32 ref(Uint32 lk1, Uint32 lk2) {
-    return (lk1 << MAX_TUPLES_BITS) | lk2;
-  }
-
-  static Uint32 ref2page_id(Uint32 ref) { return ref >> MAX_TUPLES_BITS; }
-  static Uint32 ref2page_idx(Uint32 ref) { return ref & MAX_TUPLES_PER_PAGE; }
-
-  static bool isInvalid(Uint32 lk1, Uint32 lk2) {
-    return ref(lk1, lk2) == ~Uint32(0);
   }
 };
 

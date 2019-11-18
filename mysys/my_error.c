@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -18,8 +18,6 @@
 #include <m_string.h>
 #include <stdarg.h>
 #include <m_ctype.h>
-#include "my_base.h"
-#include "my_handler_errors.h"
 
 /* Max length of a error message. Should be kept in sync with MYSQL_ERRMSG_SIZE. */
 #define ERRMSGSIZE      (512)
@@ -59,122 +57,35 @@ static struct my_err_head
 static struct my_err_head *my_errmsgs_list= &my_errmsgs_globerrs;
 
 
-/**
-  Get a string describing a system or handler error. thread-safe.
+/*
+   Error message to user
 
-  @param  buf  a buffer in which to return the error message
-  @param  len  the size of the aforementioned buffer
-  @param  nr   the error number
+   SYNOPSIS
+     my_error()
+       nr	Errno
+       MyFlags	Flags
+       ...	variable list
 
-  @retval buf  always buf. for signature compatibility with strerror(3).
-*/
-
-char *my_strerror(char *buf, size_t len, int nr)
-{
-  char *msg= NULL;
-
-  buf[0]= '\0';                                  /* failsafe */
-
-  /*
-    These (handler-) error messages are shared by perror, as required
-    by the principle of least surprise.
-  */
-  if ((nr >= HA_ERR_FIRST) && (nr <= HA_ERR_LAST))
-    msg= (char *) handler_error_messages[nr - HA_ERR_FIRST];
-
-  if (msg != NULL)
-    strmake(buf, msg, len - 1);
-  else
-  {
-    /*
-      On Windows, do things the Windows way. On a system that supports both
-      the GNU and the XSI variant, use whichever was configured (GNU); if
-      this choice is not advertised, use the default (POSIX/XSI).  Testing
-      for __GNUC__ is not sufficient to determine whether this choice exists.
-    */
-#if defined(__WIN__)
-    strerror_s(buf, len, nr);
-#elif ((defined _POSIX_C_SOURCE && (_POSIX_C_SOURCE >= 200112L)) ||    \
-       (defined _XOPEN_SOURCE   && (_XOPEN_SOURCE >= 600)))      &&    \
-      ! defined _GNU_SOURCE
-    strerror_r(nr, buf, len);             /* I can build with or without GNU */
-#elif defined _GNU_SOURCE
-    char *r= strerror_r(nr, buf, len);
-    if (r != buf)                         /* Want to help, GNU? */
-      strmake(buf, r, len - 1);           /* Then don't. */
-#else
-    strerror_r(nr, buf, len);
-#endif
-  }
-
-  /*
-    strerror() return values are implementation-dependent, so let's
-    be pragmatic.
-  */
-  if (!buf[0])
-    strmake(buf, "unknown error", len - 1);
-
-  return buf;
-}
-
-
-/**
-  @brief Get an error format string from one of the my_error_register()ed sets
-
-  @note
-    NULL values are possible even within a registered range.
-
-  @param nr Errno
-
-  @retval NULL  if no message is registered for this error number
-  @retval str   C-string
-*/
-
-const char *my_get_err_msg(int nr)
-{
-  const char *format;
-  struct my_err_head *meh_p;
-
-  /* Search for the range this error is in. */
-  for (meh_p= my_errmsgs_list; meh_p; meh_p= meh_p->meh_next)
-    if (nr <= meh_p->meh_last)
-      break;
-
-  /*
-    If we found the range this error number is in, get the format string.
-    If the string is empty, or a NULL pointer, or if we're out of return,
-    we return NULL.
-  */
-  if (!(format= (meh_p && (nr >= meh_p->meh_first)) ?
-                meh_p->get_errmsgs()[nr - meh_p->meh_first] : NULL) ||
-      !*format)
-    return NULL;
-
-  return format;
-}
-
-
-/**
-  Fill in and print a previously registered error message.
-
-  @note
-    Goes through the (sole) function registered in error_handler_hook
-
-  @param nr        error number
-  @param MyFlags   Flags
-  @param ...       variable list matching that error format string
 */
 
 void my_error(int nr, myf MyFlags, ...)
 {
   const char *format;
+  struct my_err_head *meh_p;
   va_list args;
   char ebuff[ERRMSGSIZE];
   DBUG_ENTER("my_error");
   DBUG_PRINT("my", ("nr: %d  MyFlags: %d  errno: %d", nr, MyFlags, errno));
 
-  if (!(format = my_get_err_msg(nr)))
-    (void) my_snprintf(ebuff, sizeof(ebuff), "Unknown error %d", nr);
+  /* Search for the error messages array, which could contain the message. */
+  for (meh_p= my_errmsgs_list; meh_p; meh_p= meh_p->meh_next)
+    if (nr <= meh_p->meh_last)
+      break;
+
+  /* get the error message string. Default, if NULL or empty string (""). */
+  if (! (format= (meh_p && (nr >= meh_p->meh_first)) ?
+                  meh_p->get_errmsgs()[nr - meh_p->meh_first] : NULL) || ! *format)
+    (void) my_snprintf (ebuff, sizeof(ebuff), "Unknown error %d", nr);
   else
   {
     va_start(args,MyFlags);
@@ -187,16 +98,15 @@ void my_error(int nr, myf MyFlags, ...)
 }
 
 
-/**
-  Print an error message.
+/*
+  Error as printf
 
-  @note
-    Goes through the (sole) function registered in error_handler_hook
-
-  @param error     error number
-  @param format    format string
-  @param MyFlags   Flags
-  @param ...       variable list matching that error format string
+  SYNOPSIS
+    my_printf_error()
+      error	Errno
+      format	Format string
+      MyFlags	Flags
+      ...	variable list
 */
 
 void my_printf_error(uint error, const char *format, myf MyFlags, ...)
@@ -215,16 +125,15 @@ void my_printf_error(uint error, const char *format, myf MyFlags, ...)
   DBUG_VOID_RETURN;
 }
 
-/**
-  Print an error message.
+/*
+  Error with va_list
 
-  @note
-    Goes through the (sole) function registered in error_handler_hook
-
-  @param error     error number
-  @param format    format string
-  @param MyFlags   Flags
-  @param ap        variable list matching that error format string
+  SYNOPSIS
+    my_printv_error()
+      error	Errno
+      format	Format string
+      MyFlags	Flags
+      ...	variable list
 */
 
 void my_printv_error(uint error, const char *format, myf MyFlags, va_list ap)
@@ -261,15 +170,14 @@ void my_printf_warning(const char *format, ...)
   DBUG_VOID_RETURN;
 }
 
-/**
-  Print an error message.
+/*
+  Give message using error_handler_hook
 
-  @note
-    Goes through the (sole) function registered in error_handler_hook
-
-  @param error     error number
-  @param str       error message
-  @param MyFlags   Flags
+  SYNOPSIS
+    my_message()
+      error	Errno
+      str	Error message
+      MyFlags	Flags
 */
 
 void my_message(uint error, const char *str, register myf MyFlags)
@@ -278,11 +186,16 @@ void my_message(uint error, const char *str, register myf MyFlags)
 }
 
 
-/**
+/*
   Register error messages for use with my_error().
 
-  @description
+  SYNOPSIS
+    my_error_register()
+    errmsgs                     array of pointers to error messages
+    first                       error number of first message in the array
+    last                        error number of last message in the array
 
+  DESCRIPTION
     The pointer array is expected to contain addresses to NUL-terminated
     C character strings. The array contains (last - first + 1) pointers.
     NULL pointers and empty strings ("") are allowed. These will be mapped to
@@ -290,12 +203,9 @@ void my_message(uint error, const char *str, register myf MyFlags)
     This function registers the error numbers 'first' to 'last'.
     No overlapping with previously registered error numbers is allowed.
 
-  @param   errmsgs  array of pointers to error messages
-  @param   first    error number of first message in the array
-  @param   last     error number of last message in the array
-
-  @retval  0        OK
-  @retval  != 0     Error
+  RETURN
+    0           OK
+    != 0        Error
 */
 
 int my_error_register(const char** (*get_errmsgs) (), int first, int last)
@@ -334,24 +244,25 @@ int my_error_register(const char** (*get_errmsgs) (), int first, int last)
 }
 
 
-/**
+/*
   Unregister formerly registered error messages.
 
-  @description
+  SYNOPSIS
+    my_error_unregister()
+    first                       error number of first message
+    last                        error number of last message
 
+  DESCRIPTION
     This function unregisters the error numbers 'first' to 'last'.
     These must have been previously registered by my_error_register().
     'first' and 'last' must exactly match the registration.
     If a matching registration is present, the header is removed from the
     list and the pointer to the error messages pointers array is returned.
-    (The messages themselves are not released here as they may be static.)
     Otherwise, NULL is returned.
 
-  @param   first     error number of first message
-  @param   last      error number of last message
-
-  @retval  NULL      Error, no such number range registered.
-  @retval  non-NULL  OK, returns address of error messages pointers array.
+  RETURN
+    non-NULL    OK, returns address of error messages pointers array.
+    NULL        Error, no such number range registered.
 */
 
 const char **my_error_unregister(int first, int last)
@@ -383,17 +294,6 @@ const char **my_error_unregister(int first, int last)
   return errmsgs;
 }
 
-
-/**
-  Unregister all formerly registered error messages.
-
-  @description
-
-    This function unregisters all error numbers that previously have
-    been previously registered by my_error_register().
-    All headers are removed from the list; the messages themselves are
-    not released here as they may be static.
-*/
 
 void my_error_unregister_all(void)
 {

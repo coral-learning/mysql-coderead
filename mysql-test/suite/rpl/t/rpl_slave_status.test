@@ -26,9 +26,8 @@ connection master;
 GRANT REPLICATION SLAVE ON *.* TO rpl@127.0.0.1 IDENTIFIED BY 'rpl';
 
 --echo [on slave]
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 source include/stop_slave.inc;
---replace_column 2 ####
 CHANGE MASTER TO master_user='rpl', master_password='rpl';
 source include/start_slave.inc;
 
@@ -38,7 +37,7 @@ connection master;
 CREATE TABLE t1 (n INT);
 INSERT INTO t1 VALUES (1);
 --echo [on slave]
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 SELECT * FROM t1;
 
 --echo ==== Delete new replication user ====
@@ -48,7 +47,7 @@ DROP USER rpl@127.0.0.1;
 FLUSH PRIVILEGES;
 
 --echo [on slave]
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 
 --echo ==== Restart slave without privileges =====
 # (slave.err will contain access denied error for this START SLAVE command)
@@ -66,7 +65,6 @@ source include/wait_for_slave_io_to_stop.inc;
 
 # cleanup: slave io thread has is stopped so we reset replication
 --source include/stop_slave_sql.inc
---replace_column 2 ####
 CHANGE MASTER TO MASTER_USER = 'root', MASTER_PASSWORD = '';
 # clear Slave_IO_Errno
 --let $rpl_only_running_threads= 1

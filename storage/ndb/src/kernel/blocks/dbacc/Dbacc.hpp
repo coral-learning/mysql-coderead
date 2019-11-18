@@ -1,7 +1,5 @@
-/** **/
-/*
-   Copyright (C) 2003-2008 MySQL AB, 2008-2010 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -14,13 +12,12 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef DBACC_H
 #define DBACC_H
 
-#if defined (VM_TRACE) && !defined(ACC_SAFE_QUEUE)
+#ifdef VM_TRACE
 #define ACC_SAFE_QUEUE
 #endif
 
@@ -140,7 +137,7 @@ ndbout << "Ptr: " << ptr.p->word32 << " \tIndex: " << tmp_string << " \tValue: "
 /**
  * Check kernel_types for other operation types
  */
-#define ZSCAN_OP 8
+#define ZSCAN_OP 6
 #define ZSCAN_REC_SIZE 256
 #define ZSTAND_BY 2
 #define ZTABLESIZE 16
@@ -152,9 +149,11 @@ ndbout << "Ptr: " << ptr.p->word32 << " \tIndex: " << tmp_string << " \tValue: "
 /* CONTINUEB CODES                                                                   */
 /* --------------------------------------------------------------------------------- */
 #define ZINITIALISE_RECORDS 1
+#define ZSEND_SCAN_HBREP 4
 #define ZREL_ROOT_FRAG 5
 #define ZREL_FRAG 6
 #define ZREL_DIR 7
+#define ZREPORT_MEMORY_USAGE 8
 
 /* ------------------------------------------------------------------------- */
 /* ERROR CODES                                                               */
@@ -180,7 +179,6 @@ ndbout << "Ptr: " << ptr.p->word32 << " \tIndex: " << tmp_string << " \tValue: "
 #define ZWRITE_ERROR 630
 #define ZTO_OP_STATE_ERROR 631
 #define ZTOO_EARLY_ACCESS_ERROR 632
-#define ZDIR_RANGE_FULL_ERROR 633 // on fragment
 #endif
 
 class ElementHeader {
@@ -271,8 +269,6 @@ ElementHeader::clearScanBit(Uint32 header, Uint32 scanBit){
 
 
 class Dbacc: public SimulatedBlock {
-  friend class DbaccProxy;
-
 public:
 // State values
 enum State {
@@ -475,11 +471,6 @@ struct Fragmentrec {
 // flag to avoid accessing table record if no char attributes
 //-----------------------------------------------------------------------------
   Uint8 hasCharAttr;
-
-//-----------------------------------------------------------------------------
-// flag to mark that execEXPANDCHECK2 has failed due to DirRange full
-//-----------------------------------------------------------------------------
-  Uint8 dirRangeFull;
 };
 
   typedef Ptr<Fragmentrec> FragmentrecPtr;
@@ -615,6 +606,8 @@ struct ScanRec {
   Uint32 scanUserblockref;
   Uint32 scanMask;
   Uint8 scanLockMode;
+  Uint8 scanTimer;
+  Uint8 scanContinuebCounter;
   Uint8 scanReadCommittedFlag;
 }; 
 
@@ -629,12 +622,11 @@ struct Tabrec {
   Uint32 fragptrholder[MAX_FRAG_PER_NODE];
   Uint32 tabUserPtr;
   BlockReference tabUserRef;
-  Uint32 tabUserGsn;
 };
   typedef Ptr<Tabrec> TabrecPtr;
 
 public:
-  Dbacc(Block_context&, Uint32 instanceNumber = 0);
+  Dbacc(Block_context&);
   virtual ~Dbacc();
 
   // pointer to TUP instance in this thread
@@ -642,7 +634,6 @@ public:
   class Dblqh* c_lqh;
 
   void execACCMINUPDATE(Signal* signal);
-  void removerow(Uint32 op, const Local_key*);
 
 private:
   BLOCK_DEFINES(Dbacc);
@@ -672,10 +663,6 @@ private:
   void execDROP_TAB_REQ(Signal* signal);
   void execREAD_CONFIG_REQ(Signal* signal);
   void execDUMP_STATE_ORD(Signal* signal);
-
-  void execDROP_FRAG_REQ(Signal*);
-
-  void execDBINFO_SCANREQ(Signal *signal);
 
   // Statement blocks
   void ACCKEY_error(Uint32 fromWhere);
@@ -774,7 +761,7 @@ private:
   void increaselistcont(Signal* signal);
   void seizeLeftlist(Signal* signal);
   void seizeRightlist(Signal* signal);
-  Uint32 readTablePk(Uint32 lkey1, Uint32 lkey2, Uint32 eh, OperationrecPtr);
+  Uint32 readTablePk(Uint32 localkey1, Uint32 eh, OperationrecPtr);
   Uint32 getElement(Signal* signal, OperationrecPtr& lockOwner);
   void getdirindex(Signal* signal);
   void commitdelete(Signal* signal);
@@ -831,6 +818,7 @@ private:
   void sendSystemerror(Signal* signal, int line);
   void takeRecOutOfFreeOverdir(Signal* signal);
   void takeRecOutOfFreeOverpage(Signal* signal);
+  void sendScanHbRep(Signal* signal, Uint32);
 
   void addFragRefuse(Signal* signal, Uint32 errorCode);
   void ndbsttorryLab(Signal* signal);
@@ -853,6 +841,7 @@ private:
 
   void zpagesize_error(const char* where);
 
+  void reportMemoryUsage(Signal* signal, int gth);
   void reenable_expand_after_redo_log_exection_complete(Signal*);
 
   // charsets
@@ -861,12 +850,6 @@ private:
   // Initialisation
   void initData();
   void initRecords();
-
-#ifdef VM_TRACE
-  void debug_lh_vars(const char* where);
-#else
-  void debug_lh_vars(const char* where) {}
-#endif
 
   // Variables
 /* --------------------------------------------------------------------------------- */
@@ -899,10 +882,6 @@ private:
   FragmentrecPtr fragrecptr;
   Uint32 cfirstfreefrag;
   Uint32 cfragmentsize;
-  RSS_OP_COUNTER(cnoOfFreeFragrec);
-  RSS_OP_SNAPSHOT(cnoOfFreeFragrec);
-
-
 /* --------------------------------------------------------------------------------- */
 /* FS_CONNECTREC                                                                     */
 /* --------------------------------------------------------------------------------- */
@@ -969,10 +948,9 @@ private:
   Page8Ptr slPageptr;
   Page8Ptr spPageptr;
   Uint32 cfirstfreepage;
+  Uint32 cfreepage;
   Uint32 cpagesize;
-  Uint32 cpageCount;
   Uint32 cnoOfAllocatedPages;
-  Uint32 cnoOfAllocatedPagesMax;
 /* --------------------------------------------------------------------------------- */
 /* ROOTFRAGMENTREC                                                                   */
 /*          DURING EXPAND FRAGMENT PROCESS, EACH FRAGMEND WILL BE EXPAND INTO TWO    */
@@ -1103,6 +1081,7 @@ private:
   BlockReference cndbcntrRef;
   Uint16 csignalkey;
   Uint32 czero;
+  Uint32 csystemRestart;
   Uint32 cexcForward;
   Uint32 cexcPageindex;
   Uint32 cexcContainerptr;

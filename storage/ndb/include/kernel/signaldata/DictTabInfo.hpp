@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2008 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef DICT_TAB_INFO_HPP
 #define DICT_TAB_INFO_HPP
@@ -30,11 +29,7 @@
 // sql/my_decimal.h requires many more sql/*.h new to ndb
 // for now, copy the bit we need  TODO proper fix
 
-#define DECIMAL_MAX_FIELD_SIZE ((9 * 9) - (2 * 8))
-
-#ifndef DECIMAL_NOT_SPECIFIED
-#define DECIMAL_NOT_SPECIFIED 31
-#endif
+#define DECIMAL_MAX_LENGTH ((8 * 9) - 8)
 
 C_MODE_START
 extern int decimal_bin_size(int, int);
@@ -145,14 +140,6 @@ public:
     
     SingleUserMode     = 152,
 
-    HashMapObjectId    = 153,
-    HashMapVersion     = 154,
-
-    TableStorageType   = 155,
-
-    ExtraRowGCIBits    = 156,
-    ExtraRowAuthorBits = 157,
-
     TableEnd           = 999,
     
     AttributeName          = 1000, // String, Mandatory
@@ -163,21 +150,14 @@ public:
     AttributeKeyFlag       = 1006, //Default noKey
     AttributeStorageType   = 1007, //Default NDB_STORAGETYPE_MEMORY
     AttributeNullableFlag  = 1008, //Default NotNullable
-    AttributeDynamic       = 1009, //Default not dynamic
     AttributeDKey          = 1010, //Default NotDKey
     AttributeExtType       = 1013, //Default ExtUnsigned
     AttributeExtPrecision  = 1014, //Default 0
     AttributeExtScale      = 1015, //Default 0
     AttributeExtLength     = 1016, //Default 0
     AttributeAutoIncrement = 1017, //Default false
+    AttributeDefaultValue  = 1018, //Default value (printable string),
     AttributeArrayType     = 1019, //Default NDB_ARRAYTYPE_FIXED
-    AttributeDefaultValueLen = 1020, //Actual Length saved in AttributeDefaultValue
-    /* Default value (Binary type, not printable as string),
-     * For backward compatibility, the new keyValue
-     * (not use the old keyValue 1018) is added
-       when restoring data from low backup version data.
-    */
-    AttributeDefaultValue = 1021,
     AttributeEnd           = 1999  //
   };
   // ----------------------------------------------------------------------
@@ -196,8 +176,8 @@ public:
     DistrKeyHash = 4,
     DistrKeyLin = 5,
     UserDefined = 6,
-    DistrKeyOrderedIndex = 8, // alias
-    HashMapPartition = 9
+    DistrKeyUniqueHashIndex = 7,
+    DistrKeyOrderedIndex = 8
   };
   
   // TableType constants + objects
@@ -214,15 +194,11 @@ public:
     SubscriptionTrigger = 16,
     ReadOnlyConstraint = 17,
     IndexTrigger = 18,
-    ReorgTrigger = 19,
     
     Tablespace = 20,        ///< Tablespace
     LogfileGroup = 21,      ///< Logfile group
     Datafile = 22,          ///< Datafile
-    Undofile = 23,          ///< Undofile
-    HashMap = 24,
-
-    SchemaTransaction = 30
+    Undofile = 23           ///< Undofile
   };
 
   // used 1) until type BlobTable added 2) in upgrade code
@@ -273,8 +249,7 @@ public:
       tableType == HashIndexTrigger ||
       tableType == SubscriptionTrigger ||
       tableType == ReadOnlyConstraint ||
-      tableType == IndexTrigger ||
-      tableType == ReorgTrigger;
+      tableType == IndexTrigger;
   }
   static inline bool
   isFilegroup(int tableType) {
@@ -288,12 +263,6 @@ public:
     return
       tableType == Datafile||
       tableType == Undofile;
-  }
-
-  static inline bool
-  isHashMap(int tableType) {
-    return
-      tableType == HashMap;
   }
   
   // Object state for translating from/to API
@@ -372,21 +341,13 @@ public:
     Uint32 TablespaceDataLen;
     Uint32 TablespaceData[2*MAX_NDB_PARTITIONS];
     Uint32 RangeListDataLen;
-    Uint32 RangeListData[2*MAX_NDB_PARTITIONS*2];
+    char   RangeListData[4*2*MAX_NDB_PARTITIONS*2];
     
     Uint32 RowGCIFlag;
     Uint32 RowChecksumFlag;
 
     Uint32 SingleUserMode;
-
-    Uint32 HashMapObjectId;
-    Uint32 HashMapVersion;
-
-    Uint32 TableStorageType;
-
-    Uint32 ExtraRowGCIBits;
-    Uint32 ExtraRowAuthorBits;
-
+    
     Table() {}
     void init();
   };
@@ -448,9 +409,7 @@ public:
     Uint32 AttributeExtLength;
     Uint32 AttributeAutoIncrement;
     Uint32 AttributeStorageType;
-    Uint32 AttributeDynamic;
-    Uint32 AttributeDefaultValueLen;  //byte sizes
-    Uint8  AttributeDefaultValue[MAX_ATTR_DEFAULT_VALUE_SIZE];
+    char   AttributeDefaultValue[MAX_ATTR_DEFAULT_VALUE_SIZE];
     
     Attribute() {}
     void init();
@@ -518,9 +477,8 @@ public:
           // copy from Field_new_decimal ctor
           uint precision = AttributeExtPrecision;
           uint scale = AttributeExtScale;
-          if (precision > DECIMAL_MAX_FIELD_SIZE ||
-              scale >= DECIMAL_NOT_SPECIFIED)
-            return false;
+          if (precision > DECIMAL_MAX_LENGTH || scale >= NOT_FIXED_DEC)
+            precision = DECIMAL_MAX_LENGTH;
           uint bin_size = my_decimal_get_binary_size(precision, scale);
           AttributeSize = DictTabInfo::an8Bit;
           AttributeArraySize = bin_size * AttributeExtLength;
@@ -551,14 +509,8 @@ public:
       case DictTabInfo::ExtBlob:
       case DictTabInfo::ExtText:
         AttributeSize = DictTabInfo::an8Bit;
-        if (unlikely(AttributeArrayType == NDB_ARRAYTYPE_FIXED)) {
-          // head + inline part (length in precision lower half)
-          AttributeArraySize = (NDB_BLOB_V1_HEAD_SIZE << 2) +
-                               (AttributeExtPrecision & 0xFFFF);
-        } else {
-          AttributeArraySize = (NDB_BLOB_V2_HEAD_SIZE << 2) +
-                               (AttributeExtPrecision & 0xFFFF);
-        }
+        // head + inline part (length in precision lower half)
+        AttributeArraySize = (NDB_BLOB_HEAD_SIZE << 2) + (AttributeExtPrecision & 0xFFFF);
         break;
       case DictTabInfo::ExtBit:
 	AttributeSize = DictTabInfo::aBit;
@@ -605,11 +557,8 @@ public:
       fprintf(out, "AttributeExtPrecision = %d\n", AttributeExtPrecision);
       fprintf(out, "AttributeExtScale = %d\n", AttributeExtScale);
       fprintf(out, "AttributeExtLength = %d\n", AttributeExtLength);
-      fprintf(out, "AttributeDefaultValueLen = %d\n",
-              AttributeDefaultValueLen);
-      fprintf(out, "AttributeDefaultValue: \n");
-      for (unsigned int i = 0; i < AttributeDefaultValueLen; i++)
-        fprintf(out, "0x%x", AttributeDefaultValue[i]);
+      fprintf(out, "AttributeDefaultValue = \"%s\"\n",
+        AttributeDefaultValue ? AttributeDefaultValue : "");
     }
   };
   
@@ -637,7 +586,7 @@ private:
   Uint32 tabInfoData[DataLength];
 
 public:
-  enum Deprecated
+  enum Depricated
   {
     AttributeDGroup    = 1009, //Default NotDGroup
     AttributeStoredInd = 1011, //Default NotStored
@@ -773,43 +722,6 @@ struct DictFilegroupInfo {
   };
   static const Uint32 FileMappingSize;
   static const SimpleProperties::SP2StructMapping FileMapping[];
-};
-
-#define DHMIMAP(x, y, z) \
-  { DictHashMapInfo::y, my_offsetof(x, z), SimpleProperties::Uint32Value, 0, (~0), 0 }
-
-#define DHMIMAP2(x, y, z, u, v) \
-  { DictHashMapInfo::y, my_offsetof(x, z), SimpleProperties::Uint32Value, u, v, 0 }
-
-#define DHMIMAPS(x, y, z, u, v) \
-  { DictHashMapInfo::y, my_offsetof(x, z), SimpleProperties::StringValue, u, v, 0 }
-
-#define DHMIMAPB(x, y, z, u, v, l) \
-  { DictHashMapInfo::y, my_offsetof(x, z), SimpleProperties::BinaryValue, u, v, \
-                     my_offsetof(x, l) }
-
-#define DHMIBREAK(x) \
-  { DictHashMapInfo::x, 0, SimpleProperties::InvalidValue, 0, 0, 0 }
-
-struct DictHashMapInfo {
-  enum KeyValues {
-    HashMapName    = 1,
-    HashMapBuckets = 2,
-    HashMapValues  = 3
-  };
-
-  // Table data interpretation
-  struct HashMap {
-    char   HashMapName[MAX_TAB_NAME_SIZE];
-    Uint32 HashMapBuckets;
-    Uint16 HashMapValues[512];
-    Uint32 HashMapObjectId;
-    Uint32 HashMapVersion;
-    HashMap() {}
-    void init();
-  };
-  static const Uint32 MappingSize;
-  static const SimpleProperties::SP2StructMapping Mapping[];
 };
 
 #endif

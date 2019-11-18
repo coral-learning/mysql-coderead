@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2007 MySQL AB, 2009 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include <ndb_global.h>
 #include <NDBT_Thread.hpp>
@@ -50,7 +48,7 @@ NDBT_Thread::create(NDBT_ThreadSet* thread_set, int thread_no)
   assert(m_cond != 0);
 
   char buf[20];
-  sprintf(buf, "NDBT_%04u", (unsigned)thread_no);
+  sprintf(buf, "NDBT_%04u");
   const char* name = strdup(buf);
   assert(name != 0);
 
@@ -77,7 +75,7 @@ NDBT_Thread::~NDBT_Thread()
   }
 }
 
-void*
+static void*
 NDBT_Thread_run(void* arg)
 {
   assert(arg != 0);
@@ -175,6 +173,7 @@ NDBT_ThreadSet::NDBT_ThreadSet(int count)
 
 NDBT_ThreadSet::~NDBT_ThreadSet()
 {
+  delete_output();
   for (int n = 0; n < m_count; n++) {
     delete m_thread[n];
     m_thread[n] = 0;
@@ -241,8 +240,8 @@ NDBT_ThreadSet::delete_output()
 {
   for (int n = 0; n < m_count; n++) {
     if (m_thread[n] != 0) {
-      //NDBT_Thread& thr = *m_thread[n];
-      //thr.delete_output();
+      NDBT_Thread& thr = *m_thread[n];
+      thr.delete_output();
     }
   }
 }

@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003-2006, 2008 MySQL AB, 2008-2010 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2005, 2008 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,17 +12,15 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include <ndb_global.h>
 
 #include <NdbOut.hpp>
 #include <OutputStream.hpp>
 
-/* Initialized in ndb_init() */
-NdbOut ndbout;
-NdbOut ndberr;
+static FileOutputStream ndbouts_fileoutputstream(stdout);
+NdbOut ndbout(ndbouts_fileoutputstream);
 
 static const char * fms[] = {
   "%d", "0x%02x",      // Int8
@@ -71,9 +68,8 @@ NdbOut::operator<<(double val){ m_out->print("%f", val); return * this; }
 NdbOut& NdbOut::endline()
 {
   isHex = 0; // Reset hex to normal, if user forgot this
-  m_out->println("%s", "");
-  if (m_autoflush)
-    m_out->flush();
+  m_out->println("");
+  m_out->flush();
   return *this;
 }
 
@@ -89,25 +85,14 @@ NdbOut& NdbOut::setHexFormat(int _format)
   return *this;
 }
 
-NdbOut::NdbOut(OutputStream & out, bool autoflush)
-  : m_out(& out), isHex(0), m_autoflush(autoflush)
+NdbOut::NdbOut(OutputStream & out) 
+  : m_out(& out)
 {
-}
-
-NdbOut::NdbOut()
-  : m_out(NULL), isHex(0)
-{
-   /**
-    * m_out set to NULL!
-    */
+  isHex = 0;
 }
 
 NdbOut::~NdbOut()
 {
-   /**
-    *  don't delete m_out, as it's a reference given to us.
-    *  i.e we don't "own" it
-    */
 }
 
 void
@@ -118,7 +103,7 @@ NdbOut::print(const char * fmt, ...){
   va_start(ap, fmt);
   if (fmt != 0)
     BaseString::vsnprintf(buf, sizeof(buf)-1, fmt, ap);
-  *this << buf;
+  ndbout << buf;
   va_end(ap);
 }
 
@@ -130,42 +115,22 @@ NdbOut::println(const char * fmt, ...){
   va_start(ap, fmt);
   if (fmt != 0)
     BaseString::vsnprintf(buf, sizeof(buf)-1, fmt, ap);
-  *this << buf << endl;
+  ndbout << buf << endl;
   va_end(ap);
 }
 
 extern "C"
 void 
-vndbout_c(const char * fmt, va_list ap){
-  char buf[1000];
-  
-  if (fmt != 0)
-  {
-    BaseString::vsnprintf(buf, sizeof(buf)-1, fmt, ap);
-  }
-  ndbout << buf << endl;
-}
-
-extern "C"
-void
 ndbout_c(const char * fmt, ...){
   va_list ap;
-
+  char buf[1000];
+  
   va_start(ap, fmt);
-  vndbout_c(fmt, ap);
+  if (fmt != 0)
+    BaseString::vsnprintf(buf, sizeof(buf)-1, fmt, ap);
+  ndbout << buf << endl;
   va_end(ap);
 }
-
-extern "C" int ndbout_printer(const char * fmt, ...)
-{
-  va_list ap;
-
-  va_start(ap, fmt);
-  vndbout_c(fmt, ap);
-  va_end(ap);
-  return 1;
-}
-
 
 FilteredNdbOut::FilteredNdbOut(OutputStream & out, 
 			       int threshold, int level)
@@ -206,15 +171,3 @@ FilteredNdbOut::getThreshold() const {
   return m_threshold;
 }
 
-static FileOutputStream ndbouts_fileoutputstream(0);
-static FileOutputStream ndberrs_fileoutputstream(0);
-
-void
-NdbOut_Init()
-{
-  new (&ndbouts_fileoutputstream) FileOutputStream(stdout);
-  new (&ndbout) NdbOut(ndbouts_fileoutputstream);
-
-  new (&ndberrs_fileoutputstream) FileOutputStream(stderr);
-  new (&ndberr) NdbOut(ndberrs_fileoutputstream);
-}

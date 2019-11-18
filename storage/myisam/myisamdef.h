@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2000, 2012, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -218,6 +218,7 @@ typedef struct st_mi_isam_share {	/* Shared between opens */
   mysql_rwlock_t mmap_lock;
 } MYISAM_SHARE;
 
+
 typedef uint mi_bit_type;
 
 typedef struct st_mi_bit_buff {		/* Used for packing of record */
@@ -226,10 +227,6 @@ typedef struct st_mi_bit_buff {		/* Used for packing of record */
   uchar *pos,*end,*blob_pos,*blob_end;
   uint error;
 } MI_BIT_BUFF;
-
-C_MODE_START
-typedef ICP_RESULT (*index_cond_func_t)(void *param);
-C_MODE_END
 
 struct st_myisam_info {
   MYISAM_SHARE *s;			/* Shared between open:s */
@@ -245,9 +242,6 @@ struct st_myisam_info {
   char *filename;			/* parameter to open filename       */
   uchar *buff,				/* Temp area for key                */
 	*lastkey,*lastkey2;		/* Last used search key             */
-
-  /* Key used in mi_rnext_same and filled by mi_rkey. */
-  uchar *rnext_same_key;
   uchar *first_mbr_key;			/* Searhed spatial key              */
   uchar	*rec_buff;			/* Tempbuff for recordpack          */
   uchar *int_keypos,			/* Save position for next/previous  */
@@ -297,12 +291,6 @@ struct st_myisam_info {
   my_bool page_changed;		/* If info->buff can't be used for rnext */
   my_bool buff_used;		/* If info->buff has to be reread for rnext */
   my_bool once_flags;           /* For MYISAMMRG */
-
-  /* Used in mi_rnext_same to fill rnext_same_key for the first time. */
-    my_bool set_rnext_same_key;
-
-  index_cond_func_t index_cond_func;   /* Index condition function */
-  void *index_cond_func_arg;           /* parameter for the func */
 #ifdef __WIN__
   my_bool owned_by_merge;                       /* This MyISAM table is part of a merge union */
 #endif
@@ -700,7 +688,7 @@ extern uint _mi_rec_pack(MI_INFO *info,uchar *to,const uchar *from);
 extern uint _mi_pack_get_block_info(MI_INFO *myisam, MI_BIT_BUFF *bit_buff,
                                     MI_BLOCK_INFO *info, uchar **rec_buff_p,
                                     File file, my_off_t filepos);
-extern void _mi_store_blob_length(uchar *pos,uint pack_length,uint length);
+extern void _my_store_blob_length(uchar *pos,uint pack_length,uint length);
 extern void _myisam_log(enum myisam_log_commands command,MI_INFO *info,
 		       const uchar *buffert,uint length);
 extern void _myisam_log_command(enum myisam_log_commands command,
@@ -772,8 +760,6 @@ void mi_remap_file(MI_INFO *info, my_off_t size);
 void _mi_report_crashed(MI_INFO *file, const char *message,
                         const char *sfile, uint sline);
 
-int mi_check_index_cond(register MI_INFO *info, uint keynr, uchar *record);
-
     /* Functions needed by mi_check */
 volatile int *killed_ptr(MI_CHECK *param);
 void mi_check_print_error(MI_CHECK *param, const char *fmt,...);
@@ -788,8 +774,6 @@ int flush_blocks(MI_CHECK *param, KEY_CACHE *key_cache, File file);
 int sort_write_record(MI_SORT_PARAM *sort_param);
 int _create_index_by_sort(MI_SORT_PARAM *info, my_bool no_messages, ulonglong);
 
-extern void mi_set_index_cond_func(MI_INFO *info, index_cond_func_t func,
-                                   void *func_arg);
 #ifdef __cplusplus
 }
 #endif

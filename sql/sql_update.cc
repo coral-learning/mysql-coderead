@@ -10,8 +10,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 
 /*
@@ -38,14 +38,10 @@
 #include "records.h"                            // init_read_record,
                                                 // end_read_record
 #include "filesort.h"                           // filesort
-#include "opt_explain.h"
 #include "sql_derived.h" // mysql_derived_prepare,
                          // mysql_handle_derived,
                          // mysql_derived_filling
-#include "opt_trace.h"   // Opt_trace_object
-#include "sql_tmp_table.h"                      // tmp tables
-#include "sql_optimizer.h"                      // remove_eq_conds
-#include "sql_resolver.h"                       // setup_order, fix_inner_refs
+
 
 /**
    True if the table's input and output record buffers are comparable using
@@ -88,7 +84,7 @@ bool compare_records(const TABLE *table)
       {
         if (field->real_maybe_null())
         {
-          uchar null_byte_index= field->null_offset();
+          uchar null_byte_index= field->null_ptr - table->record[0];
           
           if (((table->record[0][null_byte_index]) & field->null_bit) !=
               ((table->record[1][null_byte_index]) & field->null_bit))
@@ -146,10 +142,10 @@ static bool check_fields(THD *thd, List<Item> &items)
 
   while ((item= it++))
   {
-    if (!(field= item->field_for_view_update()))
+    if (!(field= item->filed_for_view_update()))
     {
       /* item has name, because it comes from VIEW SELECT list */
-      my_error(ER_NONUPDATEABLE_COLUMN, MYF(0), item->item_name.ptr());
+      my_error(ER_NONUPDATEABLE_COLUMN, MYF(0), item->name);
       return TRUE;
     }
     /*
@@ -163,30 +159,71 @@ static bool check_fields(THD *thd, List<Item> &items)
 
 
 /**
-  Check if all expressions in list are constant expressions
+  Re-read record if more columns are needed for error message.
 
-  @param[in] values List of expressions
+  If we got a duplicate key error, we want to write an error
+  message containing the value of the duplicate key. If we do not have
+  all fields of the key value in record[0], we need to re-read the
+  record with a proper read_set.
 
-  @retval true Only constant expressions
-  @retval false At least one non-constant expression
+  @param[in] error   error number
+  @param[in] table   table
 */
 
-static bool check_constant_expressions(List<Item> &values)
+static void prepare_record_for_error_message(int error, TABLE *table)
 {
-  Item *value;
-  List_iterator_fast<Item> v(values);
-  DBUG_ENTER("check_constant_expressions");
+  Field **field_p;
+  Field *field;
+  uint keynr;
+  MY_BITMAP unique_map; /* Fields in offended unique. */
+  my_bitmap_map unique_map_buf[bitmap_buffer_size(MAX_FIELDS)];
+  DBUG_ENTER("prepare_record_for_error_message");
 
-  while ((value= v++))
-  {
-    if (!value->const_item())
-    {
-      DBUG_PRINT("exit", ("expression is not constant"));
-      DBUG_RETURN(false);
-    }
-  }
-  DBUG_PRINT("exit", ("expression is constant"));
-  DBUG_RETURN(true);
+  /*
+    Only duplicate key errors print the key value.
+    If storage engine does always read all columns, we have the value alraedy.
+  */
+  if ((error != HA_ERR_FOUND_DUPP_KEY) ||
+      !(table->file->ha_table_flags() & HA_PARTIAL_COLUMN_READ))
+    DBUG_VOID_RETURN;
+
+  /*
+    Get the number of the offended index.
+    We will see MAX_KEY if the engine cannot determine the affected index.
+  */
+  if ((keynr= table->file->get_dup_key(error)) >= MAX_KEY)
+    DBUG_VOID_RETURN;
+
+  /* Create unique_map with all fields used by that index. */
+  bitmap_init(&unique_map, unique_map_buf, table->s->fields, FALSE);
+  table->mark_columns_used_by_index_no_reset(keynr, &unique_map);
+
+  /* Subtract read_set and write_set. */
+  bitmap_subtract(&unique_map, table->read_set);
+  bitmap_subtract(&unique_map, table->write_set);
+
+  /*
+    If the unique index uses columns that are neither in read_set
+    nor in write_set, we must re-read the record.
+    Otherwise no need to do anything.
+  */
+  if (bitmap_is_clear_all(&unique_map))
+    DBUG_VOID_RETURN;
+
+  /* Get identifier of last read record into table->file->ref. */
+  table->file->position(table->record[0]);
+  /* Add all fields used by unique index to read_set. */
+  bitmap_union(table->read_set, &unique_map);
+  /* Tell the engine about the new set. */
+  table->file->column_bitmaps_signal();
+  /* Read record that is identified by table->file->ref. */
+  (void) table->file->rnd_pos(table->record[1], table->file->ref);
+  /* Copy the newly read columns into the new record. */
+  for (field_p= table->field; (field= *field_p); field_p++)
+    if (bitmap_is_set(&unique_map, field->field_index))
+      field->copy_from_tmp(table->s->rec_buff_length);
+
+  DBUG_VOID_RETURN;
 }
 
 
@@ -215,63 +252,67 @@ int mysql_update(THD *thd,
                  TABLE_LIST *table_list,
                  List<Item> &fields,
 		 List<Item> &values,
-                 Item *conds,
+                 COND *conds,
                  uint order_num, ORDER *order,
 		 ha_rows limit,
 		 enum enum_duplicates handle_duplicates, bool ignore,
                  ha_rows *found_return, ha_rows *updated_return)
 {
   bool		using_limit= limit != HA_POS_ERROR;
-  bool		safe_update= MY_TEST(thd->variables.option_bits & OPTION_SAFE_UPDATES);
+  bool		safe_update= test(thd->variables.option_bits & OPTION_SAFE_UPDATES);
   bool          used_key_is_modified= FALSE, transactional_table, will_batch;
   int           res;
-  int           error= 1;
-  int           loc_error;
+  int		error, loc_error;
   uint          used_index, dup_key_found;
   bool          need_sort= TRUE;
   bool          reverse= FALSE;
-  bool          using_filesort;
-  bool          read_removal= false;
 #ifndef NO_EMBEDDED_ACCESS_CHECKS
   uint		want_privilege;
 #endif
+  uint          table_count= 0;
   ha_rows	updated, found;
   key_map	old_covering_keys;
   TABLE		*table;
-  SQL_SELECT	*select= NULL;
+  SQL_SELECT	*select;
   READ_RECORD	info;
   SELECT_LEX    *select_lex= &thd->lex->select_lex;
   ulonglong     id;
   List<Item> all_fields;
   THD::killed_state killed_status= THD::NOT_KILLED;
-  COPY_INFO update(COPY_INFO::UPDATE_OPERATION, &fields, &values);
-
   DBUG_ENTER("mysql_update");
 
-  if (open_normal_and_derived_tables(thd, table_list, 0))
+  if (open_tables(thd, &table_list, &table_count, 0))
     DBUG_RETURN(1);
 
   if (table_list->multitable_view)
   {
     DBUG_ASSERT(table_list->view != 0);
     DBUG_PRINT("info", ("Switch to multi-update"));
+    /* pass counter value */
+    thd->lex->table_count= table_count;
     /* convert to multiupdate */
     DBUG_RETURN(2);
   }
+  if (lock_tables(thd, table_list, table_count, 0))
+    DBUG_RETURN(1);
 
-  THD_STAGE_INFO(thd, stage_init);
-  table= table_list->table;
+  if (mysql_handle_derived(thd->lex, &mysql_derived_prepare))
+    DBUG_RETURN(1);
 
-  if (!table_list->updatable)
+  if (thd->fill_derived_tables() &&
+      mysql_handle_derived(thd->lex, &mysql_derived_filling))
   {
-    my_error(ER_NON_UPDATABLE_TABLE, MYF(0), table_list->alias, "UPDATE");
+    mysql_handle_derived(thd->lex, &mysql_derived_cleanup);
     DBUG_RETURN(1);
   }
+  mysql_handle_derived(thd->lex, &mysql_derived_cleanup);
+
+  thd_proc_info(thd, "init");
+  table= table_list->table;
 
   /* Calculate "table->covering_keys" based on the WHERE */
   table->covering_keys= table->s->keys_in_use;
   table->quick_keys.clear_all();
-  table->possible_quick_keys.clear_all();
 
 #ifndef NO_EMBEDDED_ACCESS_CHECKS
   /* Force privilege re-checking for views after they have been opened. */
@@ -287,8 +328,7 @@ int mysql_update(THD *thd,
   table_list->grant.want_privilege= table->grant.want_privilege= want_privilege;
   table_list->register_want_access(want_privilege);
 #endif
-  if (setup_fields_with_no_wrap(thd, Ref_ptr_array(),
-                                fields, MARK_COLUMNS_WRITE, 0, 0))
+  if (setup_fields_with_no_wrap(thd, 0, fields, MARK_COLUMNS_WRITE, 0, 0))
     DBUG_RETURN(1);                     /* purecov: inspected */
   if (table_list->view && check_fields(thd, fields))
   {
@@ -299,16 +339,27 @@ int mysql_update(THD *thd,
     my_error(ER_NON_UPDATABLE_TABLE, MYF(0), table_list->alias, "UPDATE");
     DBUG_RETURN(1);
   }
-
-  if (update.add_function_default_columns(table, table->write_set))
-    DBUG_RETURN(1);
+  if (table->timestamp_field)
+  {
+    // Don't set timestamp column if this is modified
+    if (bitmap_is_set(table->write_set,
+                      table->timestamp_field->field_index))
+      table->timestamp_field_type= TIMESTAMP_NO_AUTO_SET;
+    else
+    {
+      if (table->timestamp_field_type == TIMESTAMP_AUTO_SET_ON_UPDATE ||
+          table->timestamp_field_type == TIMESTAMP_AUTO_SET_ON_BOTH)
+        bitmap_set_bit(table->write_set,
+                       table->timestamp_field->field_index);
+    }
+  }
 
 #ifndef NO_EMBEDDED_ACCESS_CHECKS
   /* Check values */
   table_list->grant.want_privilege= table->grant.want_privilege=
     (SELECT_ACL & ~table->grant.privilege);
 #endif
-  if (setup_fields(thd, Ref_ptr_array(), values, MARK_COLUMNS_READ, 0, 0))
+  if (setup_fields(thd, 0, values, MARK_COLUMNS_READ, 0, 0))
   {
     free_underlaid_joins(thd, select_lex);
     DBUG_RETURN(1);				/* purecov: inspected */
@@ -318,178 +369,58 @@ int mysql_update(THD *thd,
     fix_inner_refs(thd, all_fields, select_lex, select_lex->ref_pointer_array))
     DBUG_RETURN(1);
 
-  if ((table->file->ha_table_flags() & HA_PARTIAL_COLUMN_READ) != 0 &&
-      update.function_defaults_apply(table))
-    /*
-      A column is to be set to its ON UPDATE function default only if other
-      columns of the row are changing. To know this, we must be able to
-      compare the "before" and "after" value of those columns
-      (i.e. records_are_comparable() must be true below). Thus, we must read
-      those columns:
-    */
-    bitmap_union(table->read_set, table->write_set);
+  if (conds)
+  {
+    Item::cond_result cond_value;
+    conds= remove_eq_conds(thd, conds, &cond_value);
+    if (cond_value == Item::COND_FALSE)
+      limit= 0;                                   // Impossible WHERE
+  }
 
+  /*
+    If a timestamp field settable on UPDATE is present then to avoid wrong
+    update force the table handler to retrieve write-only fields to be able
+    to compare records and detect data change.
+  */
+  if (table->file->ha_table_flags() & HA_PARTIAL_COLUMN_READ &&
+      table->timestamp_field &&
+      (table->timestamp_field_type == TIMESTAMP_AUTO_SET_ON_UPDATE ||
+       table->timestamp_field_type == TIMESTAMP_AUTO_SET_ON_BOTH))
+    bitmap_union(table->read_set, table->write_set);
   // Don't count on usage of 'only index' when calculating which key to use
   table->covering_keys.clear_all();
 
-  /*
-    This must be done before partitioning pruning, since prune_partitions()
-    uses the table->write_set to determine may prune locks too.
-  */
-  if (table->triggers)
-    table->triggers->mark_fields_used(TRG_EVENT_UPDATE);
-
 #ifdef WITH_PARTITION_STORAGE_ENGINE
-  if (table->part_info)
+  if (prune_partitions(thd, table, conds))
   {
-    if (prune_partitions(thd, table, conds))
-      DBUG_RETURN(1);
-    if (table->all_partitions_pruned_away)
-    {
-      /* No matching records */
-      if (thd->lex->describe)
-      {
-        error= explain_no_table(thd,
-                                "No matching rows after partition pruning");
-        goto exit_without_my_ok;
-      }
-      my_ok(thd);                            // No matching records
-      DBUG_RETURN(0);
-    }
-  }
-#endif
-  if (lock_tables(thd, table_list, thd->lex->table_count, 0))
-    DBUG_RETURN(1);
-
-  // Must be done after lock_tables()
-  if (conds)
-  {
-    COND_EQUAL *cond_equal= NULL;
-    Item::cond_result result;
-    if (table_list->check_option)
-    {
-      /*
-        If this UPDATE is on a view with CHECK OPTION, Item_fields
-        must not be replaced by constants. The reason is that when
-        'conds' is optimized, 'check_option' is also optimized (it is
-        part of 'conds'). Const replacement is fine for 'conds'
-        because it is evaluated on a read row, but 'check_option' is
-        evaluated on a row with updated fields and needs those updated
-        values to be correct.
-
-        Example:
-        CREATE VIEW v1 ... WHERE fld < 2 WITH CHECK_OPTION
-        UPDATE v1 SET fld=4 WHERE fld=1
-
-        check_option is  "(fld < 2)"
-        conds is         "(fld < 2) and (fld = 1)"
-
-        optimize_cond() would propagate fld=1 to the first argument of
-        the AND to create "(1 < 2) AND (fld = 1)". After this,
-        check_option would be "(1 < 2)". But for check_option to work
-        it must be evaluated with the *updated* value of fld: 4.
-        Otherwise it will evaluate to true even when it should be
-        false, which is the case for the UPDATE statement above.
-
-        Thus, if there is a check_option, we do only the "safe" parts
-        of optimize_cond(): Item_row -> Item_func_eq conversion (to
-        enable range access) and removal of always true/always false
-        predicates.
-
-        An alternative to restricting this optimization of 'conds' in
-        the presense of check_option: the Item-tree of 'check_option'
-        could be cloned before optimizing 'conds' and thereby avoid
-        const replacement. However, at the moment there is no such
-        thing as Item::clone().
-      */
-      conds= build_equal_items(thd, conds, NULL, false,
-                               select_lex->join_list, &cond_equal);
-      conds= remove_eq_conds(thd, conds, &result);
-    }
-    else
-      conds= optimize_cond(thd, conds, &cond_equal, select_lex->join_list,
-                           true, &result);
-
-    if (result == Item::COND_FALSE)
-    {
-      limit= 0;                                   // Impossible WHERE
-      if (thd->lex->describe)
-      {
-        error= explain_no_table(thd, "Impossible WHERE");
-        goto exit_without_my_ok;
-      }
-    }
-    if (conds)
-    {
-      conds= substitute_for_best_equal_field(conds, cond_equal, 0);
-      conds->update_used_tables();
-    }
-  }
-
-#ifdef WITH_PARTITION_STORAGE_ENGINE
-  /*
-    Also try a second time after locking, to prune when subqueries and
-    stored programs can be evaluated.
-  */
-  if (table->part_info)
-  {
-    if (prune_partitions(thd, table, conds))
-      DBUG_RETURN(1);
-    if (table->all_partitions_pruned_away)
-    {
-      /* No matching records */
-      if (thd->lex->describe)
-      {
-        error= explain_no_table(thd,
-                                "No matching rows after partition pruning");
-        goto exit_without_my_ok;
-      }
-      my_ok(thd);                            // No matching records
-      DBUG_RETURN(0);
-    }
+    free_underlaid_joins(thd, select_lex);
+    my_ok(thd);				// No matching records
+    DBUG_RETURN(0);
   }
 #endif
   /* Update the table->file->stats.records number */
   table->file->info(HA_STATUS_VARIABLE | HA_STATUS_NO_LOCK);
 
-  table->mark_columns_needed_for_update(false/*mark_binlog_columns=false*/);
   select= make_select(table, 0, 0, conds, 0, &error);
-
-  { // Enter scope for optimizer trace wrapper
-    Opt_trace_object wrapper(&thd->opt_trace);
-    wrapper.add_utf8_table(table);
-
-    if (error || !limit ||
-        (select && select->check_quick(thd, safe_update, limit)))
+  if (error || !limit ||
+      (select && select->check_quick(thd, safe_update, limit)))
+  {
+    delete select;
+    free_underlaid_joins(thd, select_lex);
+    /*
+      There was an error or the error was already sent by
+      the quick select evaluation.
+      TODO: Add error code output parameter to Item::val_xxx() methods.
+      Currently they rely on the user checking DA for
+      errors when unwinding the stack after calling Item::val_xxx().
+    */
+    if (error || thd->is_error())
     {
-      if (thd->lex->describe && !error && !thd->is_error())
-      {
-        error= explain_no_table(thd, "Impossible WHERE");
-        goto exit_without_my_ok;
-      }
-      delete select;
-      free_underlaid_joins(thd, select_lex);
-      /*
-        There was an error or the error was already sent by
-        the quick select evaluation.
-        TODO: Add error code output parameter to Item::val_xxx() methods.
-        Currently they rely on the user checking DA for
-        errors when unwinding the stack after calling Item::val_xxx().
-      */
-      if (error || thd->is_error())
-      {
-        DBUG_RETURN(1);				// Error in where
-      }
-
-      char buff[MYSQL_ERRMSG_SIZE];
-      my_snprintf(buff, sizeof(buff), ER(ER_UPDATE_INFO), 0, 0,
-                  (ulong) thd->get_stmt_da()->current_statement_warn_count());
-      my_ok(thd, 0, 0, buff);
-
-      DBUG_PRINT("info",("0 records updated"));
-      DBUG_RETURN(0);
+      DBUG_RETURN(1);				// Error in where
     }
-  } // Ends scope for optimizer trace wrapper
+    my_ok(thd);				// No matching records
+    DBUG_RETURN(0);
+  }
 
   /* If running in safe sql mode, don't allow updates without keys */
   if (table->quick_keys.is_clear_all())
@@ -499,10 +430,12 @@ int mysql_update(THD *thd,
     {
       my_message(ER_UPDATE_WITHOUT_KEY_IN_SAFE_MODE,
 		 ER(ER_UPDATE_WITHOUT_KEY_IN_SAFE_MODE), MYF(0));
-      goto exit_without_my_ok;
+      goto err;
     }
   }
   init_ftfuncs(thd, select_lex, 1);
+
+  table->mark_columns_needed_for_update();
 
   table->update_const_key_parts(conds);
   order= simple_remove_const(order, conds);
@@ -528,53 +461,46 @@ int mysql_update(THD *thd,
   }
 
 #ifdef WITH_PARTITION_STORAGE_ENGINE
-  used_key_is_modified|= partition_key_modified(table, table->write_set);
-#endif
-  table->mark_columns_per_binlog_row_image();
-  using_filesort= order && (need_sort||used_key_is_modified);
-  if (thd->lex->describe)
-  {
-    const bool using_tmp_table= !using_filesort &&
-                                (used_key_is_modified || order);
-    error= explain_single_table_modification(thd, table, select, used_index,
-                                             limit, using_tmp_table,
-                                             using_filesort,
-                                             true,
-                                             used_key_is_modified);
-    goto exit_without_my_ok;
-  }
-
+  if (used_key_is_modified || order ||
+      partition_key_modified(table, table->write_set))
+#else
   if (used_key_is_modified || order)
+#endif
   {
     /*
       We can't update table directly;  We must first search after all
       matching rows before updating the table!
     */
-
     if (used_index < MAX_KEY && old_covering_keys.is_set(used_index))
-      table->set_keyread(true);
+      table->add_read_columns_used_by_index(used_index);
+    else
+    {
+      table->use_all_columns();
+    }
 
     /* note: We avoid sorting if we sort on the used index */
-    if (using_filesort)
+    if (order && (need_sort || used_key_is_modified))
     {
       /*
 	Doing an ORDER BY;  Let filesort find and sort the rows we are going
 	to update
         NOTE: filesort will call table->prepare_for_position()
       */
+      uint         length= 0;
+      SORT_FIELD  *sortorder;
       ha_rows examined_rows;
-      ha_rows found_rows;
-      Filesort fsort(order, limit, select);
 
       table->sort.io_cache = (IO_CACHE *) my_malloc(sizeof(IO_CACHE),
 						    MYF(MY_FAE | MY_ZEROFILL));
-      if ((table->sort.found_records= filesort(thd, table, &fsort, true,
-                                               &examined_rows, &found_rows))
+      if (!(sortorder=make_unireg_sortorder(order, &length, NULL)) ||
+          (table->sort.found_records= filesort(thd, table, sortorder, length,
+                                               select, limit, 1,
+                                               &examined_rows))
           == HA_POS_ERROR)
       {
-        goto exit_without_my_ok;
+	goto err;
       }
-      thd->inc_examined_row_count(examined_rows);
+      thd->examined_row_count+= examined_rows;
       /*
 	Filesort has already found and selected the rows we want to update,
 	so we don't need the where clause
@@ -589,19 +515,17 @@ int mysql_update(THD *thd,
 	we go trough the matching rows, save a pointer to them and
 	update these in a separate loop based on the pointer.
       */
-      table->prepare_for_position();
 
       IO_CACHE tempfile;
       if (open_cached_file(&tempfile, mysql_tmpdir,TEMP_PREFIX,
 			   DISK_BUFFER_SIZE, MYF(MY_WME)))
-        goto exit_without_my_ok;
+	goto err;
 
       /* If quick select is used, initialize it before retrieving rows. */
-      if (select && select->quick && (error= select->quick->reset()))
+      if (select && select->quick && select->quick->reset())
       {
         close_cached_file(&tempfile);
-        table->file->print_error(error, MYF(0));
-        goto exit_without_my_ok;
+        goto err;
       }
       table->file->try_semi_consistent_read(1);
 
@@ -617,22 +541,16 @@ int mysql_update(THD *thd,
       */
 
       if (used_index == MAX_KEY || (select && select->quick))
-        error= init_read_record(&info, thd, table, select, 0, 1, FALSE);
+        init_read_record(&info, thd, table, select, 0, 1, FALSE);
       else
-        error= init_read_record_idx(&info, thd, table, 1, used_index, reverse);
+        init_read_record_idx(&info, thd, table, 1, used_index, reverse);
 
-      if (error)
-      {
-        close_cached_file(&tempfile);
-        goto exit_without_my_ok;
-      }
-
-      THD_STAGE_INFO(thd, stage_searching_rows_for_update);
+      thd_proc_info(thd, "Searching rows for update");
       ha_rows tmp_limit= limit;
 
       while (!(error=info.read_record(&info)) && !thd->killed)
       {
-        thd->inc_examined_row_count(1);
+        thd->examined_row_count++;
         bool skip_record= FALSE;
         if (select && select->skip_record(thd, &skip_record))
         {
@@ -673,10 +591,11 @@ int mysql_update(THD *thd,
       /* Change select to use tempfile */
       if (select)
       {
-        select->set_quick(NULL);
-        if (select->free_cond)
-          delete select->cond;
-        select->cond= NULL;
+	delete select->quick;
+	if (select->free_cond)
+	  delete select->cond;
+	select->quick=0;
+	select->cond=0;
       }
       else
       {
@@ -687,23 +606,19 @@ int mysql_update(THD *thd,
 	error=1; /* purecov: inspected */
       select->file=tempfile;			// Read row ptrs from this file
       if (error >= 0)
-        goto exit_without_my_ok;
+	goto err;
     }
-    if (used_index < MAX_KEY && old_covering_keys.is_set(used_index))
-      table->set_keyread(false);
+    if (table->key_read)
+      table->restore_column_maps_after_mark_index();
   }
 
   if (ignore)
     table->file->extra(HA_EXTRA_IGNORE_DUP_KEY);
   
-  if (select && select->quick && (error= select->quick->reset()))
-  {
-    table->file->print_error(error, MYF(0));
-    goto exit_without_my_ok;
-  }
+  if (select && select->quick && select->quick->reset())
+    goto err;
   table->file->try_semi_consistent_read(1);
-  if ((error= init_read_record(&info, thd, table, select, 0, 1, FALSE)))
-    goto exit_without_my_ok;
+  init_read_record(&info, thd, table, select, 0, 1, FALSE);
 
   updated= found= 0;
   /*
@@ -712,11 +627,13 @@ int mysql_update(THD *thd,
   */
   thd->count_cuted_fields= CHECK_FIELD_WARN;
   thd->cuted_fields=0L;
-  THD_STAGE_INFO(thd, stage_updating);
+  thd_proc_info(thd, "Updating");
 
   transactional_table= table->file->has_transactions();
-  thd->abort_on_warning= (!ignore && thd->is_strict_mode());
-
+  thd->abort_on_warning= test(!ignore &&
+                              (thd->variables.sql_mode &
+                               (MODE_STRICT_TRANS_TABLES |
+                                MODE_STRICT_ALL_TABLES)));
   if (table->triggers &&
       table->triggers->has_triggers(TRG_EVENT_UPDATE,
                                     TRG_ACTION_AFTER))
@@ -732,16 +649,16 @@ int mysql_update(THD *thd,
   else
     will_batch= !table->file->start_bulk_update();
 
-  if ((table->file->ha_table_flags() & HA_READ_BEFORE_WRITE_REMOVAL) &&
-      !ignore && !using_limit &&
-      !(table->triggers && table->triggers->has_update_triggers()) &&
-      select && select->quick && select->quick->index != MAX_KEY &&
-      check_constant_expressions(values))
-    read_removal= table->check_read_removal(select->quick->index);
+  /*
+    Assure that we can use position()
+    if we need to create an error message.
+  */
+  if (table->file->ha_table_flags() & HA_PARTIAL_COLUMN_READ)
+    table->prepare_for_position();
 
   while (!(error=info.read_record(&info)) && !thd->killed)
   {
-    thd->inc_examined_row_count(1);
+    thd->examined_row_count++;
     bool skip_record;
     if (!select || (!select->skip_record(thd, &skip_record) && !skip_record))
     {
@@ -770,14 +687,6 @@ int mysql_update(THD *thd,
             break;
           }
         }
-
-        /*
-          In order to keep MySQL legacy behavior, we do this update *after*
-          the CHECK OPTION test. Proper behavior is probably to throw an
-          error, though.
-        */
-        update.set_function_defaults(table);
-
         if (will_batch)
         {
           /*
@@ -839,6 +748,7 @@ int mysql_update(THD *thd,
                                                  HA_CHECK_FK_ERROR))
             flags|= ME_FATALERROR; /* Other handler errors are fatal */
 
+          prepare_record_for_error_message(error, table);
 	  table->file->print_error(error,MYF(flags));
 	  error= 1;
 	  break;
@@ -878,6 +788,7 @@ int mysql_update(THD *thd,
               The handler should not report error of duplicate keys if they
               are ignored. This is a requirement on batching handlers.
             */
+            prepare_record_for_error_message(error, table);
             table->file->print_error(error,MYF(0));
             error= 1;
             break;
@@ -909,7 +820,7 @@ int mysql_update(THD *thd,
       error= 1;
       break;
     }
-    thd->get_stmt_da()->inc_current_row_for_warning();
+    thd->warning_info->inc_current_row_for_warning();
     if (thd->is_error())
     {
       error= 1;
@@ -947,6 +858,7 @@ int mysql_update(THD *thd,
     */
   {
     /* purecov: begin inspected */
+    prepare_record_for_error_message(loc_error, table);
     table->file->print_error(loc_error,MYF(ME_FATALERROR));
     error= 1;
     /* purecov: end */
@@ -957,20 +869,12 @@ int mysql_update(THD *thd,
     table->file->end_bulk_update();
   table->file->try_semi_consistent_read(0);
 
-  if (read_removal)
-  {
-    /* Only handler knows how many records really was written */
-    updated= table->file->end_read_removal();
-    if (!records_are_comparable(table))
-      found= updated;
-  }
-
   if (!transactional_table && updated > 0)
-    thd->transaction.stmt.mark_modified_non_trans_table();
+    thd->transaction.stmt.modified_non_trans_table= TRUE;
 
   end_read_record(&info);
   delete select;
-  THD_STAGE_INFO(thd, stage_end);
+  thd_proc_info(thd, "end");
   (void) table->file->extra(HA_EXTRA_NO_IGNORE_DUP_KEY);
 
   /*
@@ -982,6 +886,9 @@ int mysql_update(THD *thd,
     query_cache_invalidate3(thd, table_list, 1);
   }
   
+  if (thd->transaction.stmt.modified_non_trans_table)
+      thd->transaction.all.modified_non_trans_table= TRUE;
+
   /*
     error < 0 means really no error at all: we processed all rows until the
     last one without error. error > 0 means an error (e.g. unique key
@@ -991,7 +898,7 @@ int mysql_update(THD *thd,
     Sometimes we want to binlog even if we updated no rows, in case user used
     it to be sure master and slave are in same state.
   */
-  if ((error < 0) || thd->transaction.stmt.cannot_safely_rollback())
+  if ((error < 0) || thd->transaction.stmt.modified_non_trans_table)
   {
     if (mysql_bin_log.is_open())
     {
@@ -1009,8 +916,7 @@ int mysql_update(THD *thd,
       }
     }
   }
-  DBUG_ASSERT(transactional_table || !updated ||
-              thd->transaction.stmt.cannot_safely_rollback());
+  DBUG_ASSERT(transactional_table || !updated || thd->transaction.stmt.modified_non_trans_table);
   free_underlaid_joins(thd, select_lex);
 
   /* If LAST_INSERT_ID(X) was used, report X */
@@ -1022,7 +928,7 @@ int mysql_update(THD *thd,
     char buff[MYSQL_ERRMSG_SIZE];
     my_snprintf(buff, sizeof(buff), ER(ER_UPDATE_INFO), (ulong) found,
                 (ulong) updated,
-                (ulong) thd->get_stmt_da()->current_statement_warn_count());
+                (ulong) thd->warning_info->statement_warn_count());
     my_ok(thd, (thd->client_capabilities & CLIENT_FOUND_ROWS) ? found : updated,
           id, buff);
     DBUG_PRINT("info",("%ld records updated", (long) updated));
@@ -1033,12 +939,12 @@ int mysql_update(THD *thd,
   *updated_return= updated;
   DBUG_RETURN((error >= 0 || thd->is_error()) ? 1 : 0);
 
-exit_without_my_ok:
+err:
   delete select;
   free_underlaid_joins(thd, select_lex);
   table->set_keyread(FALSE);
   thd->abort_on_warning= 0;
-  DBUG_RETURN(error);
+  DBUG_RETURN(1);
 }
 
 /*
@@ -1180,7 +1086,6 @@ bool unsafe_key_update(TABLE_LIST *leaves, table_map tables_for_update)
         TABLE *table2= tl2->table;
         if (table2->map & tables_for_update && table1->s == table2->s)
         {
-#ifdef WITH_PARTITION_STORAGE_ENGINE
           // A table is updated through two aliases
           if (table_partitioned &&
               (partition_key_modified(table1, table1->write_set) ||
@@ -1194,15 +1099,13 @@ bool unsafe_key_update(TABLE_LIST *leaves, table_map tables_for_update)
                                          : tl2->alias);
             return true;
           }
-#endif
 
           if (primkey_clustered)
           {
             // The primary key can cover multiple columns
             KEY key_info= table1->key_info[table1->s->primary_key];
             KEY_PART_INFO *key_part= key_info.key_part;
-            KEY_PART_INFO *key_part_end= key_part +
-              key_info.user_defined_key_parts;
+            KEY_PART_INFO *key_part_end= key_part + key_info.key_parts;
 
             for (;key_part != key_part_end; ++key_part)
             {
@@ -1221,83 +1124,6 @@ bool unsafe_key_update(TABLE_LIST *leaves, table_map tables_for_update)
           }
         }
       }
-    }
-  }
-  return false;
-}
-
-
-/**
-  Check if there is enough privilege on specific table used by the
-  main select list of multi-update directly or indirectly (through
-  a view).
-
-  @param[in]      thd                Thread context.
-  @param[in]      table              Table list element for the table.
-  @param[in]      tables_for_update  Bitmap with tables being updated.
-  @param[in/out]  updated_arg        Set to true if table in question is
-                                     updated, also set to true if it is
-                                     a view and one of its underlying
-                                     tables is updated. Should be
-                                     initialized to false by the caller
-                                     before a sequence of calls to this
-                                     function.
-
-  @note To determine which tables/views are updated we have to go from
-        leaves to root since tables_for_update contains map of leaf
-        tables being updated and doesn't include non-leaf tables
-        (fields are already resolved to leaf tables).
-
-  @retval false - Success, all necessary privileges on all tables are
-                  present or might be present on column-level.
-  @retval true  - Failure, some necessary privilege on some table is
-                  missing.
-*/
-
-static bool multi_update_check_table_access(THD *thd, TABLE_LIST *table,
-                                            table_map tables_for_update,
-                                            bool *updated_arg)
-{
-  if (table->view)
-  {
-    bool updated= false;
-    /*
-      If it is a mergeable view then we need to check privileges on its
-      underlying tables being merged (including views). We also need to
-      check if any of them is updated in order to find if this view is
-      updated.
-      If it is a non-mergeable view then it can't be updated.
-    */
-    DBUG_ASSERT(table->merge_underlying_list ||
-                (!table->updatable &&
-                 !(table->table->map & tables_for_update)));
-
-    for (TABLE_LIST *tbl= table->merge_underlying_list; tbl;
-         tbl= tbl->next_local)
-    {
-      if (multi_update_check_table_access(thd, tbl, tables_for_update, &updated))
-        return true;
-    }
-    if (check_table_access(thd, updated ? UPDATE_ACL: SELECT_ACL, table,
-                           FALSE, 1, FALSE))
-      return true;
-    *updated_arg|= updated;
-    /* We only need SELECT privilege for columns in the values list. */
-    table->grant.want_privilege= SELECT_ACL & ~table->grant.privilege;
-  }
-  else
-  {
-    /* Must be a base or derived table. */
-    const bool updated= table->table->map & tables_for_update;
-    if (check_table_access(thd, updated ? UPDATE_ACL : SELECT_ACL, table,
-                           FALSE, 1, FALSE))
-      return true;
-    *updated_arg|= updated;
-    /* We only need SELECT privilege for columns in the values list. */
-    if (!table->derived)
-    {
-      table->grant.want_privilege= SELECT_ACL & ~table->grant.privilege;
-      table->table->grant.want_privilege= SELECT_ACL & ~table->table->grant.privilege;
     }
   }
   return false;
@@ -1324,6 +1150,12 @@ int mysql_multi_update_prepare(THD *thd)
   List<Item> *fields= &lex->select_lex.item_list;
   table_map tables_for_update;
   bool update_view= 0;
+  /*
+    if this multi-update was converted from usual update, here is table
+    counter else junk will be assigned here, but then replaced with real
+    count in open_tables()
+  */
+  uint  table_count= lex->table_count;
   const bool using_lock_tables= thd->locked_tables_mode != LTM_NONE;
   bool original_multiupdate= (thd->lex->sql_command == SQLCOM_UPDATE_MULTI);
   DBUG_ENTER("mysql_multi_update_prepare");
@@ -1338,10 +1170,11 @@ int mysql_multi_update_prepare(THD *thd)
     keep prepare of multi-UPDATE compatible with concurrent LOCK TABLES WRITE
     and global read lock.
   */
-  if (original_multiupdate &&
-      open_normal_and_derived_tables(thd, table_list,
-                                     (thd->stmt_arena->is_stmt_prepare() ?
-                                      MYSQL_OPEN_FORCE_SHARED_MDL : 0)))
+  if ((original_multiupdate &&
+       open_tables(thd, &table_list, &table_count,
+                   (thd->stmt_arena->is_stmt_prepare() ?
+                    MYSQL_OPEN_FORCE_SHARED_MDL : 0))) ||
+      mysql_handle_derived(lex, &mysql_derived_prepare))
     DBUG_RETURN(TRUE);
   /*
     setup_tables() need for VIEWs. JOIN::prepare() will call setup_tables()
@@ -1349,26 +1182,22 @@ int mysql_multi_update_prepare(THD *thd)
     call in setup_tables()).
   */
 
-  if (setup_tables(thd, &lex->select_lex.context,
-                   &lex->select_lex.top_join_list,
-                   table_list, &lex->select_lex.leaf_tables,
-                   FALSE))
+  if (setup_tables_and_check_access(thd, &lex->select_lex.context,
+                                    &lex->select_lex.top_join_list,
+                                    table_list,
+                                    &lex->select_lex.leaf_tables, FALSE,
+                                    UPDATE_ACL, SELECT_ACL))
     DBUG_RETURN(TRUE);
 
-  if (setup_fields_with_no_wrap(thd, Ref_ptr_array(),
-                                *fields, MARK_COLUMNS_WRITE, 0, 0))
+  if (setup_fields_with_no_wrap(thd, 0, *fields, MARK_COLUMNS_WRITE, 0, 0))
     DBUG_RETURN(TRUE);
 
-  /*
-   Setting tl->updating= false for view as it is correctly set
-   for tables below
-  */
   for (tl= table_list; tl ; tl= tl->next_local)
   {
     if (tl->view)
     {
       update_view= 1;
-      tl->updating= false;
+      break;
     }
   }
 
@@ -1390,6 +1219,11 @@ int mysql_multi_update_prepare(THD *thd)
   for (tl= leaves; tl; tl= tl->next_leaf)
   {
     TABLE *table= tl->table;
+    /* Only set timestamp column if this is not modified */
+    if (table->timestamp_field &&
+        bitmap_is_set(table->write_set,
+                      table->timestamp_field->field_index))
+      table->timestamp_field_type= TIMESTAMP_NO_AUTO_SET;
 
     /* if table will be updated then check that it is unique */
     if (table->map & tables_for_update)
@@ -1418,28 +1252,27 @@ int mysql_multi_update_prepare(THD *thd)
         another table instance used by this statement which is going to
         be write-locked (for example, trigger to be invoked might try
         to update this table).
-        Last argument routine_modifies_data for read_lock_type_for_table()
-        is ignored, as prelocking placeholder will never be set here.
       */
-      DBUG_ASSERT(tl->prelocking_placeholder == false);
-      tl->lock_type= read_lock_type_for_table(thd, lex, tl, true);
+      tl->lock_type= read_lock_type_for_table(thd, lex, tl);
       tl->updating= 0;
       /* Update TABLE::lock_type accordingly. */
       if (!tl->placeholder() && !using_lock_tables)
         tl->table->reginfo.lock_type= tl->lock_type;
     }
   }
-
-  /*
-    Check access privileges for tables being updated or read.
-    Note that unlike in the above loop we need to iterate here not only
-    through all leaf tables but also through all view hierarchy.
-  */
   for (tl= table_list; tl; tl= tl->next_local)
   {
-    bool not_used= false;
-    if (multi_update_check_table_access(thd, tl, tables_for_update, &not_used))
-      DBUG_RETURN(TRUE);
+    /* Check access privileges for table */
+    if (!tl->derived)
+    {
+      uint want_privilege= tl->updating ? UPDATE_ACL : SELECT_ACL;
+      if (check_access(thd, want_privilege, tl->db,
+                       &tl->grant.privilege,
+                       &tl->grant.m_internal,
+                       0, 0) ||
+          check_grant(thd, want_privilege, tl, FALSE, 1, FALSE))
+        DBUG_RETURN(TRUE);
+    }
   }
 
   /* check single table update for view compound from several tables */
@@ -1457,6 +1290,12 @@ int mysql_multi_update_prepare(THD *thd)
     }
   }
 
+  /* now lock and fill tables */
+  if (!thd->stmt_arena->is_stmt_prepare() &&
+      lock_tables(thd, table_list, table_count, 0))
+  {
+    DBUG_RETURN(TRUE);
+  }
   /* @todo: downgrade the metadata locks here. */
 
   /*
@@ -1464,8 +1303,19 @@ int mysql_multi_update_prepare(THD *thd)
     skip all tables of UPDATE SELECT itself
   */
   lex->select_lex.exclude_from_table_unique_test= TRUE;
+  /* We only need SELECT privilege for columns in the values list */
   for (tl= leaves; tl; tl= tl->next_leaf)
   {
+    TABLE *table= tl->table;
+    TABLE_LIST *tlist;
+    if (!(tlist= tl->top_table())->derived)
+    {
+      tlist->grant.want_privilege=
+        (SELECT_ACL & ~tlist->grant.privilege);
+      table->grant.want_privilege= (SELECT_ACL & ~table->grant.privilege);
+    }
+    DBUG_PRINT("info", ("table: %s  want_privilege: %u", tl->alias,
+                        (uint) table->grant.want_privilege));
     if (tl->lock_type != TL_READ &&
         tl->lock_type != TL_READ_NO_INSERT)
     {
@@ -1482,6 +1332,15 @@ int mysql_multi_update_prepare(THD *thd)
     further check in multi_update::prepare whether to use record cache.
   */
   lex->select_lex.exclude_from_table_unique_test= FALSE;
+ 
+  if (thd->fill_derived_tables() &&
+      mysql_handle_derived(lex, &mysql_derived_filling))
+  {
+    mysql_handle_derived(lex, &mysql_derived_cleanup);
+    DBUG_RETURN(TRUE);
+  }
+  mysql_handle_derived(lex, &mysql_derived_cleanup);
+
   DBUG_RETURN (FALSE);
 }
 
@@ -1494,7 +1353,7 @@ bool mysql_multi_update(THD *thd,
                         TABLE_LIST *table_list,
                         List<Item> *fields,
                         List<Item> *values,
-                        Item *conds,
+                        COND *conds,
                         ulonglong options,
                         enum enum_duplicates handle_duplicates,
                         bool ignore,
@@ -1513,31 +1372,28 @@ bool mysql_multi_update(THD *thd,
     DBUG_RETURN(TRUE);
   }
 
-  thd->abort_on_warning= (!ignore && thd->is_strict_mode());
+  thd->abort_on_warning= test(thd->variables.sql_mode &
+                              (MODE_STRICT_TRANS_TABLES |
+                               MODE_STRICT_ALL_TABLES));
 
-  if (thd->lex->describe)
-    res= explain_multi_table_modification(thd, *result);
-  else
+  List<Item> total_list;
+
+  res= mysql_select(thd, &select_lex->ref_pointer_array,
+                    table_list, select_lex->with_wild,
+                    total_list,
+                    conds, 0, (ORDER *) NULL, (ORDER *)NULL, (Item *) NULL,
+                    (ORDER *)NULL,
+                    options | SELECT_NO_JOIN_CACHE | SELECT_NO_UNLOCK |
+                    OPTION_SETUP_TABLES_DONE,
+                    *result, unit, select_lex);
+
+  DBUG_PRINT("info",("res: %d  report_error: %d", res, (int) thd->is_error()));
+  res|= thd->is_error();
+  if (unlikely(res))
   {
-    List<Item> total_list;
-
-    res= mysql_select(thd,
-                      table_list, select_lex->with_wild,
-                      total_list,
-                      conds, (SQL_I_List<ORDER> *) NULL,
-                      (SQL_I_List<ORDER> *)NULL, (Item *) NULL,
-                      options | SELECT_NO_JOIN_CACHE | SELECT_NO_UNLOCK |
-                      OPTION_SETUP_TABLES_DONE,
-                      *result, unit, select_lex);
-
-    DBUG_PRINT("info",("res: %d  report_error: %d",res, (int) thd->is_error()));
-    res|= thd->is_error();
-    if (unlikely(res))
-    {
-      /* If we had a another error reported earlier then this will be ignored */
-      (*result)->send_error(ER_UNKNOWN_ERROR, ER(ER_UNKNOWN_ERROR));
-      (*result)->abort_result_set();
-    }
+    /* If we had a another error reported earlier then this will be ignored */
+    (*result)->send_error(ER_UNKNOWN_ERROR, ER(ER_UNKNOWN_ERROR));
+    (*result)->abort_result_set();
   }
   thd->abort_on_warning= 0;
   DBUG_RETURN(res);
@@ -1553,8 +1409,7 @@ multi_update::multi_update(TABLE_LIST *table_list,
    tmp_tables(0), updated(0), found(0), fields(field_list),
    values(value_list), table_count(0), copy_field(0),
    handle_duplicates(handle_duplicates_arg), do_update(1), trans_safe(1),
-   transactional_tables(0), ignore(ignore_arg), error_handled(0),
-   update_operations(NULL)
+   transactional_tables(0), ignore(ignore_arg), error_handled(0)
 {}
 
 
@@ -1577,7 +1432,7 @@ int multi_update::prepare(List<Item> &not_used_values,
 
   thd->count_cuted_fields= CHECK_FIELD_WARN;
   thd->cuted_fields=0L;
-  THD_STAGE_INFO(thd, stage_updating_main_table);
+  thd_proc_info(thd, "updating main table");
 
   tables_to_update= get_table_map(fields);
 
@@ -1608,8 +1463,7 @@ int multi_update::prepare(List<Item> &not_used_values,
     reference tables
   */
 
-  int error= setup_fields(thd, Ref_ptr_array(),
-                          *values, MARK_COLUMNS_READ, 0, 0);
+  int error= setup_fields(thd, 0, *values, MARK_COLUMNS_READ, 0, 0);
 
   for (table_ref= leaves; table_ref; table_ref= table_ref->next_leaf)
   {
@@ -1618,6 +1472,16 @@ int multi_update::prepare(List<Item> &not_used_values,
     {
       table->read_set= &table->def_read_set;
       bitmap_union(table->read_set, &table->tmp_set);
+      /*
+        If a timestamp field settable on UPDATE is present then to avoid wrong
+        update force the table handler to retrieve write-only fields to be able
+        to compare records and detect data change.
+        */
+      if (table->file->ha_table_flags() & HA_PARTIAL_COLUMN_READ &&
+          table->timestamp_field &&
+          (table->timestamp_field_type == TIMESTAMP_AUTO_SET_ON_UPDATE ||
+           table->timestamp_field_type == TIMESTAMP_AUTO_SET_ON_BOTH))
+        bitmap_union(table->read_set, table->write_set);
     }
   }
   
@@ -1672,11 +1536,6 @@ int multi_update::prepare(List<Item> &not_used_values,
 					      table_count);
   values_for_table= (List_item **) thd->alloc(sizeof(List_item *) *
 					      table_count);
-
-  DBUG_ASSERT(update_operations == NULL);
-  update_operations= (COPY_INFO**) thd->calloc(sizeof(COPY_INFO*) *
-                                               table_count);
-
   if (thd->is_fatal_error)
     DBUG_RETURN(1);
   for (i=0 ; i < table_count ; i++)
@@ -1704,41 +1563,6 @@ int multi_update::prepare(List<Item> &not_used_values,
   for (i=0 ; i < table_count ; i++)
     set_if_bigger(max_fields, fields_for_table[i]->elements + leaf_table_count);
   copy_field= new Copy_field[max_fields];
-
-
-  for (TABLE_LIST *ref= leaves; ref != NULL; ref= ref->next_leaf)
-  {
-    TABLE *table= ref->table;
-    if (tables_to_update & table->map)
-    {
-      const uint position= table->pos_in_table_list->shared;
-      List<Item> *cols= fields_for_table[position];
-      List<Item> *vals= values_for_table[position];
-      COPY_INFO *update=
-        new (thd->mem_root) COPY_INFO(COPY_INFO::UPDATE_OPERATION, cols, vals);
-      if (update == NULL ||
-          update->add_function_default_columns(table, table->write_set))
-        DBUG_RETURN(1);
-
-      update_operations[position]= update;
-
-      if ((table->file->ha_table_flags() & HA_PARTIAL_COLUMN_READ) != 0 &&
-          update->function_defaults_apply(table))
-      {
-        /*
-          A column is to be set to its ON UPDATE function default only if
-          other columns of the row are changing. To know this, we must be able
-          to compare the "before" and "after" value of those columns. Thus, we
-          must read those columns:
-        */
-        bitmap_union(table->read_set, table->write_set);
-      }
-      /* All needed columns must be marked before prune_partitions(). */
-      if (table->triggers)
-        table->triggers->mark_fields_used(TRG_EVENT_UPDATE);
-    }
-  }
-
   DBUG_RETURN(thd->is_fatal_error != 0);
 }
 
@@ -1859,12 +1683,13 @@ multi_update::initialize_tables(JOIN *join)
     {
       if (safe_update_on_fly(thd, join->join_tab, table_ref, all_tables))
       {
-        table->mark_columns_needed_for_update(true/*mark_binlog_columns=true*/);
+        table->mark_columns_needed_for_update();
 	table_to_update= table;			// Update table on the fly
 	continue;
       }
     }
-    table->mark_columns_needed_for_update(true/*mark_binlog_columns=true*/);
+    table->mark_columns_needed_for_update();
+    table->prepare_for_position();
 
     /*
       enable uncacheable flag if we update a view with check option
@@ -1923,13 +1748,6 @@ loop_end:
     TABLE *tbl= table;
     do
     {
-      /*
-        Signal each table (including tables referenced by WITH CHECK OPTION
-        clause) for which we will store row position in the temporary table
-        that we need a position to be read first.
-      */
-      tbl->prepare_for_position();
-
       Field_string *field= new Field_string(tbl->file->ref_length, 0,
                                             tbl->alias, &my_charset_bin);
       if (!field)
@@ -1951,8 +1769,8 @@ loop_end:
     temp_fields.concat(fields_for_table[cnt]);
 
     /* Make an unique key over the first field to avoid duplicated updates */
-    memset(&group, 0, sizeof(group));
-    group.direction= ORDER::ORDER_ASC;
+    bzero((char*) &group, sizeof(group));
+    group.asc= 1;
     group.item= (Item**) temp_fields.head_ref();
 
     tmp_param->quick_group=1;
@@ -1998,12 +1816,8 @@ multi_update::~multi_update()
   if (copy_field)
     delete [] copy_field;
   thd->count_cuted_fields= CHECK_FIELD_IGNORE;		// Restore this setting
-  DBUG_ASSERT(trans_safe || !updated ||
-              thd->transaction.stmt.cannot_safely_rollback());
-
-  if (update_operations != NULL)
-    for (uint i= 0; i < table_count; i++)
-      delete update_operations[i];
+  DBUG_ASSERT(trans_safe || !updated || 
+              thd->transaction.all.modified_non_trans_table);
 }
 
 
@@ -2035,10 +1849,8 @@ bool multi_update::send_data(List<Item> &not_used_values)
     {
       table->status|= STATUS_UPDATED;
       store_record(table,record[1]);
-      if (fill_record_n_invoke_before_triggers(thd,
-                                               *fields_for_table[offset],
-                                               *values_for_table[offset],
-                                               false, // ignore_errors
+      if (fill_record_n_invoke_before_triggers(thd, *fields_for_table[offset],
+                                               *values_for_table[offset], 0,
                                                table->triggers,
                                                TRG_EVENT_UPDATE))
 	DBUG_RETURN(1);
@@ -2051,8 +1863,6 @@ bool multi_update::send_data(List<Item> &not_used_values)
       found++;
       if (!records_are_comparable(table) || compare_records(table))
       {
-        update_operations[offset]->set_function_defaults(table);
-
 	int error;
         if ((error= cur_table->view_check_option(thd, ignore)) !=
             VIEW_CHECK_OK)
@@ -2091,6 +1901,7 @@ bool multi_update::send_data(List<Item> &not_used_values)
                                                    HA_CHECK_FK_ERROR))
               flags|= ME_FATALERROR; /* Other handler errors are fatal */
 
+            prepare_record_for_error_message(error, table);
             table->file->print_error(error,MYF(flags));
             DBUG_RETURN(1);
           }
@@ -2112,7 +1923,7 @@ bool multi_update::send_data(List<Item> &not_used_values)
           else
           {
             trans_safe= FALSE;
-            thd->transaction.stmt.mark_modified_non_trans_table();
+            thd->transaction.stmt.modified_non_trans_table= TRUE;
           }
         }
       }
@@ -2149,7 +1960,7 @@ bool multi_update::send_data(List<Item> &not_used_values)
       /* Store regular updated fields in the row. */
       fill_record(thd,
                   tmp_table->field + 1 + unupdated_check_opt_tables.elements,
-                  *values_for_table[offset], 1, NULL);
+                  *values_for_table[offset], 1);
 
       /* Write row, ignoring duplicated updates to a row */
       error= tmp_table->file->ha_write_row(tmp_table->record[0]);
@@ -2157,13 +1968,11 @@ bool multi_update::send_data(List<Item> &not_used_values)
       {
         if (error &&
             create_myisam_from_heap(thd, tmp_table,
-                                         tmp_table_param[offset].start_recinfo,
-                                         &tmp_table_param[offset].recinfo,
-                                         error, TRUE, NULL))
+                                    tmp_table_param + offset, error, 1))
         {
           do_update= 0;
-	  DBUG_RETURN(1);			// Not a table_is_full error
-	}
+          DBUG_RETURN(1);			// Not a table_is_full error
+        }
         found++;
       }
     }
@@ -2183,7 +1992,7 @@ void multi_update::abort_result_set()
 {
   /* the error was handled or nothing deleted and no side effects return */
   if (error_handled ||
-      (!thd->transaction.stmt.cannot_safely_rollback() && !updated))
+      (!thd->transaction.stmt.modified_non_trans_table && !updated))
     return;
 
   /* Something already updated so we have to invalidate cache */
@@ -2196,7 +2005,7 @@ void multi_update::abort_result_set()
 
   if (! trans_safe)
   {
-    DBUG_ASSERT(thd->transaction.stmt.cannot_safely_rollback());
+    DBUG_ASSERT(thd->transaction.stmt.modified_non_trans_table);
     if (do_update && table_count > 1)
     {
       /* Add warning here */
@@ -2207,7 +2016,7 @@ void multi_update::abort_result_set()
       (void) do_updates();
     }
   }
-  if (thd->transaction.stmt.cannot_safely_rollback())
+  if (thd->transaction.stmt.modified_non_trans_table)
   {
     /*
       The query has to binlog because there's a modified non-transactional table
@@ -2226,8 +2035,9 @@ void multi_update::abort_result_set()
                         thd->query(), thd->query_length(),
                         transactional_tables, FALSE, FALSE, errcode);
     }
+    thd->transaction.all.modified_non_trans_table= TRUE;
   }
-  DBUG_ASSERT(trans_safe || !updated || thd->transaction.stmt.cannot_safely_rollback());
+  DBUG_ASSERT(trans_safe || !updated || thd->transaction.stmt.modified_non_trans_table);
 }
 
 
@@ -2241,49 +2051,15 @@ int multi_update::do_updates()
   DBUG_ENTER("multi_update::do_updates");
 
   do_update= 0;					// Don't retry this function
-
   if (!found)
-  {
-    /*
-      If the binary log is on, we still need to check
-      if there are transactional tables involved. If
-      there are mark the transactional_tables flag correctly.
-
-      This flag determines whether the writes go into the
-      transactional or non transactional cache, even if they
-      do not change any table, they are still written into
-      the binary log when the format is STMT or MIXED.
-    */
-    if(mysql_bin_log.is_open())
-    {
-      for (cur_table= update_tables; cur_table;
-           cur_table= cur_table->next_local)
-      {
-        table = cur_table->table;
-        transactional_tables= transactional_tables ||
-                              table->file->has_transactions();
-      }
-    }
     DBUG_RETURN(0);
-  }
   for (cur_table= update_tables; cur_table; cur_table= cur_table->next_local)
   {
     uint offset= cur_table->shared;
 
     table = cur_table->table;
-
-    /*
-      Always update the flag if - even if not updating the table,
-      when the binary log is ON. This will allow the right binlog
-      cache - stmt or trx cache - to be selected when logging
-      innefective statementst to the binary log (in STMT or MIXED
-      mode logging).
-     */
-    if (mysql_bin_log.is_open())
-      transactional_tables= transactional_tables || table->file->has_transactions();
-
     if (table == table_to_update)
-      continue;                                        // Already updated
+      continue;					// Already updated
     org_updated= updated;
     tmp_table= tmp_tables[cur_table->shared];
     tmp_table->file->extra(HA_EXTRA_CACHE);	// Change to read cache
@@ -2320,7 +2096,7 @@ int multi_update::do_updates()
     {
       if (thd->killed && trans_safe)
 	goto err;
-      if ((local_error=tmp_table->file->ha_rnd_next(tmp_table->record[0])))
+      if ((local_error=tmp_table->file->rnd_next(tmp_table->record[0])))
       {
 	if (local_error == HA_ERR_END_OF_FILE)
 	  break;
@@ -2329,15 +2105,15 @@ int multi_update::do_updates()
 	goto err;
       }
 
-      /* call ha_rnd_pos() using rowids from temporary table */
+      /* call rnd_pos() using rowids from temporary table */
       check_opt_it.rewind();
       TABLE *tbl= table;
       uint field_num= 0;
       do
       {
         if((local_error=
-              tbl->file->ha_rnd_pos(tbl->record[0],
-                                    (uchar *) tmp_table->field[field_num]->ptr)))
+              tbl->file->rnd_pos(tbl->record[0],
+                                (uchar *) tmp_table->field[field_num]->ptr)))
           goto err;
         field_num++;
       } while((tbl= check_opt_it++));
@@ -2358,7 +2134,6 @@ int multi_update::do_updates()
 
       if (!records_are_comparable(table) || compare_records(table))
       {
-        update_operations[offset]->set_function_defaults(table);
         int error;
         if ((error= cur_table->view_check_option(thd, ignore)) !=
             VIEW_CHECK_OK)
@@ -2368,19 +2143,20 @@ int multi_update::do_updates()
           else if (error == VIEW_CHECK_ERROR)
             goto err;
         }
-        local_error= table->file->ha_update_row(table->record[1],
-                                                table->record[0]);
-        if (!local_error)
+	if ((local_error=table->file->ha_update_row(table->record[1],
+						    table->record[0])) &&
+            local_error != HA_ERR_RECORD_IS_THE_SAME)
+	{
+	  if (!ignore ||
+              table->file->is_fatal_error(local_error, HA_CHECK_DUP_KEY |
+                                                       HA_CHECK_FK_ERROR))
+	    goto err;
+          else if (ignore && !table->file->is_fatal_error(local_error,
+                                                          HA_CHECK_FK_ERROR))
+            warn_fk_constraint_violation(thd, table, local_error);
+	}
+        if (local_error != HA_ERR_RECORD_IS_THE_SAME)
           updated++;
-        else if (local_error == HA_ERR_RECORD_IS_THE_SAME)
-          local_error= 0;
-        else if (!ignore ||
-                 table->file->is_fatal_error(local_error, HA_CHECK_DUP_KEY |
-                                                          HA_CHECK_FK_ERROR))
-          goto err;
-       else if (ignore && !table->file->is_fatal_error(local_error,
-                                                          HA_CHECK_FK_ERROR))
-          warn_fk_constraint_violation(thd, table, local_error);
         else
           local_error= 0;
       }
@@ -2393,10 +2169,12 @@ int multi_update::do_updates()
 
     if (updated != org_updated)
     {
-      if (!table->file->has_transactions())
+      if (table->file->has_transactions())
+        transactional_tables= TRUE;
+      else
       {
         trans_safe= FALSE;				// Can't do safe rollback
-        thd->transaction.stmt.mark_modified_non_trans_table();
+        thd->transaction.stmt.modified_non_trans_table= TRUE;
       }
     }
     (void) table->file->ha_rnd_end();
@@ -2410,6 +2188,7 @@ int multi_update::do_updates()
 
 err:
   {
+    prepare_record_for_error_message(local_error, table);
     table->file->print_error(local_error,MYF(ME_FATALERROR));
   }
 
@@ -2432,7 +2211,7 @@ err2:
     else
     {
       trans_safe= FALSE;
-      thd->transaction.stmt.mark_modified_non_trans_table();
+      thd->transaction.stmt.modified_non_trans_table= TRUE;
     }
   }
   DBUG_RETURN(1);
@@ -2447,7 +2226,7 @@ bool multi_update::send_eof()
   ulonglong id;
   THD::killed_state killed_status= THD::NOT_KILLED;
   DBUG_ENTER("multi_update::send_eof");
-  THD_STAGE_INFO(thd, stage_updating_reference_tables);
+  thd_proc_info(thd, "updating reference tables");
 
   /* 
      Does updates for the last n - 1 tables, returns 0 if ok;
@@ -2461,7 +2240,7 @@ bool multi_update::send_eof()
     later carried out killing should not affect binlogging.
   */
   killed_status= (local_error == 0)? THD::NOT_KILLED : thd->killed;
-  THD_STAGE_INFO(thd, stage_end);
+  thd_proc_info(thd, "end");
 
   /* We must invalidate the query cache before binlog writing and
   ha_autocommit_... */
@@ -2479,7 +2258,10 @@ bool multi_update::send_eof()
     either from the query's list or via a stored routine: bug#13270,23333
   */
 
-  if (local_error == 0 || thd->transaction.stmt.cannot_safely_rollback())
+  if (thd->transaction.stmt.modified_non_trans_table)
+    thd->transaction.all.modified_non_trans_table= TRUE;
+
+  if (local_error == 0 || thd->transaction.stmt.modified_non_trans_table)
   {
     if (mysql_bin_log.is_open())
     {
@@ -2497,7 +2279,7 @@ bool multi_update::send_eof()
     }
   }
   DBUG_ASSERT(trans_safe || !updated || 
-              thd->transaction.stmt.cannot_safely_rollback());
+              thd->transaction.stmt.modified_non_trans_table);
 
   if (local_error != 0)
     error_handled= TRUE; // to force early leave from ::send_error()

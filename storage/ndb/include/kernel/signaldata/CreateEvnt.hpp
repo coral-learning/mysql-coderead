@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef CREATE_EVNT_HPP
 #define CREATE_EVNT_HPP
@@ -22,9 +21,6 @@
 #include "SignalData.hpp"
 #include <NodeBitmask.hpp>
 #include <signaldata/DictTabInfo.hpp>
-#include <AttributeList.hpp>
-
-typedef BitmaskPOD<MAXNROFATTRIBUTESINWORDS_OLD> AttributeMask_OLD;
 
 /**
  * DropEvntReq.
@@ -183,15 +179,13 @@ struct CreateEvntReq {
   enum EventFlags {
     EF_REPORT_ALL = 0x1 << 16,
     EF_REPORT_SUBSCRIBE = 0x2 << 16,
-    EF_NO_REPORT_DDL = 0x4 << 16,
     EF_ALL = 0xFFFF << 16
   };
   STATIC_CONST( SignalLengthGet = 3 );
-  STATIC_CONST( SignalLengthCreate = 6+MAXNROFATTRIBUTESINWORDS_OLD );
-  STATIC_CONST( SignalLength = 8+MAXNROFATTRIBUTESINWORDS_OLD );
-
+  STATIC_CONST( SignalLengthCreate = 6+MAXNROFATTRIBUTESINWORDS );
+  STATIC_CONST( SignalLength = 8+MAXNROFATTRIBUTESINWORDS );
+  //  SECTION( ATTRIBUTE_LIST_SECTION = 0 );
   SECTION( EVENT_NAME_SECTION = 0 );
-  SECTION( ATTRIBUTE_MASK = 1 );
 
   union {
     Uint32 m_userRef;             // user block reference
@@ -204,7 +198,7 @@ struct CreateEvntReq {
   Uint32 m_requestInfo;
   Uint32 m_tableId;             // table to event
   Uint32 m_tableVersion;        // table version
-  AttributeMask_OLD::Data m_attrListBitmask;
+  AttributeMask::Data m_attrListBitmask;
   Uint32 m_eventType;           // EventFlags (16 bits) + from DictTabInfo::TableType (16 bits)
   Uint32 m_eventId;             // event table id set by DICT/SUMA
   Uint32 m_eventKey;            // event table key set by DICT/SUMA
@@ -246,27 +240,13 @@ struct CreateEvntReq {
   void setTableVersion(Uint32 val) {
     m_tableVersion = val;
   }
-  AttributeMask_OLD getAttrListBitmask() const {
-    AttributeMask_OLD tmp;
+  AttributeMask getAttrListBitmask() const {
+    AttributeMask tmp;
     tmp.assign(m_attrListBitmask);
     return tmp;
   }
   void setAttrListBitmask(const AttributeMask & val) {
-    setAttrListBitmask(val.getSizeInWords(), val.rep.data);
-  }
-  void setAttrListBitmask(const AttributeMask_OLD & val) {
-    setAttrListBitmask(val.getSizeInWords(), val.rep.data);
-  }
-  void setAttrListBitmask(Uint32 sz, const Uint32 data[]){
-    bzero(m_attrListBitmask.data, sizeof(m_attrListBitmask.data));
-    if (sz >= AttributeMask_OLD::Size)
-    {
-      AttributeMask_OLD::assign(m_attrListBitmask.data, data);
-    }
-    else
-    {
-      BitmaskImpl::assign(sz, m_attrListBitmask.data, data);
-    }
+    AttributeMask::assign(m_attrListBitmask.data, val);
   }
   Uint32 getEventType() const {
     return m_eventType & ~EF_ALL;
@@ -307,15 +287,6 @@ struct CreateEvntReq {
   void setReportSubscribe() {
     m_eventType|= EF_REPORT_SUBSCRIBE;
   }
-  Uint32 getReportDDL() const {
-    return (m_eventType & EF_NO_REPORT_DDL) == 0;
-  }
-  void setReportDDL() {
-    m_eventType &= ~(Uint32)EF_NO_REPORT_DDL;
-  }
-  void clearReportDDL() {
-    m_eventType |= EF_NO_REPORT_DDL;
-  }
 };
 
 /**
@@ -326,7 +297,7 @@ class CreateEvntConf {
 
 public:
   //  STATIC_CONST( InternalLength = 3 );
-  STATIC_CONST( SignalLength = 8+MAXNROFATTRIBUTESINWORDS_OLD );
+  STATIC_CONST( SignalLength = 8+MAXNROFATTRIBUTESINWORDS );
 
   union {
     Uint32 m_userRef;             // user block reference
@@ -339,7 +310,7 @@ public:
   Uint32 m_requestInfo;
   Uint32 m_tableId;
   Uint32 m_tableVersion;        // table version
-  AttributeMask_OLD m_attrListBitmask;
+  AttributeMask m_attrListBitmask;
   Uint32 m_eventType;
   Uint32 m_eventId;
   Uint32 m_eventKey;
@@ -374,10 +345,10 @@ public:
   void setTableVersion(Uint32 val) {
     m_tableVersion = val;
   }
-  AttributeMask_OLD getAttrListBitmask() const {
+  AttributeMask getAttrListBitmask() const {
     return m_attrListBitmask;
   }
-  void setAttrListBitmask(const AttributeMask_OLD & val) {
+  void setAttrListBitmask(const AttributeMask & val) {
     m_attrListBitmask = val;
   }
   Uint32 getEventType() const {

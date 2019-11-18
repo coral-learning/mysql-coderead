@@ -1164,7 +1164,7 @@ create table t2 as select concat(a) from t1;
 show create table t2;
 drop table t1, t2;
 
-create table t1 (a timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP);
+create table t1 (a timestamp);
 insert into t1 values (0);
 insert into t1 values (20010203040506);
 insert into t1 values (19800203040506);
@@ -1476,7 +1476,7 @@ select hex(a) from v1;
 drop table t1;
 drop view v1;
 
-create table t1 (a timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP);
+create table t1 (a timestamp);
 insert into t1 values (0);
 insert into t1 values (20010203040506);
 insert into t1 values (19800203040506);
@@ -1720,18 +1720,6 @@ DROP TABLE t1;
 --echo #
 --echo # End of Bug#54916
 --echo #
-
---echo #
---echo # WL#5510 Functions to_base64 and from_base64
---echo #
-CREATE TABLE t1 AS SELECT TO_BASE64('test') AS to_base64;
-SHOW CREATE TABLE t1;
-SELECT to_base64, LENGTH(to_base64), HEX(to_base64) FROM t1;
-CREATE TABLE t2 AS SELECT FROM_BASE64(to_base64) AS from_base64 FROM t1;
-SHOW CREATE TABLE t2;
-SELECT CAST(from_base64 AS CHAR), LENGTH(from_base64), HEX(from_base64) FROM t2;
-DROP TABLE t2;
-DROP TABLE t1;
 
 
 --echo #

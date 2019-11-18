@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2012, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -19,7 +19,6 @@
 #include <m_string.h>
 #include <m_ctype.h>
 #include <signal.h>
-#include <mysql/psi/mysql_stage.h>
 #ifdef __WIN__
 #ifdef _MSC_VER
 #include <locale.h>
@@ -38,6 +37,7 @@ static my_bool win32_init_tcp_ip();
 #define SCALE_USEC      10000
 
 my_bool my_init_done= 0;
+uint	mysys_usage_id= 0;              /* Incremented for each my_init() */
 ulong   my_thread_stack_size= 65536;
 
 static ulong atoi_octal(const char *str)
@@ -71,6 +71,7 @@ my_bool my_init(void)
 
   my_init_done= 1;
 
+  mysys_usage_id++;
   my_umask= 0660;                       /* Default umask for new files */
   my_umask_dir= 0700;                   /* Default umask for new directories */
 
@@ -165,7 +166,7 @@ void my_end(int infoflag)
     struct rusage rus;
 #ifdef HAVE_purify
     /* Purify assumes that rus is uninitialized after getrusage call */
-    memset(&rus, 0, sizeof(rus));
+    bzero((char*) &rus, sizeof(rus));
 #endif
     if (!getrusage(RUSAGE_SELF, &rus))
       fprintf(info_file,"\n\
@@ -452,9 +453,6 @@ static my_bool win32_init_tcp_ip()
 }
 #endif /* __WIN__ */
 
-PSI_stage_info stage_waiting_for_table_level_lock=
-{0, "Waiting for table level lock", 0};
-
 #ifdef HAVE_PSI_INTERFACE
 
 #if !defined(HAVE_PREAD) && !defined(_WIN32)
@@ -468,7 +466,7 @@ PSI_mutex_key key_LOCK_localtime_r;
 PSI_mutex_key key_BITMAP_mutex, key_IO_CACHE_append_buffer_lock,
   key_IO_CACHE_SHARE_mutex, key_KEY_CACHE_cache_lock, key_LOCK_alarm,
   key_my_thread_var_mutex, key_THR_LOCK_charset, key_THR_LOCK_heap,
-  key_THR_LOCK_lock, key_THR_LOCK_malloc,
+  key_THR_LOCK_isam, key_THR_LOCK_lock, key_THR_LOCK_malloc,
   key_THR_LOCK_mutex, key_THR_LOCK_myisam, key_THR_LOCK_net,
   key_THR_LOCK_open, key_THR_LOCK_threads,
   key_TMPDIR_mutex, key_THR_LOCK_myisam_mmap;
@@ -489,6 +487,7 @@ static PSI_mutex_info all_mysys_mutexes[]=
   { &key_my_thread_var_mutex, "my_thread_var::mutex", 0},
   { &key_THR_LOCK_charset, "THR_LOCK_charset", PSI_FLAG_GLOBAL},
   { &key_THR_LOCK_heap, "THR_LOCK_heap", PSI_FLAG_GLOBAL},
+  { &key_THR_LOCK_isam, "THR_LOCK_isam", PSI_FLAG_GLOBAL},
   { &key_THR_LOCK_lock, "THR_LOCK_lock", PSI_FLAG_GLOBAL},
   { &key_THR_LOCK_malloc, "THR_LOCK_malloc", PSI_FLAG_GLOBAL},
   { &key_THR_LOCK_mutex, "THR_LOCK::mutex", 0},
@@ -536,32 +535,27 @@ static PSI_file_info all_mysys_files[]=
   { &key_file_cnf, "cnf", 0}
 };
 
-PSI_stage_info *all_mysys_stages[]=
-{
-  & stage_waiting_for_table_level_lock
-};
-
 void my_init_mysys_psi_keys()
 {
   const char* category= "mysys";
   int count;
 
+  if (PSI_server == NULL)
+    return;
+
   count= sizeof(all_mysys_mutexes)/sizeof(all_mysys_mutexes[0]);
-  mysql_mutex_register(category, all_mysys_mutexes, count);
+  PSI_server->register_mutex(category, all_mysys_mutexes, count);
 
   count= sizeof(all_mysys_conds)/sizeof(all_mysys_conds[0]);
-  mysql_cond_register(category, all_mysys_conds, count);
+  PSI_server->register_cond(category, all_mysys_conds, count);
 
 #ifdef USE_ALARM_THREAD
   count= sizeof(all_mysys_threads)/sizeof(all_mysys_threads[0]);
-  mysql_thread_register(category, all_mysys_threads, count);
+  PSI_server->register_thread(category, all_mysys_threads, count);
 #endif /* USE_ALARM_THREAD */
 
   count= sizeof(all_mysys_files)/sizeof(all_mysys_files[0]);
-  mysql_file_register(category, all_mysys_files, count);
-
-  count= array_elements(all_mysys_stages);
-  mysql_stage_register(category, all_mysys_stages, count);
+  PSI_server->register_file(category, all_mysys_files, count);
 }
 #endif /* HAVE_PSI_INTERFACE */
 

@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003-2008 MySQL AB
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 /* ***************************************************
        FLEXSCAN
@@ -1333,6 +1331,7 @@ static int scanUpdateRows(Ndb* pNdb,
       break;
     } // if
 
+    MyOperation->interpret_exit_ok();
     // Fetch all attributes
     for (int attrCount = 0; attrCount < tNoOfAttributes-1; attrCount++) {
       tTmp = MyOperation->
@@ -1437,6 +1436,7 @@ static int scanDeleteRows(Ndb* pNdb, int* readValue)
       break;
     } // if
 
+    MyOperation->interpret_exit_ok();
     for (int attrCount = 0; attrCount < tNoOfAttributes-1; attrCount++) {
       tTmp = MyOperation->
 	getValue((char*)attrName[attrCount+1],

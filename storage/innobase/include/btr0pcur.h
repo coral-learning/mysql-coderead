@@ -1,6 +1,6 @@
 /*****************************************************************************
 
-Copyright (c) 1996, 2016, Oracle and/or its affiliates. All Rights Reserved.
+Copyright (c) 1996, 2013, Oracle and/or its affiliates. All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -11,8 +11,8 @@ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
 FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
-this program; if not, write to the Free Software Foundation, Inc.,
-51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA
+this program; if not, write to the Free Software Foundation, Inc., 
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
 
 *****************************************************************************/
 
@@ -92,10 +92,9 @@ Initializes and opens a persistent cursor to an index tree. It should be
 closed with btr_pcur_close. */
 UNIV_INLINE
 void
-btr_pcur_open_low(
-/*==============*/
+btr_pcur_open_func(
+/*===============*/
 	dict_index_t*	index,	/*!< in: index */
-	ulint		level,	/*!< in: level in the btree */
 	const dtuple_t*	tuple,	/*!< in: tuple on which search done */
 	ulint		mode,	/*!< in: PAGE_CUR_L, ...;
 				NOTE that if the search is made using a unique
@@ -109,7 +108,7 @@ btr_pcur_open_low(
 	ulint		line,	/*!< in: line where called */
 	mtr_t*		mtr);	/*!< in: mtr */
 #define btr_pcur_open(i,t,md,l,c,m)				\
-	btr_pcur_open_low(i,0,t,md,l,c,__FILE__,__LINE__,m)
+	btr_pcur_open_func(i,t,md,l,c,__FILE__,__LINE__,m)
 /**************************************************************//**
 Opens an persistent cursor to an index tree without initializing the
 cursor. */
@@ -146,16 +145,13 @@ UNIV_INLINE
 void
 btr_pcur_open_at_index_side(
 /*========================*/
-	bool		from_left,	/*!< in: true if open to the low end,
-					false if to the high end */
+	ibool		from_left,	/*!< in: TRUE if open to the low end,
+					FALSE if to the high end */
 	dict_index_t*	index,		/*!< in: index */
 	ulint		latch_mode,	/*!< in: latch mode */
-	btr_pcur_t*	pcur,		/*!< in/out: cursor */
-	bool		init_pcur,	/*!< in: whether to initialize pcur */
-	ulint		level,		/*!< in: level to search for
-					(0=leaf) */
-	mtr_t*		mtr)		/*!< in/out: mini-transaction */
-	MY_ATTRIBUTE((nonnull));
+	btr_pcur_t*	pcur,		/*!< in: cursor */
+	ibool		do_init,	/*!< in: TRUE if should be initialized */
+	mtr_t*		mtr);		/*!< in: mtr */
 /**************************************************************//**
 Gets the up_match value for a pcur after a search.
 @return number of matched fields at the cursor or to the right if
@@ -212,17 +208,8 @@ btr_pcur_open_at_rnd_pos_func(
 #define btr_pcur_open_at_rnd_pos(i,l,c,m)				\
 	btr_pcur_open_at_rnd_pos_func(i,l,c,__FILE__,__LINE__,m)
 /**************************************************************//**
-Frees the possible memory heap of a persistent cursor and sets the latch
-mode of the persistent cursor to BTR_NO_LATCHES.
-WARNING: this function does not release the latch on the page where the
-cursor is currently positioned. The latch is acquired by the
-"move to next/previous" family of functions. Since recursive shared locks
-are not allowed, you must take care (if using the cursor in S-mode) to
-manually release the latch by either calling
-btr_leaf_page_release(btr_pcur_get_block(&pcur), pcur.latch_mode, mtr)
-or by committing the mini-transaction right after btr_pcur_close().
-A subsequent attempt to crawl the same page in the same mtr would cause
-an assertion failure. */
+Frees the possible old_rec_buf buffer of a persistent cursor and sets the
+latch mode of the persistent cursor to BTR_NO_LATCHES. */
 UNIV_INLINE
 void
 btr_pcur_close(
@@ -459,13 +446,6 @@ void
 btr_pcur_move_to_prev_on_page(
 /*==========================*/
 	btr_pcur_t*	cursor);/*!< in/out: persistent cursor */
-/*********************************************************//**
-Moves the persistent cursor to the infimum record on the same page. */
-UNIV_INLINE
-void
-btr_pcur_move_before_first_on_page(
-/*===============================*/
-	btr_pcur_t*	cursor); /*!< in/out: persistent cursor */
 
 /** Position state of persistent B-tree cursor. */
 enum pcur_pos_t {
@@ -492,14 +472,14 @@ enum pcur_pos_t {
 /* The persistent B-tree cursor structure. This is used mainly for SQL
 selects, updates, and deletes. */
 
-struct btr_pcur_t{
+struct btr_pcur_struct{
 	btr_cur_t	btr_cur;	/*!< a B-tree cursor */
 	ulint		latch_mode;	/*!< see TODO note below!
 					BTR_SEARCH_LEAF, BTR_MODIFY_LEAF,
 					BTR_MODIFY_TREE, or BTR_NO_LATCHES,
 					depending on the latching state of
 					the page and tree where the cursor is
-					positioned; BTR_NO_LATCHES means that
+					positioned; the last value means that
 					the cursor is not currently positioned:
 					we say then that the cursor is
 					detached; it can be restored to

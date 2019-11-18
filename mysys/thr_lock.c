@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -75,7 +75,6 @@ one TL_WRITE_DELAYED lock at the same time as multiple read locks.
 #include "mysys_priv.h"
 
 #include "thr_lock.h"
-#include "mysql/psi/mysql_table.h"
 #include <m_string.h>
 #include <errno.h>
 
@@ -320,8 +319,7 @@ static void check_locks(THR_LOCK *lock, const char *where,
 void thr_lock_init(THR_LOCK *lock)
 {
   DBUG_ENTER("thr_lock_init");
-  memset(lock, 0, sizeof(*lock));
-
+  bzero((char*) lock,sizeof(*lock));
   mysql_mutex_init(key_THR_LOCK_mutex, &lock->mutex, MY_MUTEX_INIT_FAST);
   lock->read.last= &lock->read.data;
   lock->read_wait.last= &lock->read_wait.data;
@@ -377,6 +375,18 @@ has_old_lock(THR_LOCK_DATA *data, THR_LOCK_INFO *owner)
   return 0;
 }
 
+static inline my_bool have_specific_lock(THR_LOCK_DATA *data,
+					 enum thr_lock_type type)
+{
+  for ( ; data ; data=data->next)
+  {
+    if (data->type == type)
+      return 1;
+  }
+  return 0;
+}
+
+
 static void wake_up_waiters(THR_LOCK *lock);
 
 
@@ -388,7 +398,7 @@ wait_for_lock(struct st_lock_list *wait, THR_LOCK_DATA *data,
   mysql_cond_t *cond= &thread_var->suspend;
   struct timespec wait_timeout;
   enum enum_thr_lock_result result= THR_LOCK_ABORTED;
-  PSI_stage_info old_stage;
+  const char *old_proc_info;
   DBUG_ENTER("wait_for_lock");
 
   /*
@@ -427,9 +437,8 @@ wait_for_lock(struct st_lock_list *wait, THR_LOCK_DATA *data,
   thread_var->current_cond=  cond;
   data->cond= cond;
 
-  proc_info_hook(NULL, &stage_waiting_for_table_level_lock,
-                 &old_stage,
-                 __func__, __FILE__, __LINE__);
+  old_proc_info= proc_info_hook(NULL, "Waiting for table level lock",
+                                __func__, __FILE__, __LINE__);
 
   /*
     Since before_lock_wait potentially can create more threads to
@@ -519,7 +528,7 @@ wait_for_lock(struct st_lock_list *wait, THR_LOCK_DATA *data,
   thread_var->current_cond=  0;
   mysql_mutex_unlock(&thread_var->mutex);
 
-  proc_info_hook(NULL, &old_stage, NULL, __func__, __FILE__, __LINE__);
+  proc_info_hook(NULL, old_proc_info, __func__, __FILE__, __LINE__);
 
   DBUG_RETURN(result);
 }
@@ -532,17 +541,12 @@ thr_lock(THR_LOCK_DATA *data, THR_LOCK_INFO *owner,
   THR_LOCK *lock=data->lock;
   enum enum_thr_lock_result result= THR_LOCK_SUCCESS;
   struct st_lock_list *wait_queue;
-  MYSQL_TABLE_WAIT_VARIABLES(locker, state) /* no ';' */
   DBUG_ENTER("thr_lock");
 
   data->next=0;
   data->cond=0;					/* safety */
   data->type=lock_type;
   data->owner= owner;                           /* Must be reset ! */
-
-  MYSQL_START_TABLE_LOCK_WAIT(locker, &state, data->m_psi,
-                              PSI_TABLE_LOCK, lock_type);
-
   mysql_mutex_lock(&lock->mutex);
   DBUG_PRINT("lock",("data: 0x%lx  thread: 0x%lx  lock: 0x%lx  type: %d",
                      (long) data, data->owner->thread_id,
@@ -772,12 +776,9 @@ thr_lock(THR_LOCK_DATA *data, THR_LOCK_INFO *owner,
     wait_queue= &lock->write_wait;
   }
   /* Can't get lock yet;  Wait for it */
-  result= wait_for_lock(wait_queue, data, 0, lock_wait_timeout);
-  MYSQL_END_TABLE_LOCK_WAIT(locker);
-  DBUG_RETURN(result);
+  DBUG_RETURN(wait_for_lock(wait_queue, data, 0, lock_wait_timeout));
 end:
   mysql_mutex_unlock(&lock->mutex);
-  MYSQL_END_TABLE_LOCK_WAIT(locker);
   DBUG_RETURN(result);
 }
 
@@ -1512,21 +1513,21 @@ static ulong sum=0;
 
 /* The following functions is for WRITE_CONCURRENT_INSERT */
 
-static void test_get_status(void* param MY_ATTRIBUTE((unused)),
-                            int concurrent_insert MY_ATTRIBUTE((unused)))
+static void test_get_status(void* param __attribute__((unused)),
+                            int concurrent_insert __attribute__((unused)))
 {
 }
 
-static void test_update_status(void* param MY_ATTRIBUTE((unused)))
+static void test_update_status(void* param __attribute__((unused)))
 {
 }
 
-static void test_copy_status(void* to MY_ATTRIBUTE((unused)) ,
-			     void *from MY_ATTRIBUTE((unused)))
+static void test_copy_status(void* to __attribute__((unused)) ,
+			     void *from __attribute__((unused)))
 {
 }
 
-static my_bool test_check_status(void* param MY_ATTRIBUTE((unused)))
+static my_bool test_check_status(void* param __attribute__((unused)))
 {
   return 0;
 }
@@ -1583,7 +1584,7 @@ static void *test_thread(void *arg)
 }
 
 
-int main(int argc MY_ATTRIBUTE((unused)),char **argv MY_ATTRIBUTE((unused)))
+int main(int argc __attribute__((unused)),char **argv __attribute__((unused)))
 {
   pthread_t tid;
   pthread_attr_t thr_attr;

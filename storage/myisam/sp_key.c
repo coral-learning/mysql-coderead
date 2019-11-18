@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2010, Oracle and/or its affiliates. All rights reserved.
    
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -67,9 +67,9 @@ uint sp_make_key(register MI_INFO *info, uint keynr, uchar *key,
     
     val= mbr[start / sizeof (double)];
 #ifdef HAVE_ISNAN
-    if (my_isnan(val))
+    if (isnan(val))
     {
-      memset(key, 0, length);
+      bzero(key, length);
       key+= length;
       len+= length;
       continue;
@@ -118,7 +118,7 @@ static int sp_mbr_from_wkb(uchar *wkb, uint size, uint n_dims, double *mbr)
 */
 
 static int sp_add_point_to_mbr(uchar *(*wkb), uchar *end, uint n_dims, 
-			       uchar byte_order MY_ATTRIBUTE((unused)),
+			       uchar byte_order __attribute__((unused)),
 			       double *mbr)
 {
   double ord;

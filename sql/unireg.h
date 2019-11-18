@@ -1,7 +1,7 @@
 #ifndef UNIREG_INCLUDED
 #define UNIREG_INCLUDED
 
-/* Copyright (c) 2000, 2012, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +13,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 
 #include "my_global.h"                          /* ulonglong */
@@ -71,7 +71,7 @@ typedef struct st_ha_create_information HA_CREATE_INFO;
 #define SPECIAL_BIG_SELECTS	256		/* Don't use heap tables */
 #define SPECIAL_NO_HOST_CACHE	512		/* Don't cache hosts */
 #define SPECIAL_SHORT_LOG_FORMAT 1024
-/* 2048 is no longer used */
+#define SPECIAL_SAFE_MODE	2048
 #define SPECIAL_LOG_QUERIES_NOT_USING_INDEXES 4096 /* Obsolete */
 
 	/* Extern defines */
@@ -80,7 +80,7 @@ typedef struct st_ha_create_information HA_CREATE_INFO;
 #define cmp_record(A,B) memcmp((A)->record[0],(A)->B,(size_t) (A)->s->reclength)
 #define empty_record(A) { \
                           restore_record((A),s->default_values); \
-                          memset((A)->null_flags, 255, (A)->s->null_bytes);\
+                          bfill((A)->null_flags,(A)->s->null_bytes,255);\
                         }
 
 	/* Defines for use with openfrm, openprt and openfrd */
@@ -134,14 +134,11 @@ typedef struct st_ha_create_information HA_CREATE_INFO;
   The flag means that I_S table uses optimization algorithm.
 */
 #define OPTIMIZE_I_S_TABLE     OPEN_VIEW_FULL*2
-/**
+
+/*
   The flag means that we need to process trigger files only.
 */
 #define OPEN_TRIGGER_ONLY      OPTIMIZE_I_S_TABLE*2
-/**
-  This flag is used to instruct tdc_open_view() to check metadata version.
-*/
-#define CHECK_METADATA_VERSION OPEN_TRIGGER_ONLY*2
 
 #define SC_INFO_LENGTH 4		/* Form format constant */
 #define TE_INFO_LENGTH 3
@@ -181,6 +178,5 @@ int rea_create_table(THD *thd, const char *path,
                      HA_CREATE_INFO *create_info,
   		     List<Create_field> &create_field,
                      uint key_count,KEY *key_info,
-                     handler *file,
-                     bool no_ha_table);
+                     handler *file);
 #endif

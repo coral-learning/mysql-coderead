@@ -7,7 +7,6 @@
 
 set innodb_strict_mode = 0;
 
---replace_regex /> [0-9]+/> NNNN/
 create table t1 (id int auto_increment primary key,
 v varchar(32),
 col1 text,
@@ -241,8 +240,6 @@ col228 text
 ) ENGINE=InnoDB;
 
 set innodb_strict_mode = 1;
-
---replace_regex /is [0-9]+/is NNNN/
 --error ER_TOO_BIG_ROWSIZE
 alter table t1 engine=InnoDB;
 

@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef GLOBAL_DATA_H
 #define GLOBAL_DATA_H
@@ -27,11 +26,6 @@
 #include <NodeState.hpp>
 #include <NodeInfo.hpp>
 #include "ArrayPool.hpp"
-
-// #define GCP_TIMER_HACK
-#ifdef GCP_TIMER_HACK
-#include <NdbTick.h>
-#endif
 
 class SimulatedBlock;
 
@@ -69,57 +63,26 @@ struct GlobalData {
   
   Uint32     sendPackedActivated;
   Uint32     activateSendPacked;
-
-  bool       isNdbMt;    // ndbd multithreaded, no workers
-  bool       isNdbMtLqh; // ndbd multithreaded, LQH workers
-  Uint32     ndbMtLqhWorkers;
-  Uint32     ndbMtLqhThreads;
   
   GlobalData(){ 
     theSignalId = 0; 
     theStartLevel = NodeState::SL_NOTHING;
     theRestartFlag = perform_start;
-    isNdbMt = false;
-    isNdbMtLqh = false;
-    ndbMtLqhWorkers = 0;
-    ndbMtLqhThreads = 0;
-#ifdef GCP_TIMER_HACK
-    gcp_timer_limit = 0;
-#endif
   }
-  ~GlobalData() { m_global_page_pool.clear(); m_shared_page_pool.clear();}
+  ~GlobalData(){}
   
   void             setBlock(BlockNumber blockNo, SimulatedBlock * block);
   SimulatedBlock * getBlock(BlockNumber blockNo);
-  SimulatedBlock * getBlock(BlockNumber blockNo, Uint32 instanceNo);
-  SimulatedBlock * getBlockInstance(BlockNumber fullBlockNo) {
-    return getBlock(blockToMain(fullBlockNo), blockToInstance(fullBlockNo));
-  }
-  SimulatedBlock * mt_getBlock(BlockNumber blockNo, Uint32 instanceNo);
   
   void           incrementWatchDogCounter(Uint32 place);
-  Uint32 * getWatchDogPtr();
+  const Uint32 * getWatchDogPtr();
   
 private:
   Uint32     watchDog;
   SimulatedBlock* blockTable[NO_OF_BLOCKS]; // Owned by Dispatcher::
 public:
-  SafeArrayPool<GlobalPage> m_global_page_pool;
+  ArrayPool<GlobalPage> m_global_page_pool;
   ArrayPool<GlobalPage> m_shared_page_pool;
-
-#ifdef GCP_TIMER_HACK
-  // timings are local to the node
-
-  // from prepare to commit (DIH, TC)
-  MicroSecondTimer gcp_timer_commit[2];
-  // from GCP_SAVEREQ to GCP_SAVECONF (LQH)
-  MicroSecondTimer gcp_timer_save[2];
-  // sysfile update (DIH)
-  MicroSecondTimer gcp_timer_copygci[2];
-
-  // report threshold in ms, if 0 guessed, set with dump 7901 <limit>
-  Uint32 gcp_timer_limit;
-#endif
 };
 
 extern GlobalData globalData;
@@ -152,7 +115,7 @@ GlobalData::incrementWatchDogCounter(Uint32 place){
 }
 
 inline
-Uint32 *
+const Uint32 *
 GlobalData::getWatchDogPtr(){
   return &watchDog;
 }

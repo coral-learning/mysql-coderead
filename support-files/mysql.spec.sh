@@ -1,4 +1,4 @@
-# Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2000, 2018, Oracle and/or its affiliates. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@
 %global mysqld_group    mysql
 %global mysqldatadir    /var/lib/mysql
 
-%global release         1  
+%global release         1 
 
 
 #
@@ -127,13 +127,13 @@
     %if "%oelver" == "4"
       %define distro_description        Oracle Enterprise Linux 4
       %define distro_releasetag         oel4
-      %define distro_buildreq           gcc-c++ gperf ncurses-devel perl time zlib-devel cmake libaio-devel
+      %define distro_buildreq           gcc-c++ gperf ncurses-devel perl readline-devel time zlib-devel cmake libaio-devel
       %define distro_requires           chkconfig coreutils grep procps shadow-utils net-tools
     %else
       %if "%oelver" == "5"
         %define distro_description      Oracle Enterprise Linux 5
         %define distro_releasetag       oel5
-        %define distro_buildreq         gcc-c++ gperf ncurses-devel perl time zlib-devel cmake libaio-devel
+        %define distro_buildreq         gcc-c++ gperf ncurses-devel perl readline-devel time zlib-devel cmake libaio-devel
         %define distro_requires         chkconfig coreutils grep procps shadow-utils net-tools
       %else
         %{error:Oracle Enterprise Linux %{oelver} is unsupported}
@@ -145,8 +145,8 @@
       %if "%elver" == "6" || "%elver" == "7"
         %define distro_description      Oracle Linux %elver
         %define distro_releasetag       el%elver
-        %define distro_buildreq         gcc-c++ ncurses-devel perl time zlib-devel cmake libaio-devel numactl-devel
-        %define distro_requires         chkconfig coreutils grep procps shadow-utils net-tools
+        %define distro_buildreq         gcc-c++ ncurses-devel perl perl(Data::Dumper) readline-devel time zlib-devel cmake libaio-devel
+        %define distro_requires         chkconfig coreutils grep perl(Data::Dumper) procps shadow-utils net-tools
       %else
         %{error:Oracle Linux %{elver} is unsupported}
       %endif
@@ -156,20 +156,20 @@
         %if "%rhelver" == "4"
           %define distro_description      Red Hat Enterprise Linux 4
           %define distro_releasetag       rhel4
-          %define distro_buildreq         gcc-c++ gperf ncurses-devel perl time zlib-devel cmake libaio-devel
+          %define distro_buildreq         gcc-c++ gperf ncurses-devel perl readline-devel time zlib-devel cmake libaio-devel
           %define distro_requires         chkconfig coreutils grep procps shadow-utils net-tools
         %else
           %if "%rhelver" == "5"
             %define distro_description    Red Hat Enterprise Linux 5
             %define distro_releasetag     rhel5
-            %define distro_buildreq       gcc-c++ gperf ncurses-devel perl time zlib-devel cmake libaio-devel
+            %define distro_buildreq       gcc-c++ gperf ncurses-devel perl readline-devel time zlib-devel cmake libaio-devel
             %define distro_requires       chkconfig coreutils grep procps shadow-utils net-tools
           %else
             %if "%rhelver" == "6"
               %define distro_description    Red Hat Enterprise Linux 6
               %define distro_releasetag     rhel6
-              %define distro_buildreq       gcc-c++ ncurses-devel perl time zlib-devel cmake libaio-devel numactl-devel
-              %define distro_requires       chkconfig coreutils grep procps shadow-utils net-tools
+              %define distro_buildreq       gcc-c++ ncurses-devel perl perl(Data::Dumper) readline-devel time zlib-devel cmake libaio-devel
+              %define distro_requires       chkconfig coreutils grep perl(Data::Dumper) procps shadow-utils net-tools
             %else
               %{error:Red Hat Enterprise Linux %{rhelver} is unsupported}
             %endif
@@ -181,13 +181,13 @@
           %if "%susever" == "10"
             %define distro_description    SUSE Linux Enterprise Server 10
             %define distro_releasetag     sles10
-            %define distro_buildreq       gcc-c++ gdbm-devel gperf ncurses-devel openldap2-client zlib-devel cmake libaio-devel
+            %define distro_buildreq       gcc-c++ gdbm-devel gperf ncurses-devel openldap2-client readline-devel zlib-devel cmake libaio-devel
             %define distro_requires       aaa_base coreutils grep procps pwdutils
           %else
             %if "%susever" == "11"
               %define distro_description  SUSE Linux Enterprise Server 11
               %define distro_releasetag   sles11
-              %define distro_buildreq     gcc-c++ gdbm-devel gperf ncurses-devel openldap2-client procps pwdutils zlib-devel cmake libaio-devel libnuma-devel
+              %define distro_buildreq     gcc-c++ gdbm-devel gperf ncurses-devel openldap2-client procps pwdutils readline-devel zlib-devel cmake libaio-devel
               %define distro_requires     aaa_base coreutils grep procps pwdutils
             %else
               %{error:SuSE %{susever} is unsupported}
@@ -200,11 +200,11 @@
     %endif
   %endif
 %else
-  %define glibc_version %(/lib/libc.so.6 | grep stable | cut -d, -f1 | cut -c38-)
-  %define distro_description            Generic Linux (glibc %{glibc_version})
-  %define distro_releasetag             linux_glibc%{glibc_version}
-  %define distro_buildreq               gcc-c++ gperf ncurses-devel perl  time zlib-devel
-  %define distro_requires               coreutils grep procps /sbin/chkconfig /usr/sbin/useradd /usr/sbin/groupadd
+  %define generic_kernel %(uname -r | cut -d. -f1-2)
+  %define distro_description            Generic Linux (kernel %{generic_kernel})
+  %define distro_releasetag             linux%{generic_kernel}
+  %define distro_buildreq               gcc-c++ gperf ncurses-devel perl perl(Data::Dumper) readline-devel time zlib-devel
+  %define distro_requires               coreutils grep perl(Data::Dumper) procps /sbin/chkconfig /usr/sbin/useradd /usr/sbin/groupadd
 %endif
 
 # Avoid debuginfo RPMs, leaves binaries unstripped
@@ -251,6 +251,7 @@ URL:            http://www.mysql.com/
 Packager:       MySQL Release Engineering <mysql-build@oss.oracle.com> 
 Vendor:         %{mysql_vendor}
 BuildRequires:  %{distro_buildreq}
+%{?el7:Patch0:         mysql-5.5-libmysqlclient-symbols.patch}
 
 # Regression tests may take a long time, override the default to skip them 
 %{!?runselftest:%global runselftest 1}
@@ -312,7 +313,7 @@ licenses from %{mysql_vendor} if you do not wish to be bound by the terms of
 the GPL. See the chapter "Licensing and Support" in the manual for
 further info.
 
-The MySQL web site (http://www.mysql.com/) provides the latest news and
+The MySQL web site (http://www.mysql.com/) provides the latest news and 
 information about the MySQL software.  Also please see the documentation
 and the manual for more information.
 
@@ -356,10 +357,12 @@ Obsoletes:      MySQL-test-advanced
 %endif
 Obsoletes:      mysql-test < %{version}-%{release}
 Obsoletes:      mysql-test-advanced
+Obsoletes:      mysql-bench MySQL-bench
 Obsoletes:      MySQL-test-classic MySQL-test-community MySQL-test-enterprise
 Obsoletes:      MySQL-test-advanced-gpl MySQL-test-enterprise-gpl
 Provides:       mysql-test = %{version}-%{release}
 Provides:       mysql-test%{?_isa} = %{version}-%{release}
+Requires:       perl(Data::Dumper)
 AutoReqProv:    no
 
 %description -n MySQL-test%{product_suffix}
@@ -442,6 +445,8 @@ For a description of MySQL see the base MySQL RPM or http://www.mysql.com/
 ##############################################################################
 %prep
 %setup -T -a 0 -c -n %{src_dir}
+pushd %{src_dir}
+%{?el7:%patch0 -p1}
 ##############################################################################
 %build
 
@@ -466,9 +471,14 @@ touch optional-files-devel
 # name, finally a default.  RPM_OPT_FLAGS is assumed to be a part of the
 # default RPM build environment.
 #
+# We set CXX=gcc by default to support so-called 'generic' binaries, where we
+# do not have a dependancy on libgcc/libstdc++.  This only works while we do
+# not require C++ features such as exceptions, and may need to be removed at
+# a later date.
+#
 
 # This is a hack, $RPM_OPT_FLAGS on ia64 hosts contains flags which break
-# the compile in cmd-line-utils/libedit - needs investigation, but for now
+# the compile in cmd-line-utils/readline - needs investigation, but for now
 # we simply unset it and use those specified directly in cmake.
 %if "%{_arch}" == "ia64"
 RPM_OPT_FLAGS=
@@ -476,21 +486,12 @@ RPM_OPT_FLAGS=
 
 export PATH=${MYSQL_BUILD_PATH:-$PATH}
 export CC=${MYSQL_BUILD_CC:-${CC:-gcc}}
-export CXX=${MYSQL_BUILD_CXX:-${CXX:-g++}}
+export CXX=${MYSQL_BUILD_CXX:-${CXX:-gcc}}
 export CFLAGS=${MYSQL_BUILD_CFLAGS:-${CFLAGS:-$RPM_OPT_FLAGS}}
-export CXXFLAGS=${MYSQL_BUILD_CXXFLAGS:-${CXXFLAGS:-$RPM_OPT_FLAGS -felide-constructors}}
+export CXXFLAGS=${MYSQL_BUILD_CXXFLAGS:-${CXXFLAGS:-$RPM_OPT_FLAGS -felide-constructors -fno-exceptions -fno-rtti}}
 export LDFLAGS=${MYSQL_BUILD_LDFLAGS:-${LDFLAGS:-}}
 export CMAKE=${MYSQL_BUILD_CMAKE:-${CMAKE:-cmake}}
 export MAKE_JFLAG=${MYSQL_BUILD_MAKE_JFLAG:-}
-
-# By default, a build will include the bundeled "yaSSL" library for SSL.
-# However, there may be a need to override.
-# Protect against undefined variables if there is no override option.
-%if %{undefined with_ssl}
-%define ssl_option   %{nil}
-%else
-%define ssl_option   -DWITH_SSL=%{with_ssl}
-%endif
 
 # Build debug mysqld and libmysqld.a
 mkdir debug
@@ -515,9 +516,9 @@ mkdir debug
   # XXX: install_layout so we can't just set it based on INSTALL_LAYOUT=RPM
   ${CMAKE} ../%{src_dir} -DBUILD_CONFIG=mysql_release -DINSTALL_LAYOUT=RPM \
            -DCMAKE_BUILD_TYPE=Debug \
+           -DENABLE_DTRACE=OFF \
            -DMYSQL_UNIX_ADDR="%{mysqldatadir}/mysql.sock" \
            -DFEATURE_SET="%{feature_set}" \
-           %{ssl_option} \
            -DCOMPILATION_COMMENT="%{compilation_comment_debug}" \
            -DMYSQL_SERVER_SUFFIX="%{server_suffix}"
   echo BEGIN_DEBUG_CONFIG ; egrep '^#define' include/config.h ; echo END_DEBUG_CONFIG
@@ -531,9 +532,9 @@ mkdir release
   # XXX: install_layout so we can't just set it based on INSTALL_LAYOUT=RPM
   ${CMAKE} ../%{src_dir} -DBUILD_CONFIG=mysql_release -DINSTALL_LAYOUT=RPM \
            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+           -DENABLE_DTRACE=OFF \
            -DMYSQL_UNIX_ADDR="%{mysqldatadir}/mysql.sock" \
            -DFEATURE_SET="%{feature_set}" \
-           %{ssl_option} \
            -DCOMPILATION_COMMENT="%{compilation_comment_release}" \
            -DMYSQL_SERVER_SUFFIX="%{server_suffix}"
   echo BEGIN_NORMAL_CONFIG ; egrep '^#define' include/config.h ; echo END_NORMAL_CONFIG
@@ -570,6 +571,23 @@ mkdir -p $RBR%{_sysconfdir}/my.cnf.d
 (
   cd $MBD/release
   make DESTDIR=$RBR install
+)
+
+# For gcc builds, include libgcc.a in the devel subpackage (BUG 4921).  Do
+# this in a sub-shell to ensure we don't pollute the install environment
+# with compiler bits.
+(
+  PATH=${MYSQL_BUILD_PATH:-$PATH}
+  CC=${MYSQL_BUILD_CC:-${CC:-gcc}}
+  CFLAGS=${MYSQL_BUILD_CFLAGS:-${CFLAGS:-$RPM_OPT_FLAGS}}
+  if "${CC}" -v 2>&1 | grep '^gcc.version' >/dev/null 2>&1; then
+    libgcc=`${CC} ${CFLAGS} --print-libgcc-file`
+    if [ -f ${libgcc} ]; then
+      mkdir -p $RBR%{_libdir}/mysql
+      install -m 644 ${libgcc} $RBR%{_libdir}/mysql/libmygcc.a
+      echo "%{_libdir}/mysql/libmygcc.a" >>optional-files-devel
+    fi
+  fi
 )
 
 # FIXME: at some point we should stop doing this and just install everything
@@ -743,21 +761,19 @@ NEW_VERSION=%{mysql_version}-%{release}
 
 # The "pre" section code is also run on a first installation,
 # when there  is no data directory yet. Protect against error messages.
-# Check for the existence of subdirectory "mysql/", the database of system
-# tables like "mysql.user".
-if [ -d $mysql_datadir/mysql ] ; then
-        echo "MySQL RPM upgrade to version $NEW_VERSION"  > $STATUS_FILE
-        echo "'pre' step running at `date`"          >> $STATUS_FILE
-        echo                                         >> $STATUS_FILE
-        fcount=`ls -ltr $mysql_datadir/*.err 2>/dev/null | wc -l`
+if [ -d $mysql_datadir ] ; then
+	echo "MySQL RPM upgrade to version $NEW_VERSION"  > $STATUS_FILE
+	echo "'pre' step running at `date`"          >> $STATUS_FILE
+	echo                                         >> $STATUS_FILE
+	fcount=`ls -ltr $mysql_datadir/*.err 2>/dev/null | wc -l`       
         if [ $fcount -gt 0 ] ; then
              echo "ERR file(s):"                          >> $STATUS_FILE
-             ls -ltr $mysql_datadir/*.err                 >> $STATUS_FILE
-             echo                                         >> $STATUS_FILE
-             echo "Latest 'Version' line in latest file:" >> $STATUS_FILE
-             grep '^Version' `ls -tr $mysql_datadir/*.err | tail -1` | \
-                tail -1                              >> $STATUS_FILE
-             echo                                         >> $STATUS_FILE
+	     ls -ltr $mysql_datadir/*.err                 >> $STATUS_FILE
+	     echo                                         >> $STATUS_FILE
+	     echo "Latest 'Version' line in latest file:" >> $STATUS_FILE
+	     grep '^Version' `ls -tr $mysql_datadir/*.err | tail -1` | \
+		tail -1                              >> $STATUS_FILE
+	     echo                                         >> $STATUS_FILE
         fi
 
 	if [ -n "$SERVER_TO_START" ] ; then
@@ -862,13 +878,7 @@ if ! grep '^MySQL RPM upgrade' $STATUS_FILE >/dev/null 2>&1 ; then
 	# Fix bug#45415: no "mysql_install_db" on an upgrade
 	# Do this as a negative to err towards more "install" runs
 	# rather than to miss one.
-	%{_bindir}/mysql_install_db --rpm --user=%{mysqld_user} --random-passwords
-
-	# Attention: Now 'root' is the only database user,
-	# its password is a random value found in ~/.mysql_secret,
-	# and the "password expired" flag is set:
-	# Any client needs that password, and the first command
-	# executed must be a new "set password"!
+	%{_bindir}/mysql_install_db --rpm --user=%{mysqld_user}
 fi
 
 # ----------------------------------------------------------------------
@@ -1049,13 +1059,14 @@ echo "====="                                     >> $STATUS_HISTORY
 
 %files -n MySQL-server%{product_suffix} -f release/support-files/plugins.files
 %defattr(-,root,root,0755)
+
 %if %{defined license_files_server}
 %doc %{license_files_server}
 %endif
 %doc %{src_dir}/Docs/ChangeLog
 %doc %{src_dir}/Docs/INFO_SRC*
 %doc release/Docs/INFO_BIN*
-%doc release/support-files/my-default.cnf
+%doc release/support-files/my-*.cnf
 
 %if 0%{?commercial}
 %doc %attr(644, root, root) %{_infodir}/mysql.info*
@@ -1081,7 +1092,6 @@ echo "====="                                     >> $STATUS_HISTORY
 %doc %attr(644, root, man) %{_mandir}/man1/mysqlhotcopy.1*
 %doc %attr(644, root, man) %{_mandir}/man1/mysqlman.1*
 %doc %attr(644, root, man) %{_mandir}/man1/mysql.server.1*
-%doc %attr(644, root, man) %{_mandir}/man1/mysqltest.1*
 %doc %attr(644, root, man) %{_mandir}/man1/mysql_tzinfo_to_sql.1*
 %doc %attr(644, root, man) %{_mandir}/man1/mysql_zap.1*
 %doc %attr(644, root, man) %{_mandir}/man1/mysqlbug.1*
@@ -1130,16 +1140,14 @@ echo "====="                                     >> $STATUS_HISTORY
 
 %attr(644, root, root) %config(noreplace,missingok) %{_sysconfdir}/logrotate.d/mysql
 %attr(755, root, root) %{_sysconfdir}/init.d/mysql
+
 %attr(755, root, root) %{_datadir}/mysql/
-%dir %attr(755, mysql, mysql) /var/lib/mysql
 %dir %attr(750, mysql, mysql) /var/lib/mysql-files
 
 # ----------------------------------------------------------------------------
 %files -n MySQL-client%{product_suffix}
+
 %defattr(-, root, root, 0755)
-%if %{defined license_files_server}
-%doc %{license_files_server}
-%endif
 %attr(755, root, root) %{_bindir}/msql2mysql
 %attr(755, root, root) %{_bindir}/mysql
 %attr(755, root, root) %{_bindir}/mysql_find_rows
@@ -1154,7 +1162,6 @@ echo "====="                                     >> $STATUS_HISTORY
 %attr(755, root, root) %{_bindir}/mysqlimport
 %attr(755, root, root) %{_bindir}/mysqlshow
 %attr(755, root, root) %{_bindir}/mysqlslap
-%attr(755, root, root) %{_bindir}/mysql_config_editor
 
 %doc %attr(644, root, man) %{_mandir}/man1/msql2mysql.1*
 %doc %attr(644, root, man) %{_mandir}/man1/mysql.1*
@@ -1168,14 +1175,10 @@ echo "====="                                     >> $STATUS_HISTORY
 %doc %attr(644, root, man) %{_mandir}/man1/mysqlimport.1*
 %doc %attr(644, root, man) %{_mandir}/man1/mysqlshow.1*
 %doc %attr(644, root, man) %{_mandir}/man1/mysqlslap.1*
-%doc %attr(644, root, man) %{_mandir}/man1/mysql_config_editor.1*
 
 # ----------------------------------------------------------------------------
 %files -n MySQL-devel%{product_suffix} -f optional-files-devel
 %defattr(-, root, root, 0755)
-%if %{defined license_files_server}
-%doc %{license_files_server}
-%endif
 %doc %attr(644, root, man) %{_mandir}/man1/comp_err.1*
 %doc %attr(644, root, man) %{_mandir}/man1/mysql_config.1*
 %attr(755, root, root) %{_bindir}/mysql_config
@@ -1190,9 +1193,6 @@ echo "====="                                     >> $STATUS_HISTORY
 # ----------------------------------------------------------------------------
 %files -n MySQL-shared%{product_suffix}
 %defattr(-, root, root, 0755)
-%if %{defined license_files_server}
-%doc %{license_files_server}
-%endif
 # Shared libraries (omit for architectures that don't support them)
 %{_libdir}/libmysql*.so*
 
@@ -1205,25 +1205,14 @@ echo "====="                                     >> $STATUS_HISTORY
 # ----------------------------------------------------------------------------
 %files -n MySQL-test%{product_suffix}
 %defattr(-, root, root, 0755)
-%if %{defined license_files_server}
-%doc %{license_files_server}
-%endif
 %attr(-, root, root) %{_datadir}/mysql-test
 %attr(755, root, root) %{_bindir}/mysql_client_test
 %attr(755, root, root) %{_bindir}/mysql_client_test_embedded
 %attr(755, root, root) %{_bindir}/mysqltest_embedded
-%doc %attr(644, root, man) %{_mandir}/man1/mysql_client_test.1*
-%doc %attr(644, root, man) %{_mandir}/man1/mysql-stress-test.pl.1*
-%doc %attr(644, root, man) %{_mandir}/man1/mysql-test-run.pl.1*
-%doc %attr(644, root, man) %{_mandir}/man1/mysql_client_test_embedded.1*
-%doc %attr(644, root, man) %{_mandir}/man1/mysqltest_embedded.1*
 
 # ----------------------------------------------------------------------------
 %files -n MySQL-embedded%{product_suffix}
 %defattr(-, root, root, 0755)
-%if %{defined license_files_server}
-%doc %{license_files_server}
-%endif
 %attr(755, root, root) %{_bindir}/mysql_embedded
 %attr(644, root, root) %{_libdir}/mysql/libmysqld.a
 %attr(644, root, root) %{_libdir}/mysql/libmysqld-debug.a
@@ -1234,39 +1223,29 @@ echo "====="                                     >> $STATUS_HISTORY
 # merging BK trees)
 ##############################################################################
 %changelog
-* Mon Oct 06 2014 Balasubramanian Kandasamy <balasubramanian.kandasamy@oracle.com>
-- Add license info in each subpackage
+* Wed Jan 10 2018 Bjorn Munch <bjorn.munch@oracle.com>
+- No longer need to remove obsoleted mysqltest man pages
 
-* Wed May 28 2014 Balasubramanian Kandasamy <balasubramanian.kandasamy@oracle.com>
-- Updated usergroup to mysql on datadir
+* Tue Oct 31 2017 Bjorn Munch <bjorn.munch@oracle.com>
+- Remove obsoleted mysqltest man pages
+
+* Mon Sep 26 2016 Balasubramanian Kandasamy <balasubramanian.kandasamy@oracle.com>
+- Include mysql-files directory
+
+* Wed Jul 02 2014 Bjorn Munch <bjorn.munch@oracle.com>
+- Disable dtrace unconditionally, breaks after we install Oracle dtrace
 
 * Wed Oct 30 2013 Balasubramanian Kandasamy <balasubramanian.kandasamy@oracle.com>
 - Removed non gpl file docs/mysql.info from community packages
 
 * Mon Sep 09 2013 Balasubramanian Kandasamy <balasubramanian.kandasamy@oracle.com>
-- Updated logic to get the correct count of PID files
+- Updated logic to get the correct count of PID files 
 
 * Fri Aug 16 2013 Balasubramanian Kandasamy <balasubramanian.kandasamy@oracle.com>
 - Added provides lowercase mysql tags  
 
 * Wed Jun 26 2013 Balasubramanian Kandasamy <balasubramanian.kandasamy@oracle.com>
 - Cleaned up spec file to resolve rpm dependencies.
-
-* Mon Nov 05 2012 Joerg Bruehe <joerg.bruehe@oracle.com>
-
-- Allow to override the default to use the bundled yaSSL by an option like
-      --define="with_ssl /path/to/ssl"
-
-* Wed Oct 10 2012 Bjorn Munch <bjorn.munch@oracle.com>
-
-- Replace old my-*.cnf config file examples with template my-default.cnf
-
-* Fri Oct 05 2012 Joerg Bruehe <joerg.bruehe@oracle.com>
-
-- Let the installation use the new option "--random-passwords" of "mysql_install_db".
-  (Bug# 12794345 Ensure root password)
-- Fix an inconsistency: "new install" vs "upgrade" are told from the (non)existence
-  of "$mysql_datadir/mysql" (holding table "mysql.user" and other system stuff).
 
 * Tue Jul 24 2012 Joerg Bruehe <joerg.bruehe@oracle.com>
 
@@ -1276,17 +1255,9 @@ echo "====="                                     >> $STATUS_HISTORY
       --define "runselftest 0"
   Failures of the test suite will NOT make the RPM build fail!
 
-* Mon Jul 16 2012 Joerg Bruehe <joerg.bruehe@oracle.com>
-
-- Add the man page for the "mysql_config_editor".
-
 * Mon Jun 11 2012 Joerg Bruehe <joerg.bruehe@oracle.com>
 
 - Make sure newly added "SPECIFIC-ULN/" directory does not disturb packaging.
-
-* Wed Feb 29 2012 Brajmohan Saxena <brajmohan.saxena@oracle.com>
-
-- Removal all traces of the readline library from mysql (BUG 13738013)
 
 * Wed Sep 28 2011 Joerg Bruehe <joerg.bruehe@oracle.com>
 
@@ -1317,12 +1288,6 @@ echo "====="                                     >> $STATUS_HISTORY
 * Thu Sep 08 2011 Daniel Fischer <daniel.fischer@oracle.com>
 
 - Add mysql_plugin man page.
-
-* Tue Aug 30 2011 Tor Didriksen <tor.didriksen@oracle.com>
-
-- Set CXX=g++ by default to add a dependency on libgcc/libstdc++.
-  Also, remove the use of the -fno-exceptions and -fno-rtti flags.
-  TODO: update distro_buildreq/distro_requires
 
 * Tue Aug 30 2011 Joerg Bruehe <joerg.bruehe@oracle.com>
 

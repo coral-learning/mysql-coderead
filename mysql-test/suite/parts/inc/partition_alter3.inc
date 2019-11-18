@@ -115,7 +115,6 @@ ALTER TABLE t1 REMOVE PARTITIONING;
 --source suite/parts/inc/partition_check_read1.inc
 #
 --echo #  1.2.7 Remove partitioning from not partitioned table --> ????
---error ER_PARTITION_MGMT_ON_NONPARTITIONED
 ALTER TABLE t1 REMOVE PARTITIONING;
 DROP TABLE t1;
 --source suite/parts/inc/partition_check_drop.inc
@@ -194,7 +193,6 @@ ALTER TABLE t1 REMOVE PARTITIONING;
 --source suite/parts/inc/partition_check_read2.inc
 #
 --echo #  2.2.7 Remove partitioning from not partitioned table --> ????
---error ER_PARTITION_MGMT_ON_NONPARTITIONED
 ALTER TABLE t1 REMOVE PARTITIONING;
 DROP TABLE t1;
 --source suite/parts/inc/partition_check_drop.inc

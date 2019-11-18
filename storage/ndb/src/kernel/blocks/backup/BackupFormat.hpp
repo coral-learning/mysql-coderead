@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003, 2005-2008 MySQL AB, 2008 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2005-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef BACKUP_FORMAT_HPP
 #define BACKUP_FORMAT_HPP
@@ -41,21 +39,6 @@ struct BackupFormat {
 
   struct FileHeader {
     char Magic[8];
-    Uint32 BackupVersion;
-
-    Uint32 SectionType;
-    Uint32 SectionLength;
-    Uint32 FileType;
-    Uint32 BackupId;
-    Uint32 BackupKey_0;
-    Uint32 BackupKey_1;
-    Uint32 ByteOrder;
-    Uint32 NdbVersion;
-    Uint32 MySQLVersion;
-  };
-
-  struct FileHeader_pre_backup_version {
-    char Magic[8];
     Uint32 NdbVersion;
 
     Uint32 SectionType;
@@ -72,10 +55,9 @@ struct BackupFormat {
    */
   enum FileType {
     CTL_FILE = 1,
-    LOG_FILE = 2, //redo log file for backup.
+    LOG_FILE = 2,
     DATA_FILE = 3,
-    LCP_FILE = 4,
-    UNDO_FILE = 5 //undo log for backup.
+    LCP_FILE = 4
   };
   
   /**

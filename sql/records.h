@@ -1,6 +1,6 @@
 #ifndef SQL_RECORDS_H
 #define SQL_RECORDS_H 
-/* Copyright (c) 2008, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2008, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,12 +12,15 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface                      /* gcc class implementation */
+#endif
 #include <my_global.h>                /* for uint typedefs */
 
-typedef struct st_join_table JOIN_TAB;
+struct st_join_table;
 class handler;
 struct TABLE;
 class THD;
@@ -28,25 +31,23 @@ class SQL_SELECT;
   index read, scan, etc, use of cache, etc.
 
   Use by:
-@code
   READ_RECORD read_record;
-  if (init_read_record(&read_record, ...))
-    return TRUE;
+  init_read_record(&read_record, ...);
   while (read_record.read_record())
   {
     ...
   }
   end_read_record();
-@endcode
 */
 
 struct READ_RECORD
 {
   typedef int (*Read_func)(READ_RECORD*);
   typedef void (*Unlock_row_func)(st_join_table *);
-  typedef int (*Setup_func)(JOIN_TAB*);
+  typedef int (*Setup_func)(struct st_join_table*);
 
   TABLE *table;                                 /* Head-form */
+  handler *file;
   TABLE **forms;                                /* head and ref forms */
   Unlock_row_func unlock_row;
   Read_func read_record;
@@ -66,14 +67,13 @@ public:
   READ_RECORD() {}
 };
 
-bool init_read_record(READ_RECORD *info, THD *thd, TABLE *reg_form,
+void init_read_record(READ_RECORD *info, THD *thd, TABLE *reg_form,
 		      SQL_SELECT *select, int use_record_cache,
                       bool print_errors, bool disable_rr_cache);
-bool init_read_record_idx(READ_RECORD *info, THD *thd, TABLE *table,
+void init_read_record_idx(READ_RECORD *info, THD *thd, TABLE *table,
                           bool print_error, uint idx, bool reverse);
 void end_read_record(READ_RECORD *info);
 
 void rr_unlock_row(st_join_table *tab);
-int rr_sequential(READ_RECORD *info);
 
 #endif /* SQL_RECORDS_H */

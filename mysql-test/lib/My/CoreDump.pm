@@ -133,13 +133,10 @@ EOF
   return 1;
 }
 
-# The 'cdb debug' prints are added to pinpoint the location of a hang
-# which could not be reproduced manually. Will be removed later.
 
 # Check that Debugging tools for Windows are installed
 sub cdb_check {
    `cdb -? 2>&1`;
-  print localtime() . " cdb debug X\n";
   if ($? >> 8)
   {
     print "Cannot find cdb. Please Install Debugging tools for Windows\n";
@@ -184,16 +181,14 @@ sub _cdb {
   # different machine)
   my $tmp_name= $core_name.".cdb_lmv";
   `cdb -z $core_name -c \"lmv;q\" > $tmp_name 2>&1`;
-  print localtime() . " cdb debug C\n";
   if ($? >> 8)
   {
     unlink($tmp_name);
     # check if cdb is installed and complain if not
-    print localtime() . " cdb debug D\n";
     cdb_check();
     return;
   }
-  print localtime() . " cdb debug E\n";
+  
   open(temp,"< $tmp_name");
   my %dirhash=();
   while(<temp>)
@@ -209,7 +204,7 @@ sub _cdb {
   }
   close(temp);
   unlink($tmp_name);
-  print localtime() . " cdb debug F\n";
+  
   my $image_path= join(";", (keys %dirhash),".");
 
   # For better callstacks, setup _NT_SYMBOL_PATH to include
@@ -240,7 +235,6 @@ sub _cdb {
   my $cdb_output=
     `cdb -c "$cdb_cmd" -z $core_name -i "$image_path" -y "$symbol_path" -t 0 -lines 2>&1`;
   return if $? >> 8;
-  print localtime() . " cdb debug G\n";
   return unless $cdb_output;
   
   # Remove comments (lines starting with *), stack pointer and frame 

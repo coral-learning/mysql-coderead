@@ -458,37 +458,6 @@ if (!`SELECT foo from bar`) {
 }
 
 # ----------------------------------------------------------------------------
-#test to check conversion between error numbers and error strings
-# ----------------------------------------------------------------------------
-let $var=convert_error(1450);
-let $var1=convert_error($var);
-let $var2=convert_error($var1);
-echo $var2;
-
-let $var=convert_error(ER_UNKNOWN_ERROR);
-let $var1=convert_error($var);
-let $var2=convert_error($var1);
-echo $var2;
-
---error 1
---exec echo "let \$var= convert_error(NOT_A_VALID_ERROR);" | $MYSQL_TEST 2>&1
-
-let $var=convert_error(9999999);
-echo $var;
-
-let $var=convert_error(9ABC9);
-echo $var;
-
-let $var=convert_error(0);
-echo $var;
-
-let $var=convert_error();
-echo $var;
-
-let $var=;
-let $var1=convert_error($var);
-echo $var1;
-# ----------------------------------------------------------------------------
 # Test comments
 # ----------------------------------------------------------------------------
 
@@ -710,18 +679,6 @@ remove_file $MYSQLTEST_VARDIR/tmp/mysqltest.sql;
 --error 1
 --exec echo "--error 1,2,3,4,5,6,7,8,9,10,11" | $MYSQL_TEST 2>&1
 
-# BUG#13687542 MTR BEHAVES WRONG WHEN EXECUTING 'ERROR $VAR' IN A LOOP
---let $i= 0
---let $error= 0
-while ($i < 3)
-{
-  --error $error
-  CREATE TABLE t1 (a INT);
-  --let $error= 1050
-  --inc $i
-}
-
-DROP TABLE t1;
 
 # ----------------------------------------------------------------------------
 # Test echo command
@@ -1207,11 +1164,21 @@ echo $d;
 
 
 # ----------------------------------------------------------------------------
-# Test system (which is now deprecated)
+# Test system
 # ----------------------------------------------------------------------------
+#system ls > /dev/null;
+system echo "hej" > /dev/null;
+#--system ls > /dev/null
+--system echo "hej" > /dev/null;
 
 --error 1
---exec echo "system something;" | $MYSQL_TEST 2>&1
+--exec echo "system;" | $MYSQL_TEST 2>&1
+--error 1
+--exec echo "system $NONEXISTSINFVAREABLI;" | $MYSQL_TEST 2>&1
+
+--disable_abort_on_error ONCE
+system NonExistsinfComamdn 2> /dev/null;
+
 
 # ----------------------------------------------------------------------------
 # Test delimiter
@@ -2895,11 +2862,6 @@ diff_files $MYSQLTEST_VARDIR/tmp/testdir/file2.txt $MYSQLTEST_VARDIR/tmp/testdir
 rmdir $MYSQLTEST_VARDIR/tmp/testdir;
 
 cat_file $MYSQLTEST_VARDIR/tmp/testdir/file3.txt;
-
-# Test replace_result and that it does not affect next SQL stmt
-replace_result file prefix;
-list_files $MYSQLTEST_VARDIR/tmp/testdir;
-SELECT "bla bla file" as x;
 
 list_files_write_file $MYSQLTEST_VARDIR/tmp/testdir/file11.txt $MYSQLTEST_VARDIR/tmp/testdir file?.txt;
 remove_files_wildcard $MYSQLTEST_VARDIR/tmp/testdir file?.txt;

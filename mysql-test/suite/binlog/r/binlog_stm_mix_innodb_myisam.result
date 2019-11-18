@@ -10,7 +10,7 @@ insert into t2 select * from t1;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement accesses nontransactional table as well as transactional or temporary table, and writes to any of them.
 commit;
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; insert into t1 values(1)
@@ -27,7 +27,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 rollback;
 Warnings:
 Warning	1196	Some non-transactional changed tables couldn't be rolled back
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; insert into t1 values(2)
@@ -47,7 +47,7 @@ rollback to savepoint my_savepoint;
 Warnings:
 Warning	1196	Some non-transactional changed tables couldn't be rolled back
 commit;
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; insert into t1 values(3)
@@ -75,7 +75,7 @@ select a from t1 order by a;
 a
 5
 7
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; insert into t1 values(5)
@@ -99,7 +99,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 select get_lock("a",10);
 get_lock("a",10)
 1
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; insert into t1 values(8)
@@ -110,7 +110,7 @@ delete from t2;
 reset master;
 insert into t1 values(9);
 insert into t2 select * from t1;
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; insert into t1 values(9)
@@ -124,7 +124,7 @@ reset master;
 insert into t1 values(10);
 begin;
 insert into t2 select * from t1;
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; insert into t1 values(10)
@@ -134,7 +134,7 @@ master-bin.000001	#	Query	#	#	use `test`; insert into t2 select * from t1
 master-bin.000001	#	Query	#	#	COMMIT
 insert into t1 values(11);
 commit;
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; insert into t1 values(10)
@@ -153,7 +153,7 @@ begin;
 insert into t1 values(12);
 insert into t2 select * from t1;
 commit;
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; insert into t1 values(12)
@@ -166,7 +166,8 @@ begin;
 insert into t1 values(13);
 insert into t2 select * from t1;
 rollback;
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
+Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 delete from t1;
 delete from t2;
 reset master;
@@ -177,11 +178,10 @@ insert into t1 values(15);
 insert into t2 select * from t1;
 rollback to savepoint my_savepoint;
 commit;
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; insert into t1 values(14)
-master-bin.000001	#	Query	#	#	SAVEPOINT `my_savepoint`
 master-bin.000001	#	Xid	#	#	COMMIT /* XID */
 delete from t1;
 delete from t2;
@@ -198,11 +198,10 @@ select a from t1 order by a;
 a
 16
 18
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; insert into t1 values(16)
-master-bin.000001	#	Query	#	#	SAVEPOINT `my_savepoint`
 master-bin.000001	#	Query	#	#	use `test`; insert into t1 values(18)
 master-bin.000001	#	Xid	#	#	COMMIT /* XID */
 delete from t1;
@@ -232,8 +231,6 @@ commit;
 begin;
 create temporary table ti (a int) engine=innodb;
 rollback;
-Warnings:
-Warning	#	The creation of some temporary tables could not be rolled back.
 insert into ti values(1);
 set autocommit=0;
 create temporary table t1 (a int) engine=myisam;
@@ -254,11 +251,10 @@ insert into t2 values (3);
 select get_lock("lock1",60);
 get_lock("lock1",60)
 1
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; insert into t1 values(16)
-master-bin.000001	#	Query	#	#	SAVEPOINT `my_savepoint`
 master-bin.000001	#	Query	#	#	use `test`; insert into t1 values(18)
 master-bin.000001	#	Xid	#	#	COMMIT /* XID */
 master-bin.000001	#	Query	#	#	BEGIN
@@ -295,8 +291,7 @@ master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; insert into t0 select GET_LOCK("lock1",null)
 master-bin.000001	#	Query	#	#	COMMIT
 master-bin.000001	#	Query	#	#	use `test`; create table t2 (n int) engine=innodb
-master-bin.000001	#	Query	#	#	use `test`; DROP /*!40005 TEMPORARY */ TABLE IF EXISTS `ti`
-master-bin.000001	#	Query	#	#	use `test`; DROP /*!40005 TEMPORARY */ TABLE IF EXISTS `t1`
+master-bin.000001	#	Query	#	#	use `test`; DROP /*!40005 TEMPORARY */ TABLE IF EXISTS `t1`,`ti`
 do release_lock("lock1");
 drop table t0,t2;
 set autocommit=0;
@@ -307,7 +302,7 @@ CREATE TABLE t2 (primary key (a)) engine=innodb select * from t1;
 ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
 DROP TABLE if exists t2;
 Warnings:
-Note	1051	Unknown table 'test.t2'
+Note	1051	Unknown table 't2'
 INSERT INTO t1 values (3,3);
 CREATE TEMPORARY TABLE t2 (primary key (a)) engine=innodb select * from t1;
 ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
@@ -316,7 +311,7 @@ Warnings:
 Warning	1196	Some non-transactional changed tables couldn't be rolled back
 DROP TABLE IF EXISTS t2;
 Warnings:
-Note	1051	Unknown table 'test.t2'
+Note	1051	Unknown table 't2'
 CREATE TABLE t2 (a int, b int, primary key (a)) engine=innodb;
 INSERT INTO t1 VALUES (4,4);
 CREATE TABLE IF NOT EXISTS t2 (primary key (a)) engine=innodb select * from t1;
@@ -338,8 +333,7 @@ Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it accesses a non-transactional table after accessing a transactional table within the same transaction.
 ROLLBACK;
 Warnings:
-Warning	#	Some non-transactional changed tables couldn't be rolled back
-Warning	#	The creation of some temporary tables could not be rolled back.
+Warning	1196	Some non-transactional changed tables couldn't be rolled back
 INSERT INTO t1 values (8,8);
 CREATE TEMPORARY TABLE IF NOT EXISTS t2 (primary key (a)) engine=innodb select * from t1;
 Warnings:
@@ -384,7 +378,7 @@ SELECT * from t2;
 a	b
 100	100
 DROP TABLE t1,t2;
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; INSERT INTO t1 values (1,1),(1,2)
@@ -442,8 +436,9 @@ get_lock("a",10)
 flush logs;
 select
 (@a:=load_file("MYSQLTEST_VARDIR/tmp/mix_innodb_myisam_binlog.output"))
-is not null AS Loaded;
-Loaded
+is not null;
+(@a:=load_file("MYSQLTEST_VARDIR/tmp/mix_innodb_myisam_binlog.output"))
+is not null
 1
 select
 @a like "%#%error_code=0%ROLLBACK\n/*!*/;%ROLLBACK /* added by mysqlbinlog */;%" OR
@@ -466,7 +461,7 @@ Warning	1196	Some non-transactional changed tables couldn't be rolled back
 select count(*) from tt /* 2 */;
 count(*)
 2
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; insert into ti values (1)
@@ -492,7 +487,7 @@ ERROR 23000: Duplicate entry '2' for key 'a'
 rollback;
 Warnings:
 Warning	1196	Some non-transactional changed tables couldn't be rolled back
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; insert into ti values (1)
@@ -528,7 +523,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 reset master;
 insert into t2 values (bug27417(2));
 ERROR 23000: Duplicate entry '2' for key 'PRIMARY'
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Intvar	#	#	INSERT_ID=3
@@ -548,7 +543,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 select count(*) from t2 /* nothing got deleted */;
 count(*)
 2
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Intvar	#	#	INSERT_ID=4
@@ -575,7 +570,7 @@ insert into t2 values (1);
 reset master;
 insert into t2 values (bug27417(1));
 ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Intvar	#	#	INSERT_ID=1
@@ -591,7 +586,7 @@ insert into t2 values (2);
 reset master;
 insert into t2 select bug27417(1) union select bug27417(2);
 ERROR 23000: Duplicate entry '2' for key 'PRIMARY'
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Intvar	#	#	INSERT_ID=2
@@ -606,7 +601,7 @@ insert into t3 values (1,1),(2,3),(3,4);
 reset master;
 update t3 set b=b+bug27417(1);
 ERROR 23000: Duplicate entry '4' for key 'b'
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Intvar	#	#	INSERT_ID=4
@@ -623,7 +618,7 @@ insert into t4 values (1,1),(2,2);
 reset master;
 UPDATE t4,t3 SET t4.a=t3.a + bug27417(1) /* top level non-ta table */;
 ERROR 23000: Duplicate entry '2' for key 'PRIMARY'
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Intvar	#	#	INSERT_ID=6
@@ -655,7 +650,7 @@ insert into t3 values (bug27417(1), 2);
 reset master;
 delete from t2;
 ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Intvar	#	#	INSERT_ID=9
@@ -676,7 +671,7 @@ insert into t5 values (1),(2);
 reset master;
 delete t2.* from t2,t5 where t2.a=t5.a + 1;
 ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; delete t2.* from t2,t5 where t2.a=t5.a + 1
@@ -697,7 +692,7 @@ a	b
 select count(*) from t1 /* must be 2 */;
 count(*)
 2
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Intvar	#	#	INSERT_ID=10
@@ -724,7 +719,7 @@ Warning	1196	Some non-transactional changed tables couldn't be rolled back
 select count(*) from tt /* 2 */;
 count(*)
 2
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; insert into ti values (1)
@@ -750,7 +745,7 @@ ERROR 23000: Duplicate entry '2' for key 'a'
 rollback;
 Warnings:
 Warning	1196	Some non-transactional changed tables couldn't be rolled back
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; insert into ti values (1)
@@ -786,7 +781,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 reset master;
 insert into t2 values (bug27417(2));
 ERROR 23000: Duplicate entry '2' for key 'PRIMARY'
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Intvar	#	#	INSERT_ID=3
@@ -805,7 +800,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 select count(*) from t2 /* nothing got deleted */;
 count(*)
 2
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Intvar	#	#	INSERT_ID=4
@@ -831,7 +826,7 @@ insert into t2 values (1);
 reset master;
 insert into t2 values (bug27417(1));
 ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Intvar	#	#	INSERT_ID=1
@@ -846,7 +841,7 @@ insert into t2 values (2);
 reset master;
 insert into t2 select bug27417(1) union select bug27417(2);
 ERROR 23000: Duplicate entry '2' for key 'PRIMARY'
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Intvar	#	#	INSERT_ID=2
@@ -860,7 +855,7 @@ insert into t3 values (1,1),(2,3),(3,4);
 reset master;
 update t3 set b=b+bug27417(1);
 ERROR 23000: Duplicate entry '4' for key 'b'
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Intvar	#	#	INSERT_ID=4
@@ -876,7 +871,7 @@ insert into t4 values (1,1),(2,2);
 reset master;
 UPDATE t4,t3 SET t4.a=t3.a + bug27417(1) /* top level non-ta table */;
 ERROR 23000: Duplicate entry '2' for key 'PRIMARY'
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Intvar	#	#	INSERT_ID=6
@@ -907,7 +902,7 @@ insert into t3 values (bug27417(1), 2);
 reset master;
 delete from t2;
 ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Intvar	#	#	INSERT_ID=9
@@ -927,7 +922,7 @@ insert into t5 values (1),(2);
 reset master;
 delete t2.* from t2,t5 where t2.a=t5.a + 1;
 ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; delete t2.* from t2,t5 where t2.a=t5.a + 1
@@ -947,7 +942,7 @@ a	b
 select count(*) from t1 /* must be 2 */;
 count(*)
 2
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Intvar	#	#	INSERT_ID=10

@@ -1,4 +1,4 @@
-/* Copyright (c) 2004, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2004, 2011, Oracle and/or its affiliates. All rights reserved.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -41,6 +41,10 @@ TODO:
  -Brian
 */
 
+#ifdef USE_PRAGMA_IMPLEMENTATION
+#pragma implementation        // gcc: Class implementation
+#endif
+
 #include "my_global.h"
 #include "sql_priv.h"
 #include "sql_class.h"                          // SSV
@@ -49,10 +53,6 @@ TODO:
 #include "ha_tina.h"
 #include "probes_mysql.h"
 
-#include <algorithm>
-
-using std::min;
-using std::max;
 
 /*
   uchar + uchar + ulonglong + ulonglong + ulonglong + ulonglong + uchar
@@ -102,7 +102,7 @@ int sort_set (tina_set *a, tina_set *b)
 }
 
 static uchar* tina_get_key(TINA_SHARE *share, size_t *length,
-                          my_bool not_used MY_ATTRIBUTE((unused)))
+                          my_bool not_used __attribute__((unused)))
 {
   *length=share->table_name_length;
   return (uchar*) share->table_name;
@@ -133,11 +133,14 @@ static void init_tina_psi_keys(void)
   const char* category= "csv";
   int count;
 
+  if (PSI_server == NULL)
+    return;
+
   count= array_elements(all_tina_mutexes);
-  mysql_mutex_register(category, all_tina_mutexes, count);
+  PSI_server->register_mutex(category, all_tina_mutexes, count);
 
   count= array_elements(all_tina_files);
-  mysql_file_register(category, all_tina_files, count);
+  PSI_server->register_file(category, all_tina_files, count);
 }
 #endif /* HAVE_PSI_INTERFACE */
 
@@ -987,6 +990,9 @@ int ha_tina::write_row(uchar * buf)
 
   ha_statistic_increment(&SSV::ha_write_count);
 
+  if (table->timestamp_field_type & TIMESTAMP_AUTO_SET_ON_INSERT)
+    table->timestamp_field->set_time();
+
   size= encode_quote(buf);
 
   if (!share->tina_write_opened)
@@ -1035,8 +1041,8 @@ int ha_tina::open_update_temp_file_if_needed()
 
 /*
   This is called for an update.
-  Make sure you put in code to increment the auto increment.
-  Currently auto increment is not being
+  Make sure you put in code to increment the auto increment, also
+  update any timestamp data. Currently auto increment is not being
   fixed since autoincrements have yet to be added to this table handler.
   This will be called in a table scan right before the previous ::rnd_next()
   call.
@@ -1048,6 +1054,9 @@ int ha_tina::update_row(const uchar * old_data, uchar * new_data)
   DBUG_ENTER("ha_tina::update_row");
 
   ha_statistic_increment(&SSV::ha_update_count);
+
+  if (table->timestamp_field_type & TIMESTAMP_AUTO_SET_ON_UPDATE)
+    table->timestamp_field->set_time();
 
   size= encode_quote(new_data);
 
@@ -1311,7 +1320,8 @@ bool ha_tina::get_write_pos(my_off_t *end_pos, tina_set *closest_hole)
   if (closest_hole == chain_ptr) /* no more chains */
     *end_pos= file_buff->end();
   else
-    *end_pos= min(file_buff->end(), closest_hole->begin);
+    *end_pos= min(file_buff->end(),
+                  closest_hole->begin);
   return (closest_hole != chain_ptr) && (*end_pos == closest_hole->begin);
 }
 
@@ -1417,9 +1427,9 @@ int ha_tina::rnd_end()
       DBUG_RETURN(-1);
 
     /* Open the file again */
-    if ((data_file= mysql_file_open(csv_key_file_data,
-                                    share->data_file_name,
-                                    O_RDONLY, MYF(MY_WME))) == -1)
+    if (((data_file= mysql_file_open(csv_key_file_data,
+                                     share->data_file_name,
+                                     O_RDONLY, MYF(MY_WME))) == -1))
       DBUG_RETURN(my_errno ? my_errno : -1);
     /*
       As we reopened the data file, increase share->data_file_version 

@@ -1,14 +1,13 @@
-# The log file name and location can be set in
-# /etc/my.cnf by setting the "log-error" option
-# in either [mysqld] or [mysqld_safe] section as
-# follows:
+# This logname can be set in /etc/my.cnf
+# by setting the variable "err-log"
+# in the [safe_mysqld] section as follows:
 #
-# [mysqld]
-# log-error=@localstatedir@/mysqld.log
+# [safe_mysqld]
+# err-log=@localstatedir@/mysqld.log
 #
-# In case the root user has a password, then you
-# have to create a /root/.my.cnf configuration file
-# with the following content:
+# If the root user has a password you have to create a
+# /root/.my.cnf configuration file with the following
+# content:
 #
 # [mysqladmin]
 # password = <secret> 
@@ -16,14 +15,14 @@
 #
 # where "<secret>" is the password. 
 #
-# ATTENTION: The /root/.my.cnf file should be readable
-# _ONLY_ by root !
+# ATTENTION: This /root/.my.cnf should be readable ONLY
+# for root !
 
 @localstatedir@/mysqld.log {
         # create 600 mysql mysql
         notifempty
-        daily
-        rotate 5
+	daily
+        rotate 3
         missingok
         compress
     postrotate

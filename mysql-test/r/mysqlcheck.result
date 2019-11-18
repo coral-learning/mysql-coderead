@@ -13,17 +13,13 @@ mysql.help_category                                OK
 mysql.help_keyword                                 OK
 mysql.help_relation                                OK
 mysql.help_topic                                   OK
-mysql.innodb_index_stats                           OK
-mysql.innodb_table_stats                           OK
+mysql.host                                         OK
 mysql.ndb_binlog_index                             OK
 mysql.plugin                                       OK
 mysql.proc                                         OK
 mysql.procs_priv                                   OK
 mysql.proxies_priv                                 OK
 mysql.servers                                      OK
-mysql.slave_master_info                            OK
-mysql.slave_relay_log_info                         OK
-mysql.slave_worker_info                            OK
 mysql.slow_log
 note     : The storage engine for the table doesn't support analyze
 mysql.tables_priv                                  OK
@@ -45,27 +41,13 @@ mysql.help_category                                OK
 mysql.help_keyword                                 OK
 mysql.help_relation                                OK
 mysql.help_topic                                   OK
-mysql.innodb_index_stats
-note     : Table does not support optimize, doing recreate + analyze instead
-status   : OK
-mysql.innodb_table_stats
-note     : Table does not support optimize, doing recreate + analyze instead
-status   : OK
+mysql.host                                         OK
 mysql.ndb_binlog_index                             OK
 mysql.plugin                                       OK
 mysql.proc                                         OK
 mysql.procs_priv                                   OK
 mysql.proxies_priv                                 OK
 mysql.servers                                      OK
-mysql.slave_master_info
-note     : Table does not support optimize, doing recreate + analyze instead
-status   : OK
-mysql.slave_relay_log_info
-note     : Table does not support optimize, doing recreate + analyze instead
-status   : OK
-mysql.slave_worker_info
-note     : Table does not support optimize, doing recreate + analyze instead
-status   : OK
 mysql.slow_log
 note     : The storage engine for the table doesn't support optimize
 mysql.tables_priv                                  OK
@@ -85,17 +67,13 @@ mysql.help_category                                OK
 mysql.help_keyword                                 OK
 mysql.help_relation                                OK
 mysql.help_topic                                   OK
-mysql.innodb_index_stats                           OK
-mysql.innodb_table_stats                           OK
+mysql.host                                         OK
 mysql.ndb_binlog_index                             OK
 mysql.plugin                                       OK
 mysql.proc                                         OK
 mysql.procs_priv                                   OK
 mysql.proxies_priv                                 OK
 mysql.servers                                      OK
-mysql.slave_master_info                            OK
-mysql.slave_relay_log_info                         OK
-mysql.slave_worker_info                            OK
 mysql.slow_log
 note     : The storage engine for the table doesn't support analyze
 mysql.tables_priv                                  OK
@@ -115,27 +93,13 @@ mysql.help_category                                Table is already up to date
 mysql.help_keyword                                 Table is already up to date
 mysql.help_relation                                Table is already up to date
 mysql.help_topic                                   Table is already up to date
-mysql.innodb_index_stats
-note     : Table does not support optimize, doing recreate + analyze instead
-status   : OK
-mysql.innodb_table_stats
-note     : Table does not support optimize, doing recreate + analyze instead
-status   : OK
+mysql.host                                         Table is already up to date
 mysql.ndb_binlog_index                             Table is already up to date
 mysql.plugin                                       Table is already up to date
 mysql.proc                                         Table is already up to date
 mysql.procs_priv                                   Table is already up to date
 mysql.proxies_priv                                 Table is already up to date
 mysql.servers                                      Table is already up to date
-mysql.slave_master_info
-note     : Table does not support optimize, doing recreate + analyze instead
-status   : OK
-mysql.slave_relay_log_info
-note     : Table does not support optimize, doing recreate + analyze instead
-status   : OK
-mysql.slave_worker_info
-note     : Table does not support optimize, doing recreate + analyze instead
-status   : OK
 mysql.slow_log
 note     : The storage engine for the table doesn't support optimize
 mysql.tables_priv                                  Table is already up to date
@@ -314,7 +278,10 @@ CHECK TABLE bug47205 FOR UPGRADE;
 Table	Op	Msg_type	Msg_text
 test.bug47205	check	error	Table rebuild required. Please do "ALTER TABLE `bug47205` FORCE" or dump/reload to fix it!
 # ALTER TABLE ... FORCE should rebuild the table
+# and therefore output "affected rows: 1"
 ALTER TABLE bug47205 FORCE;
+affected rows: 1
+info: Records: 1  Duplicates: 0  Warnings: 0
 # Table should now be ok
 CHECK TABLE bug47205 FOR UPGRADE;
 Table	Op	Msg_type	Msg_text
@@ -358,12 +325,3 @@ CHECK TABLE bug47205 FOR UPGRADE;
 Table	Op	Msg_type	Msg_text
 test.bug47205	check	status	OK
 DROP TABLE bug47205;
-#
-# Bug#12688860 : SECURITY RECOMMENDATION: PASSWORDS ON CLI
-#
-DROP DATABASE IF EXISTS b12688860_db;
-CREATE DATABASE b12688860_db;
-Warning: Using a password on the command line interface can be insecure.
-DROP DATABASE b12688860_db;
-
-End of tests

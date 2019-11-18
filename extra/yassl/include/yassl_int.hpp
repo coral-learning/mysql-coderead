@@ -203,7 +203,6 @@ public:
     size_t       GetLength() const;
     int          GetCnPosition() const { return cnPosition_; }
     int          GetCnLength()   const { return cnLen_; }
-
 private:
     X509_NAME(const X509_NAME&);                // hide copy
     X509_NAME& operator=(const X509_NAME&);     // and assign
@@ -213,7 +212,7 @@ private:
 class StringHolder {
     ASN1_STRING  asnString_;
 public:
-    StringHolder(const char* str, int sz, byte type= 0);
+    StringHolder(const char* str, int sz);
     ~StringHolder();
 
     ASN1_STRING* GetString();
@@ -231,7 +230,7 @@ class X509 {
     StringHolder afterDate_;    // not valid after
 public:
     X509(const char* i, size_t, const char* s, size_t,
-         ASN1_STRING *b, ASN1_STRING *a, int, int, int, int);
+         const char* b, int, const char* a, int, int, int, int, int);
     ~X509() {}
 
     X509_NAME* GetIssuer();
@@ -304,7 +303,6 @@ public:
 
     ~Sessions();
 
-    friend void Session_initialize();
     friend Sessions& GetSessions(); // singleton creator
 private:
     Sessions(const Sessions&);              // hide copy

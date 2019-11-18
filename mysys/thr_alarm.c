@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA */
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 /* To avoid problems with alarms in debug code, we disable DBUG here */
 #define FORCE_DBUG_OFF
@@ -60,9 +60,9 @@ static void *alarm_handler(void *arg);
 #define reschedule_alarms() pthread_kill(alarm_thread,THR_SERVER_ALARM)
 #endif
 
-static sig_handler thread_alarm(int sig MY_ATTRIBUTE((unused)));
+static sig_handler thread_alarm(int sig __attribute__((unused)));
 
-static int compare_ulong(void *not_used MY_ATTRIBUTE((unused)),
+static int compare_ulong(void *not_used __attribute__((unused)),
 			 uchar *a_ptr,uchar* b_ptr)
 {
   ulong a=*((ulong*) a_ptr),b= *((ulong*) b_ptr);
@@ -80,8 +80,16 @@ void init_thr_alarm(uint max_alarms)
   sigfillset(&full_signal_set);			/* Neaded to block signals */
   mysql_mutex_init(key_LOCK_alarm, &LOCK_alarm, MY_MUTEX_INIT_FAST);
   mysql_cond_init(key_COND_alarm, &COND_alarm, NULL);
-  thr_client_alarm= SIGUSR1;
-  my_sigset(thr_client_alarm, thread_alarm);
+  if (thd_lib_detected == THD_LIB_LT)
+    thr_client_alarm= SIGALRM;
+  else
+    thr_client_alarm= SIGUSR1;
+#ifndef USE_ALARM_THREAD
+  if (thd_lib_detected != THD_LIB_LT)
+#endif
+  {
+    my_sigset(thr_client_alarm, thread_alarm);
+  }
   sigemptyset(&s);
   sigaddset(&s, THR_SERVER_ALARM);
   alarm_thread=pthread_self();
@@ -98,6 +106,11 @@ void init_thr_alarm(uint max_alarms)
   }
 #elif defined(USE_ONE_SIGNAL_HAND)
   pthread_sigmask(SIG_BLOCK, &s, NULL);		/* used with sigwait() */
+  if (thd_lib_detected == THD_LIB_LT)
+  {
+    my_sigset(thr_client_alarm, process_alarm);        /* Linuxthreads */
+    pthread_sigmask(SIG_UNBLOCK, &s, NULL);
+  }
 #else
   my_sigset(THR_SERVER_ALARM, process_alarm);
   pthread_sigmask(SIG_UNBLOCK, &s, NULL);
@@ -274,12 +287,24 @@ void thr_end_alarm(thr_alarm_t *alarmed)
   every second.
 */
 
-sig_handler process_alarm(int sig MY_ATTRIBUTE((unused)))
+sig_handler process_alarm(int sig __attribute__((unused)))
 {
   sigset_t old_mask;
 /*
   This must be first as we can't call DBUG inside an alarm for a normal thread
 */
+
+  if (thd_lib_detected == THD_LIB_LT &&
+      !pthread_equal(pthread_self(),alarm_thread))
+  {
+#if defined(MAIN) && !defined(__bsdi__)
+    printf("thread_alarm in process_alarm\n"); fflush(stdout);
+#endif
+#ifdef SIGNAL_HANDLER_RESET_ON_DELIVERY
+    my_sigset(thr_client_alarm, process_alarm);	/* int. thread system calls */
+#endif
+    return;
+  }
 
   /*
     We have to do do the handling of the alarm in a sub function,
@@ -304,7 +329,7 @@ sig_handler process_alarm(int sig MY_ATTRIBUTE((unused)))
 }
 
 
-static sig_handler process_alarm_part2(int sig MY_ATTRIBUTE((unused)))
+static sig_handler process_alarm_part2(int sig __attribute__((unused)))
 {
   ALARM *alarm_data;
   DBUG_ENTER("process_alarm");
@@ -492,7 +517,7 @@ void thr_alarm_info(ALARM_INFO *info)
 */
 
 
-static sig_handler thread_alarm(int sig MY_ATTRIBUTE((unused)))
+static sig_handler thread_alarm(int sig __attribute__((unused)))
 {
 #ifdef MAIN
   printf("thread_alarm\n"); fflush(stdout);
@@ -511,7 +536,7 @@ static sig_handler thread_alarm(int sig MY_ATTRIBUTE((unused)))
 /* set up a alarm thread with uses 'sleep' to sleep between alarms */
 
 #ifdef USE_ALARM_THREAD
-static void *alarm_handler(void *arg MY_ATTRIBUTE((unused)))
+static void *alarm_handler(void *arg __attribute__((unused)))
 {
   int error;
   struct timespec abstime;
@@ -560,7 +585,7 @@ static void *alarm_handler(void *arg MY_ATTRIBUTE((unused)))
     }
     process_alarm(0);
   }
-  memset(&alarm_thread, 0, sizeof(alarm_thread)); /* For easy debugging */
+  bzero((char*) &alarm_thread,sizeof(alarm_thread)); /* For easy debugging */
   alarm_thread_running= 0;
   mysql_cond_signal(&COND_alarm);
   mysql_mutex_unlock(&LOCK_alarm);
@@ -580,7 +605,7 @@ void thr_alarm_kill(my_thread_id thread_id)
   /* Can't do this yet */
 }
 
-sig_handler process_alarm(int sig MY_ATTRIBUTE((unused)))
+sig_handler process_alarm(int sig __attribute__((unused)))
 {
   /* Can't do this yet */
 }
@@ -646,7 +671,7 @@ void init_thr_alarm(uint max_alarm)
 
 void thr_alarm_info(ALARM_INFO *info)
 {
-  memset(info, 0, sizeof(*info));
+  bzero((char*) info, sizeof(*info));
 }
 
 void resize_thr_alarm(uint max_alarms)
@@ -774,7 +799,7 @@ static sig_handler print_signal_warning(int sig)
 #endif /* USE_ONE_SIGNAL_HAND */
 
 
-static void *signal_hand(void *arg MY_ATTRIBUTE((unused)))
+static void *signal_hand(void *arg __attribute__((unused)))
 {
   sigset_t set;
   int sig,error,err_count=0;;
@@ -842,7 +867,7 @@ static void *signal_hand(void *arg MY_ATTRIBUTE((unused)))
 }
 
 
-int main(int argc MY_ATTRIBUTE((unused)),char **argv MY_ATTRIBUTE((unused)))
+int main(int argc __attribute__((unused)),char **argv __attribute__((unused)))
 {
   pthread_t tid;
   pthread_attr_t thr_attr;
@@ -931,7 +956,7 @@ int main(int argc MY_ATTRIBUTE((unused)),char **argv MY_ATTRIBUTE((unused)))
 
 #else /* !defined(DONT_USE_ALARM_THREAD) */
 
-int main(int argc MY_ATTRIBUTE((unused)),char **argv MY_ATTRIBUTE((unused)))
+int main(int argc __attribute__((unused)),char **argv __attribute__((unused)))
 {
   printf("thr_alarm disabled with DONT_USE_THR_ALARM\n");
   exit(1);

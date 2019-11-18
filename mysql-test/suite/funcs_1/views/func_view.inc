@@ -151,9 +151,6 @@
 #
 #
 
-# For TIME to DATETIME/TIMESTAMP conversion:
-SET timestamp=UNIX_TIMESTAMP('2010-01-01');
-
 --disable_warnings
 DROP TABLE IF EXISTS t1_selects, t1_modes, t1_values;
 DROP VIEW  IF EXISTS v1;
@@ -210,8 +207,8 @@ ALTER TABLE t1_values ADD my_binary_30      BINARY(30);
 ALTER TABLE t1_values ADD my_varbinary_1000 VARBINARY(1000);
 ALTER TABLE t1_values ADD my_datetime       DATETIME;
 ALTER TABLE t1_values ADD my_date           DATE;
-ALTER TABLE t1_values ADD ts_dummy          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
-ALTER TABLE t1_values ADD my_timestamp      TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00';
+ALTER TABLE t1_values ADD ts_dummy          TIMESTAMP;
+ALTER TABLE t1_values ADD my_timestamp      TIMESTAMP;
 ALTER TABLE t1_values ADD my_time           TIME;
 ALTER TABLE t1_values ADD my_year           YEAR;
 ALTER TABLE t1_values ADD my_bigint         BIGINT;

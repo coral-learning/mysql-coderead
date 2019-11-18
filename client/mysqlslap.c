@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2005, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2005, 2017, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -81,7 +81,6 @@ TODO:
 #define DELETE_TYPE_REQUIRES_PREFIX 6
 
 #include "client_priv.h"
-#include "my_default.h"
 #include <mysqld_error.h>
 #include <my_dir.h>
 #include <signal.h>
@@ -126,7 +125,6 @@ static char *host= NULL, *opt_password= NULL, *user= NULL,
             *post_system= NULL,
             *opt_mysql_unix_port= NULL;
 static char *opt_plugin_dir= 0, *opt_default_auth= 0;
-static my_bool opt_secure_auth= TRUE;
 static uint opt_enable_cleartext_plugin= 0;
 static my_bool using_opt_enable_cleartext_plugin= 0;
 
@@ -147,7 +145,6 @@ const char *auto_generate_sql_type= "mixed";
 static unsigned long connect_flags= CLIENT_MULTI_RESULTS |
                                     CLIENT_MULTI_STATEMENTS |
                                     CLIENT_REMEMBER_OPTIONS;
-
 
 static int verbose, delimiter_length;
 static uint commit_rate;
@@ -304,13 +301,11 @@ int main(int argc, char **argv)
 
   MY_INIT(argv[0]);
 
-  my_getopt_use_args_separator= TRUE;
   if (load_defaults("my",load_default_groups,&argc,&argv))
   {
     my_end(0);
     exit(1);
   }
-  my_getopt_use_args_separator= FALSE;
   defaults_argv=argv;
   if (get_options(&argc,&argv))
   {
@@ -338,17 +333,11 @@ int main(int argc, char **argv)
     mysql_options(&mysql,MYSQL_OPT_COMPRESS,NullS);
 #ifdef HAVE_OPENSSL
   if (opt_use_ssl)
-  {
     mysql_ssl_set(&mysql, opt_ssl_key, opt_ssl_cert, opt_ssl_ca,
                   opt_ssl_capath, opt_ssl_cipher);
-    mysql_options(&mysql, MYSQL_OPT_SSL_CRL, opt_ssl_crl);
-    mysql_options(&mysql, MYSQL_OPT_SSL_CRLPATH, opt_ssl_crlpath);
-  }
 #endif
   if (opt_protocol)
     mysql_options(&mysql,MYSQL_OPT_PROTOCOL,(char*)&opt_protocol);
-  if (!opt_secure_auth && slap_connect(&mysql))
-    mysql_options(&mysql, MYSQL_SECURE_AUTH,(char*)&opt_secure_auth);
 #ifdef HAVE_SMEM
   if (shared_memory_base_name)
     mysql_options(&mysql,MYSQL_SHARED_MEMORY_BASE_NAME,shared_memory_base_name);
@@ -361,9 +350,6 @@ int main(int argc, char **argv)
   if (opt_default_auth && *opt_default_auth)
     mysql_options(&mysql, MYSQL_DEFAULT_AUTH, opt_default_auth);
 
-  mysql_options(&mysql, MYSQL_OPT_CONNECT_ATTR_RESET, 0);
-  mysql_options4(&mysql, MYSQL_OPT_CONNECT_ATTR_ADD,
-                 "program_name", "mysqlslap");
   if (using_opt_enable_cleartext_plugin)
     mysql_options(&mysql, MYSQL_ENABLE_CLEARTEXT_PLUGIN, 
                   (char*) &opt_enable_cleartext_plugin);
@@ -371,7 +357,8 @@ int main(int argc, char **argv)
   {
     if (!(mysql_connect_ssl_check(&mysql, host, user, opt_password,
                                   NULL, opt_mysql_port, opt_mysql_unix_port,
-                                  connect_flags, opt_ssl_required)))
+                                  connect_flags,
+                                  opt_ssl_mode == SSL_MODE_REQUIRED)))
     {
       fprintf(stderr,"%s: Error when connecting to server: %s\n",
               my_progname,mysql_error(&mysql));
@@ -454,7 +441,7 @@ void concurrency_loop(MYSQL *mysql, uint current, option_string *eptr)
   head_sptr= (stats *)my_malloc(sizeof(stats) * iterations, 
                                 MYF(MY_ZEROFILL|MY_FAE|MY_WME));
 
-  memset(&conclusion, 0, sizeof(conclusions));
+  bzero(&conclusion, sizeof(conclusions));
 
   if (auto_actual_queries)
     client_limit= auto_actual_queries;
@@ -654,7 +641,7 @@ static struct my_option my_long_options[] =
     0, 0, 0, 0, 0, 0},
   {"password", 'p',
     "Password to use when connecting to server. If password is not given it's "
-      "asked from the tty.", 0, 0, 0, GET_PASSWORD, OPT_ARG, 0, 0, 0, 0, 0, 0},
+      "asked from the tty.", 0, 0, 0, GET_STR, OPT_ARG, 0, 0, 0, 0, 0, 0},
 #ifdef __WIN__
   {"pipe", 'W', "Use named pipes to connect to server.", 0, 0, 0, GET_NO_ARG,
     NO_ARG, 0, 0, 0, 0, 0, 0},
@@ -687,9 +674,6 @@ static struct my_option my_long_options[] =
   {"query", 'q', "Query to run or file containing query to run.",
     &user_supplied_query, &user_supplied_query,
     0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"secure-auth", OPT_SECURE_AUTH, "Refuse client connecting to server if it"
-    " uses old (pre-4.1.1) protocol.", &opt_secure_auth,
-    &opt_secure_auth, 0, GET_BOOL, NO_ARG, 1, 0, 0, 0, 0, 0},
 #ifdef HAVE_SMEM
   {"shared-memory-base-name", OPT_SHARED_MEMORY_BASE_NAME,
     "Base name of shared memory.", &shared_memory_base_name,
@@ -736,7 +720,7 @@ static void usage(void)
 
 
 static my_bool
-get_one_option(int optid, const struct my_option *opt MY_ATTRIBUTE((unused)),
+get_one_option(int optid, const struct my_option *opt __attribute__((unused)),
                char *argument)
 {
   DBUG_ENTER("get_one_option");

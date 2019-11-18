@@ -1,4 +1,4 @@
-# Copyright (c) 2006, 2016, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2006, 2018, Oracle and/or its affiliates. All rights reserved.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,11 +18,6 @@ CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
 if("${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}" GREATER 2.6)
  CMAKE_POLICY(VERSION 2.8)
 endif()
-
-# We use CMAKE_SHARED_LIBRARY_<Lang>_FLAGS. See cmake --help-policy CMP0018
-IF(CMAKE_VERSION VERSION_GREATER "2.8.8")
-  CMAKE_POLICY(SET CMP0018 OLD)
-ENDIF()
 
 # We use PROPERTIES LINK_INTERFACE_LIBRARIES. See cmake --help-policy CMP0022
 IF(CMAKE_VERSION VERSION_EQUAL "2.8.12" OR
@@ -124,20 +119,10 @@ IF(CMAKE_BUILD_TYPE MATCHES "Debug" OR WITH_DEBUG)
   ENDIF()
 ENDIF()
 
-OPTION(WITH_DEFAULT_COMPILER_OPTIONS
-  "Use flags from cmake/build_configurations/compiler_options.cmake"
-  ON)
-OPTION(WITH_DEFAULT_FEATURE_SET
-  "Use feature set in cmake/build_configurations/feature_set.cmake"
-  ON)
 IF(BUILD_CONFIG)
   INCLUDE(
   ${CMAKE_SOURCE_DIR}/cmake/build_configurations/${BUILD_CONFIG}.cmake)
 ENDIF()
-
-#cmake on 64bit windows/mac/solaris doesn't set CMAKE_SYSTEM_PROCESSOR correctly
-SET(MYSQL_MACHINE_TYPE ${CMAKE_SYSTEM_PROCESSOR})
-
 
 # Include the platform-specific file. To allow exceptions, this code
 # looks for files in order of how specific they are. If there is, for
@@ -157,34 +142,15 @@ FOREACH(_base
 ENDFOREACH()
 
 
-IF(UNIX)
-  OPTION(WITH_INNODB_MEMCACHED "" OFF)
-  OPTION(ENABLE_MEMCACHED_SASL "Enable SASL on InnoDB Memcached" OFF)
-  OPTION(ENABLE_MEMCACHED_SASL_PWDB "Enable SASL on InnoDB Memcached" OFF)
-ELSE()
-  OPTION(WITH_INNODB_MEMCACHED "" OFF)
-ENDIF()
- 
 # Following autotools tradition, add preprocessor definitions
 # specified in environment variable CPPFLAGS
 IF(DEFINED ENV{CPPFLAGS})
   ADD_DEFINITIONS($ENV{CPPFLAGS})
 ENDIF()
 
-INCLUDE(CheckTypeSize)
-CHECK_TYPE_SIZE("void *" SIZEOF_VOIDP)
-IF(WITH_DEFAULT_COMPILER_OPTIONS)
-  INCLUDE(${CMAKE_SOURCE_DIR}/cmake/build_configurations/compiler_options.cmake)
-ENDIF()
-IF(WITH_DEFAULT_FEATURE_SET)
-  INCLUDE(${CMAKE_SOURCE_DIR}/cmake/build_configurations/feature_set.cmake)
-ENDIF()
-
 # Add macros
 INCLUDE(character_sets)
-INCLUDE(cpu_info)
 INCLUDE(zlib)
-INCLUDE(libevent)
 INCLUDE(ssl)
 INCLUDE(readline)
 INCLUDE(mysql_version)
@@ -208,9 +174,7 @@ OPTION(WITHOUT_SERVER OFF)
 IF(UNIX)
   OPTION(WITH_VALGRIND "Valgrind instrumentation" OFF)
 ENDIF()
-IF(NOT WITHOUT_SERVER)
-  OPTION (WITH_UNIT_TESTS "Compile MySQL with unit tests" ON)
-ENDIF()
+OPTION (WITH_UNIT_TESTS "Compile MySQL with unit tests" ON)
 MARK_AS_ADVANCED(CYBOZU BACKUP_TEST WITHOUT_SERVER DISABLE_SHARED)
 
 
@@ -288,33 +252,45 @@ IF (WITH_ASAN)
   ENDIF()
 ENDIF()
 
-
-OPTION(ENABLE_DEBUG_SYNC "Enable debug sync (debug builds only)" ON) 
-IF(ENABLE_DEBUG_SYNC) 
-  SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DENABLED_DEBUG_SYNC") 
-  SET(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DENABLED_DEBUG_SYNC") 
-ENDIF() 
+# Always enable debug sync for debug builds.
+SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DENABLED_DEBUG_SYNC")
+SET(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DENABLED_DEBUG_SYNC")
  
-# Older versions of ccache must be disabled: export CCACHE_DISABLE=1
-# See http://www.cmake.org/Wiki/CTest/Coverage
 OPTION(ENABLE_GCOV "Enable gcov (debug, Linux builds only)" OFF)
 IF (ENABLE_GCOV AND NOT WIN32 AND NOT APPLE)
-  SET(CMAKE_CXX_FLAGS_DEBUG
-    "${CMAKE_CXX_FLAGS_DEBUG} -fprofile-arcs -ftest-coverage -DHAVE_GCOV")
-  SET(CMAKE_C_FLAGS_DEBUG
-    "${CMAKE_C_FLAGS_DEBUG} -fprofile-arcs -ftest-coverage -DHAVE_GCOV")
-  SET(CMAKE_EXE_LINKER_FLAGS_DEBUG
-    "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -fprofile-arcs -ftest-coverage -lgcov")
+  SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fprofile-arcs -ftest-coverage")
+  SET(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -fprofile-arcs -ftest-coverage")
+  SET(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -fprofile-arcs -ftest-coverage -lgcov")
 ENDIF()
 
-OPTION(ENABLE_GPROF "Enable gprof (optimized, Linux builds only)" OFF)
-IF (ENABLE_GPROF AND NOT WIN32 AND NOT APPLE)
+IF(CMAKE_SYSTEM_NAME MATCHES "Linux")
+  OPTION(REPRODUCIBLE_BUILD "Take extra pains to make build result independent of build location and time" OFF)
+ENDIF()
+IF(REPRODUCIBLE_BUILD)
+  SET(DEBUG_PREFIX_FLAGS
+    "-fdebug-prefix-map=${CMAKE_SOURCE_DIR}/=./ -fdebug-prefix-map=${CMAKE_CURRENT_BINARY_DIR}=./obj")
+
+  # See if -fdebug-prefix= commands are included in the debug output,
+  # making the build unreproducible with switches recorded.
+  # See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=69821.
+  EXECUTE_PROCESS(COMMAND ${CMAKE_C_COMPILER} -g3 -x c -S -fdebug-prefix-map=foo=bar -o - -
+    INPUT_FILE /dev/null OUTPUT_VARIABLE DEBUG_PREFIX_MAP_RESULT)
+  IF(DEBUG_PREFIX_MAP_RESULT MATCHES "foo=bar")
+    SET(DEBUG_PREFIX_FLAGS "${DEBUG_PREFIX_FLAGS} -gno-record-gcc-switches")
+  ENDIF()
+
+  SET(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${DEBUG_PREFIX_FLAGS}")
   SET(CMAKE_C_FLAGS_RELWITHDEBINFO
-    "${CMAKE_C_FLAGS_RELWITHDEBINFO} -pg")
+    "${CMAKE_C_FLAGS_RELWITHDEBINFO} ${DEBUG_PREFIX_FLAGS}")
+  SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${DEBUG_PREFIX_FLAGS}")
   SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO
-    "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -pg")
-  SET(CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO
-    "${CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO} -pg")
+    "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} ${DEBUG_PREFIX_FLAGS}")
+
+  SET(CMAKE_C_LINK_FLAGS "${CMAKE_C_LINK_FLAGS} -Wl,--build-id=none")
+  SET(CMAKE_CXX_LINK_FLAGS "${CMAKE_C_LINK_FLAGS} -Wl,--build-id=none")
+
+  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE
+    "${CMAKE_SOURCE_DIR}/scripts/invoke-with-relative-paths.pl")
 ENDIF()
 
 OPTION(ENABLED_LOCAL_INFILE
@@ -323,15 +299,6 @@ MARK_AS_ADVANCED(ENABLED_LOCAL_INFILE)
 
 OPTION(WITH_FAST_MUTEXES "Compile with fast mutexes" OFF)
 MARK_AS_ADVANCED(WITH_FAST_MUTEXES)
-
-OPTION(OPTIMIZER_TRACE "Support tracing of Optimizer" ON)
-
-OPTION(INNODB_COMPILER_HINTS "Compile InnoDB with compiler hints" ON)
-MARK_AS_ADVANCED(INNODB_COMPILER_HINTS)
-
-OPTION(INNODB_PAGE_ATOMIC_REF_COUNT "Use atomics for the page reference count"
-       ON)
-MARK_AS_ADVANCED(INNODB_PAGE_ATOMIC_REF_COUNT)
 
 # Set DBUG_OFF and other optional release-only flags for non-debug project types
 FOREACH(BUILD_TYPE RELEASE RELWITHDEBINFO MINSIZEREL)
@@ -359,7 +326,7 @@ ENDIF()
 
 # Add safemutex for debug configurations, except on Windows
 # (safemutex has never worked on Windows)
-IF(WITH_DEBUG AND NOT WIN32 AND NOT WITH_INNODB_MEMCACHED)
+IF(WITH_DEBUG AND NOT WIN32)
   FOREACH(LANG C CXX)
       SET(CMAKE_${LANG}_FLAGS_DEBUG
           "${CMAKE_${LANG}_FLAGS_DEBUG} -DSAFE_MUTEX")
@@ -415,12 +382,16 @@ INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR}/include)
 
 # Add bundled or system zlib.
 MYSQL_CHECK_ZLIB_WITH_COMPRESS()
-# Add bundled yassl/taocrypt or system openssl.
+IF(BUILD_BUNDLED_ZLIB)
+  INCLUDE_DIRECTORIES(SYSTEM
+    ${CMAKE_CURRENT_SOURCE_DIR}/zlib
+    ${CMAKE_CURRENT_BINARY_DIR}/zlib
+    )
+ENDIF()
+# Optionally add bundled yassl/taocrypt or system openssl.
 MYSQL_CHECK_SSL()
-# Add system/bundled editline.
-MYSQL_CHECK_EDITLINE()
-# Add libevent
-MYSQL_CHECK_LIBEVENT()
+# Add readline or libedit.
+MYSQL_CHECK_READLINE()
 
 #
 # Setup maintainer mode options by the end. Platform checks are
@@ -435,24 +406,10 @@ OPTION(MYSQL_MAINTAINER_MODE
 
 INCLUDE(maintainer)
 
-IF(WITH_UNIT_TESTS)
- ENABLE_TESTING()
-ENDIF()
-
-OPTION(WITH_SYMVER16
-  "Export libmysqlclient_16 and libmysqlclient_18 symbol versions" OFF)
-
-IF(WITH_SYMVER16)
-  ADD_DEFINITIONS(-DEXPORT_SYMVER16)
-ENDIF()
-
 IF(NOT WITHOUT_SERVER)
-  SET (MYSQLD_STATIC_PLUGIN_LIBS "" CACHE INTERNAL "")
-  # Add storage engines and plugins.
-  CONFIGURE_PLUGINS()
-ELSE()
-  # We may still want Cluster client libraries, use -DWITH_NDBCLUSTER=1
-  ADD_SUBDIRECTORY(storage/ndb)
+SET (MYSQLD_STATIC_PLUGIN_LIBS "" CACHE INTERNAL "")
+ # Add storage engines and plugins.
+ CONFIGURE_PLUGINS()
 ENDIF()
 
 ADD_SUBDIRECTORY(include)
@@ -461,57 +418,42 @@ ADD_SUBDIRECTORY(strings)
 ADD_SUBDIRECTORY(vio)
 ADD_SUBDIRECTORY(regex)
 ADD_SUBDIRECTORY(mysys)
-ADD_SUBDIRECTORY(mysys_ssl)
 ADD_SUBDIRECTORY(libmysql)
 
 IF(WITH_UNIT_TESTS)
-  # Visual Studio 11 needs this extra flag in order to compile gmock.
-  IF(WIN32)
-    ADD_DEFINITIONS( /D _VARIADIC_MAX=10 )
-  ENDIF()
-  # libc++ doesn't have tuple in tr1
-  IF(HAVE_LLVM_LIBCPP)
-    ADD_DEFINITIONS(-DGTEST_USE_OWN_TR1_TUPLE=1)
-  ENDIF()
-  ADD_SUBDIRECTORY(unittest)
-  ADD_SUBDIRECTORY(unittest/examples)
+ ENABLE_TESTING()
+ENDIF()
+IF(WITH_UNIT_TESTS)
   ADD_SUBDIRECTORY(unittest/mytap)
-  ADD_SUBDIRECTORY(unittest/mytap/t)
+  ADD_SUBDIRECTORY(unittest/mysys)
+  ADD_SUBDIRECTORY(unittest/my_decimal)
 ENDIF()
 
 ADD_SUBDIRECTORY(extra)
-ADD_SUBDIRECTORY(client)
-ADD_SUBDIRECTORY(sql/share)
-ADD_SUBDIRECTORY(libservices)
-
-IF(UNIX)
-  ADD_SUBDIRECTORY(man)
-ENDIF()
-
 IF(NOT WITHOUT_SERVER)
   ADD_SUBDIRECTORY(tests)
+  ADD_SUBDIRECTORY(client)
   ADD_SUBDIRECTORY(sql)
+  ADD_SUBDIRECTORY(sql/share)
+  ADD_SUBDIRECTORY(libservices)
   OPTION (WITH_EMBEDDED_SERVER "Compile MySQL with embedded server" OFF)
   IF(WITH_EMBEDDED_SERVER) 
    ADD_SUBDIRECTORY(libmysqld)
    ADD_SUBDIRECTORY(libmysqld/examples)
   ENDIF(WITH_EMBEDDED_SERVER)
-ENDIF()
 
-# scripts/mysql_config depends on client and server targets loaded above.
-# It is referenced by some of the directories below, so we insert it here.
-ADD_SUBDIRECTORY(scripts)
-
-IF(NOT WITHOUT_SERVER)
   ADD_SUBDIRECTORY(mysql-test)
   ADD_SUBDIRECTORY(mysql-test/lib/My/SafeProcess)
   ADD_SUBDIRECTORY(support-files)
+  ADD_SUBDIRECTORY(scripts)
   ADD_SUBDIRECTORY(sql-bench)
+  IF(UNIX)
+    ADD_SUBDIRECTORY(man)
+  ENDIF()
   IF(EXISTS ${CMAKE_SOURCE_DIR}/internal/CMakeLists.txt)
     ADD_SUBDIRECTORY(internal)
   ENDIF()
   ADD_SUBDIRECTORY(packaging/rpm-oel)
-  ADD_SUBDIRECTORY(packaging/rpm-fedora)
   ADD_SUBDIRECTORY(packaging/rpm-sles)
   ADD_SUBDIRECTORY(packaging/rpm-docker)
 ENDIF()
@@ -572,11 +514,15 @@ IF(NOT INSTALL_LAYOUT MATCHES "RPM")
   )
   INSTALL(FILES README DESTINATION ${INSTALL_DOCREADMEDIR} COMPONENT Readme)
   INSTALL(FILES ${CMAKE_BINARY_DIR}/Docs/INFO_SRC ${CMAKE_BINARY_DIR}/Docs/INFO_BIN DESTINATION ${INSTALL_DOCDIR})
+  IF(UNIX)
+    INSTALL(FILES Docs/INSTALL-BINARY DESTINATION ${INSTALL_DOCREADMEDIR} COMPONENT Readme)
+  ENDIF()
   # MYSQL_DOCS_LOCATON is used in "make dist", points to the documentation directory
   SET(MYSQL_DOCS_LOCATION "" CACHE PATH "Location from where documentation is copied")
   MARK_AS_ADVANCED(MYSQL_DOCS_LOCATION)
   INSTALL(DIRECTORY Docs/ DESTINATION ${INSTALL_DOCDIR}
     COMPONENT Documentation
+    PATTERN "INSTALL-BINARY" EXCLUDE
     PATTERN "Makefile.*" EXCLUDE
     PATTERN "glibc*" EXCLUDE
     PATTERN "linuxthreads.txt" EXCLUDE

@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef DLLIST_HPP
 #define DLLIST_HPP
@@ -34,16 +33,7 @@ public:
   struct HeadPOD {
     Uint32 firstItem;
     inline bool isEmpty() const { return firstItem == RNIL; }
-    inline void init () { 
-      firstItem = RNIL; 
-#ifdef VM_TRACE
-      in_use = false;
-#endif
-    }
-
-#ifdef VM_TRACE
-    bool in_use;
-#endif
+    inline void init () { firstItem = RNIL; }
   };
 
   struct Head : public HeadPOD 
@@ -177,16 +167,9 @@ public:
     : DLListImpl<P,T,U>(thePool), src(_src)
   {
     this->head = src;
-#ifdef VM_TRACE
-    assert(src.in_use == false);
-    src.in_use = true;
-#endif
   }
   
   ~LocalDLListImpl(){
-#ifdef VM_TRACE
-    assert(src.in_use == true);
-#endif
     src = this->head;
   }
 private:
@@ -198,9 +181,6 @@ inline
 DLListImpl<P,T,U>::DLListImpl(P & _pool)
   : thePool(_pool)
 {
-  // Require user defined constructor on T since we fiddle
-  // with T's members
-  ASSERT_TYPE_HAS_CONSTRUCTOR(T);
 }
 
 template <typename P, typename T, typename U>

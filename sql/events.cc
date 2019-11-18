@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2005, 2015, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2005, 2013, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -308,7 +308,6 @@ Events::create_event(THD *thd, Event_parse_data *parse_data,
 {
   bool ret;
   bool save_binlog_row_based, event_already_exists;
-  ulong save_binlog_format= thd->variables.binlog_format;
   DBUG_ENTER("Events::create_event");
 
   if (check_if_system_tables_error())
@@ -342,15 +341,10 @@ Events::create_event(THD *thd, Event_parse_data *parse_data,
   */
   if ((save_binlog_row_based= thd->is_current_stmt_binlog_format_row()))
     thd->clear_current_stmt_binlog_format_row();
-  thd->variables.binlog_format= BINLOG_FORMAT_STMT;
-
 
   if (lock_object_name(thd, MDL_key::EVENT,
                        parse_data->dbname.str, parse_data->name.str))
-  {
-    ret= true;
-    goto err;
-  }
+    DBUG_RETURN(TRUE);
 
   /* On error conditions my_error() is called so no need to handle here */
   if (!(ret= db_repository->create_event(thd, parse_data, if_not_exists,
@@ -395,22 +389,17 @@ Events::create_event(THD *thd, Event_parse_data *parse_data,
         ret= true;
       }
       else
-      {
-        thd->add_to_binlog_accessed_dbs(parse_data->dbname.str);
         /*
           If the definer is not set or set to CURRENT_USER, the value of CURRENT_USER
           will be written into the binary log as the definer for the SQL thread.
         */
         ret= write_bin_log(thd, TRUE, log_query.c_ptr(), log_query.length());
-      }
     }
   }
-err:
   /* Restore the state of binlog format */
   DBUG_ASSERT(!thd->is_current_stmt_binlog_format_row());
   if (save_binlog_row_based)
     thd->set_current_stmt_binlog_format_row();
-  thd->variables.binlog_format= save_binlog_format;
 
   DBUG_RETURN(ret);
 }
@@ -441,7 +430,6 @@ Events::update_event(THD *thd, Event_parse_data *parse_data,
 {
   int ret;
   bool save_binlog_row_based;
-  ulong save_binlog_format= thd->variables.binlog_format;
   Event_queue_element *new_element;
 
   DBUG_ENTER("Events::update_event");
@@ -490,14 +478,10 @@ Events::update_event(THD *thd, Event_parse_data *parse_data,
   */
   if ((save_binlog_row_based= thd->is_current_stmt_binlog_format_row()))
     thd->clear_current_stmt_binlog_format_row();
-  thd->variables.binlog_format= BINLOG_FORMAT_STMT;
 
   if (lock_object_name(thd, MDL_key::EVENT,
                        parse_data->dbname.str, parse_data->name.str))
-  {
-    ret= true;
-    goto err;
-  }
+    DBUG_RETURN(TRUE);
 
   /* On error conditions my_error() is called so no need to handle here */
   if (!(ret= db_repository->update_event(thd, parse_data,
@@ -524,20 +508,13 @@ Events::update_event(THD *thd, Event_parse_data *parse_data,
                                   new_element);
       /* Binlog the alter event. */
       DBUG_ASSERT(thd->query() && thd->query_length());
-
-      thd->add_to_binlog_accessed_dbs(parse_data->dbname.str);
-      if (new_dbname)
-        thd->add_to_binlog_accessed_dbs(new_dbname->str);
-
       ret= write_bin_log(thd, TRUE, thd->query(), thd->query_length());
     }
   }
-err:
   /* Restore the state of binlog format */
   DBUG_ASSERT(!thd->is_current_stmt_binlog_format_row());
   if (save_binlog_row_based)
     thd->set_current_stmt_binlog_format_row();
-  thd->variables.binlog_format= save_binlog_format;
 
   DBUG_RETURN(ret);
 }
@@ -597,8 +574,6 @@ Events::drop_event(THD *thd, LEX_STRING dbname, LEX_STRING name, bool if_exists)
       event_queue->drop_event(thd, dbname, name);
     /* Binlog the drop event. */
     DBUG_ASSERT(thd->query() && thd->query_length());
-
-    thd->add_to_binlog_accessed_dbs(dbname.str);
     ret= write_bin_log(thd, TRUE, thd->query(), thd->query_length());
   }
   /* Restore the state of binlog format */
@@ -775,7 +750,7 @@ Events::show_create_event(THD *thd, LEX_STRING dbname, LEX_STRING name)
 */
 
 int
-Events::fill_schema_events(THD *thd, TABLE_LIST *tables, Item * /* cond */)
+Events::fill_schema_events(THD *thd, TABLE_LIST *tables, COND * /* cond */)
 {
   char *db= NULL;
   int ret;
@@ -841,16 +816,7 @@ Events::init(my_bool opt_noacl_or_bootstrap)
   */
   thd->thread_stack= (char*) &thd;
   thd->store_globals();
-  /*
-    Set current time for the thread that handles events.
-    Current time is stored in data member start_time of THD class.
-    Subsequently, this value is used to check whether event was expired
-    when make loading events from storage. Check for event expiration time
-    is done at Event_queue_element::compute_next_execution_time() where
-    event's status set to Event_parse_data::DISABLED and dropped flag set
-    to true if event was expired.
-  */
-  thd->set_time();
+
   /*
     We will need Event_db_repository anyway, even if the scheduler is
     disabled - to perform events DDL.
@@ -980,37 +946,23 @@ static PSI_thread_info all_events_threads[]=
   { &key_thread_event_scheduler, "event_scheduler", PSI_FLAG_GLOBAL},
   { &key_thread_event_worker, "event_worker", 0}
 };
-#endif /* HAVE_PSI_INTERFACE */
-
-PSI_stage_info stage_waiting_on_empty_queue= { 0, "Waiting on empty queue", 0};
-PSI_stage_info stage_waiting_for_next_activation= { 0, "Waiting for next activation", 0};
-PSI_stage_info stage_waiting_for_scheduler_to_stop= { 0, "Waiting for the scheduler to stop", 0};
-
-#ifdef HAVE_PSI_INTERFACE
-PSI_stage_info *all_events_stages[]=
-{
-  & stage_waiting_on_empty_queue,
-  & stage_waiting_for_next_activation,
-  & stage_waiting_for_scheduler_to_stop
-};
 
 static void init_events_psi_keys(void)
 {
   const char* category= "sql";
   int count;
 
+  if (PSI_server == NULL)
+    return;
+
   count= array_elements(all_events_mutexes);
-  mysql_mutex_register(category, all_events_mutexes, count);
+  PSI_server->register_mutex(category, all_events_mutexes, count);
 
   count= array_elements(all_events_conds);
-  mysql_cond_register(category, all_events_conds, count);
+  PSI_server->register_cond(category, all_events_conds, count);
 
   count= array_elements(all_events_threads);
-  mysql_thread_register(category, all_events_threads, count);
-
-  count= array_elements(all_events_stages);
-  mysql_stage_register(category, all_events_stages, count);
-
+  PSI_server->register_thread(category, all_events_threads, count);
 }
 #endif /* HAVE_PSI_INTERFACE */
 
@@ -1110,19 +1062,13 @@ Events::load_events_from_db(THD *thd)
     NOTE: even if we run in read-only mode, we should be able to lock the
     mysql.event table for writing. In order to achieve this, we should call
     mysql_lock_tables() under the super user.
-
-    Same goes for transaction access mode.
-    Temporarily reset it to read-write.
   */
 
   saved_master_access= thd->security_ctx->master_access;
   thd->security_ctx->master_access |= SUPER_ACL;
-  bool save_tx_read_only= thd->tx_read_only;
-  thd->tx_read_only= false;
 
   ret= db_repository->open_event_table(thd, TL_WRITE, &table);
 
-  thd->tx_read_only= save_tx_read_only;
   thd->security_ctx->master_access= saved_master_access;
 
   if (ret)
@@ -1131,15 +1077,12 @@ Events::load_events_from_db(THD *thd)
     DBUG_RETURN(TRUE);
   }
 
-  if (init_read_record(&read_record_info, thd, table, NULL, 0, 1, FALSE))
-  {
-    sql_print_error("Event Scheduler: Error while starting read of mysql.event");
-    DBUG_RETURN(TRUE);
-  }
+  init_read_record(&read_record_info, thd, table, NULL, 0, 1, FALSE);
   while (!(read_record_info.read_record(&read_record_info)))
   {
     Event_queue_element *et;
-    bool created, dropped;
+    bool created;
+    bool drop_on_completion;
 
     if (!(et= new Event_queue_element))
       goto end;
@@ -1154,13 +1097,10 @@ Events::load_events_from_db(THD *thd)
       delete et;
       goto end;
     }
+    drop_on_completion= (et->on_completion ==
+                         Event_parse_data::ON_COMPLETION_DROP);
 
-    /**
-      Since the Event_queue_element object could be deleted inside
-      Event_queue::create_event we should save the value of dropped flag
-      into the temporary variable.
-    */
-    dropped= et->dropped;
+
     if (event_queue->create_event(thd, et, &created))
     {
       /* Out of memory */
@@ -1169,7 +1109,7 @@ Events::load_events_from_db(THD *thd)
     }
     if (created)
       count++;
-    else if (dropped)
+    else if (drop_on_completion)
     {
       /*
         If not created, a stale event - drop if immediately if

@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -90,7 +90,7 @@ int main(int argc, char **argv)
   log_filename=myisam_log_filename;
   get_options(&argc,&argv);
   /* Number of MyISAM files we can have open at one time */
-  max_files= (my_set_max_open_files(MY_MIN(max_files, 8)) - 6) / 2;
+  max_files= (my_set_max_open_files(min(max_files,8))-6)/2;
   if (update)
     printf("Trying to %s MyISAM files according to log '%s'\n",
 	   (recover ? "recover" : "update"),log_filename);
@@ -327,7 +327,7 @@ static int examine_log(char * file_name, char **table_names)
   }
 
   init_io_cache(&cache,file,0,READ_CACHE,start_offset,0,MYF(0));
-  memset(com_count, 0, sizeof(com_count));
+  bzero((uchar*) com_count,sizeof(com_count));
   init_tree(&tree,0,0,sizeof(file_info),(qsort_cmp2) file_info_compare,1,
 	    (tree_element_free) file_info_free, NULL);
   (void) init_key_cache(dflt_key_cache,KEY_CACHE_BLOCK_SIZE,KEY_CACHE_SIZE,
@@ -695,7 +695,7 @@ static int read_string(IO_CACHE *file, register uchar* *to, register uint length
 }				/* read_string */
 
 
-static int file_info_compare(void* cmp_arg MY_ATTRIBUTE((unused)),
+static int file_info_compare(void* cmp_arg __attribute__((unused)),
 			     void *a, void *b)
 {
   long lint;
@@ -709,7 +709,7 @@ static int file_info_compare(void* cmp_arg MY_ATTRIBUTE((unused)),
 	/* ARGSUSED */
 
 static int test_if_open (struct file_info *key,
-			 element_count count MY_ATTRIBUTE((unused)),
+			 element_count count __attribute__((unused)),
 			 struct test_if_open_param *param)
 {
   if (!strcmp(key->name,param->name) && key->id > param->max_id)
@@ -737,7 +737,7 @@ static void fix_blob_pointers(MI_INFO *info, uchar *record)
 	/* ARGSUSED */
 
 static int test_when_accessed (struct file_info *key,
-			       element_count count MY_ATTRIBUTE((unused)),
+			       element_count count __attribute__((unused)),
 			       struct st_access_param *access_param)
 {
   if (key->accessed < access_param->min_accessed && ! key->closed)

@@ -214,8 +214,7 @@ XA START 'xid1';
 # Sending:
 INSERT INTO t2 SELECT a FROM t1;
 # Connection default
-# Waiting for until a transaction with 'INSERT SELECT'
-# will be locked inside innodb subsystem.
+# Waiting until INSERT ... is blocked
 DELETE FROM t1;
 # Connection con2
 # Reaping: INSERT INTO t2 SELECT a FROM t1

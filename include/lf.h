@@ -1,4 +1,4 @@
-/* Copyright (c) 2007, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2007, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -16,10 +16,7 @@
 #ifndef _lf_h
 #define _lf_h
 
-#include "my_global.h"
-#include "my_atomic.h"
-#include "my_sys.h"
-#include "hash.h"
+#include <my_atomic.h>
 
 C_MODE_START
 
@@ -114,12 +111,13 @@ typedef struct {
 typedef struct {
   void * volatile pin[LF_PINBOX_PINS];
   LF_PINBOX *pinbox;
+  void  **stack_ends_here;
   void  *purgatory;
   uint32 purgatory_count;
   uint32 volatile link;
 /* we want sizeof(LF_PINS) to be 64 to avoid false sharing */
-#if SIZEOF_INT*2+SIZEOF_CHARP*(LF_PINBOX_PINS+2) != 64
-  char pad[64-sizeof(uint32)*2-sizeof(void*)*(LF_PINBOX_PINS+2)];
+#if SIZEOF_INT*2+SIZEOF_CHARP*(LF_PINBOX_PINS+3) != 64
+  char pad[64-sizeof(uint32)*2-sizeof(void*)*(LF_PINBOX_PINS+3)];
 #endif
 } LF_PINS;
 
@@ -140,7 +138,7 @@ typedef struct {
 #if defined(__GNUC__) && defined(MY_LF_EXTRA_DEBUG)
 #define LF_REQUIRE_PINS(N)                                      \
   static const char require_pins[LF_PINBOX_PINS-N]              \
-                             MY_ATTRIBUTE ((unused));          \
+                             __attribute__ ((unused));          \
   static const int LF_NUM_PINS_IN_THIS_FILE= N;
 #define _lf_pin(PINS, PIN, ADDR)                                \
   (                                                             \
@@ -189,8 +187,6 @@ typedef struct st_lf_allocator {
   uchar * volatile top;
   uint element_size;
   uint32 volatile mallocs;
-  void (*constructor)(uchar *); /* called, when an object is malloc()'ed */
-  void (*destructor)(uchar *);  /* called, when an object is free()'d    */
 } LF_ALLOCATOR;
 
 void lf_alloc_init(LF_ALLOCATOR *allocator, uint size, uint free_ptr_offset);
@@ -213,10 +209,18 @@ lock_wrap(lf_alloc_new, void *,
           (pins),
           &pins->pinbox->pinarray.lock)
 
+C_MODE_END
+
+/*
+  extendible hash, lf_hash.c
+*/
+#include <hash.h>
+
+C_MODE_START
+
 #define LF_HASH_UNIQUE 1
 
-/* lf_hash overhead per element (that is, sizeof(LF_SLIST) */
-extern const int LF_HASH_OVERHEAD;
+/* lf_hash overhead per element is sizeof(LF_SLIST). */
 
 typedef struct {
   LF_DYNARRAY array;                    /* hash itself */
@@ -237,9 +241,6 @@ void lf_hash_destroy(LF_HASH *hash);
 int lf_hash_insert(LF_HASH *hash, LF_PINS *pins, const void *data);
 void *lf_hash_search(LF_HASH *hash, LF_PINS *pins, const void *key, uint keylen);
 int lf_hash_delete(LF_HASH *hash, LF_PINS *pins, const void *key, uint keylen);
-typedef int lf_hash_match_func(const uchar *el);
-void *lf_hash_random_match(LF_HASH *hash, LF_PINS *pins,
-                           lf_hash_match_func *match, uint rand_val);
 /*
   shortcut macros to access underlying pinbox functions from an LF_HASH
   see _lf_pinbox_get_pins() and _lf_pinbox_put_pins()

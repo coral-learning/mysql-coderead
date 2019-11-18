@@ -1,6 +1,6 @@
-#!/usr/bin/perl
+#!@PERL_PATH@
 
-# Copyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Library General Public
@@ -53,7 +53,7 @@ BEGIN {
         $MYSQLDUMP = '@bindir@/mysqldump';
                                          #path to mysqldump executable
 
-        $MYSQLADMIN= 'http://example.com/MySQLadmin';
+        $MYSQLADMIN= 'http://foobar.com/MySQLadmin';
                                          #URL of CGI for manipulating
                                          #the temporary grant-tables
 }
@@ -477,15 +477,22 @@ MySQLaccess::Report::Print_Header();
 # *****************************
 # Read configuration-file
   MySQLaccess::Debug::Print(1, "Reading configuration file...");
-  if (-f "./$script_conf") {
-     require "./$script_conf";
-  }
-  elsif (-f "@sysconfdir@/$script_conf") {
+  if (-f "@sysconfdir@/$script_conf") {
+     print "Configuration file '$script_conf' is found in '@sysconfdir@/'\n";
      require "@sysconfdir@/$script_conf";
   }
   elsif (-f "/etc/$script_conf") {
+     print "Configuration file '$script_conf' is found in '/etc/'\n";
      require "/etc/$script_conf";
   }
+  elsif (-f "./$script_conf") {
+     print "\nERROR! Configuration file '$script_conf' is found in the current ";
+     print "directory.\nThe permissible locations for this file are either ";
+     print "@sysconfdir@/ or /etc/\n";
+     print "Please move it to one of these locations and retry.\n\n";
+     exit 0;
+  }
+
 
 # ****************************
 # Read in all parameters
@@ -2393,8 +2400,7 @@ sub Print_Header {
     print "$MySQLaccess::script Version $MySQLaccess::VERSION\n"
          ."By RUG-AIV, by Yves Carlier (Yves.Carlier\@rug.ac.be)\n"
          ."Changes by Steve Harvey (sgh\@vex.net)\n"
-         ."This software comes with ABSOLUTELY NO WARRANTY.\n"
-	 ."\nWarning: $MySQLaccess::script is deprecated and will be removed in a future version.\n";
+         ."This software comes with ABSOLUTELY NO WARRANTY.\n";
     }
     if ($MySQLaccess::CGI) { #CGI-BIN mode
     print "content-type: text/html\n\n" 
@@ -2408,7 +2414,6 @@ sub Print_Header {
          ."By RUG-AIV, by Yves Carlier (<a href=mailto:Yves.Carlier\@rug.ac.be>Yves.Carlier\@rug.ac.be</a>)<BR>\n"
          ."Changes by Steve Harvey (<a href=mailto:sgh\@vex.net>sgh\@vex.net</a>)<BR>\n"
          ."This software comes with ABSOLUTELY NO WARRANTY.<BR>\n"
-         ."<BR>\nWarning: $MySQLaccess::script is deprecated and will be removed in a future version.<BR>\n"
          ."</ADDRESS>\n</CENTER>\n"
          ."<HR>\n";
     Print_Taskbar();

@@ -1,4 +1,5 @@
-/* Copyright (c) 2010, 2015, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2010, 2018, Oracle and/or its affiliates. All rights
+   reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -17,6 +18,7 @@
 #include "keycaches.h"                       // get_key_cache
 #include "sql_base.h"                        // Open_table_context
 #include "lock.h"                            // MYSQL_OPEN_*
+#include "sql_handler.h"                     // mysql_ha_rm_tables
 #include "partition_element.h"               // PART_ADMIN
 #include "sql_partition.h"                   // set_part_state
 #include "transaction.h"                     // trans_rollback_stmt
@@ -65,7 +67,7 @@ static int prepare_for_repair(THD *thd, TABLE_LIST *table_list,
 
   if (!(table= table_list->table))
   {
-    const char *key;
+    char key[MAX_DBKEY_LENGTH];
     uint key_length;
     /*
       If the table didn't exist, we have a shared metadata lock
@@ -81,16 +83,16 @@ static int prepare_for_repair(THD *thd, TABLE_LIST *table_list,
     */
     my_hash_value_type hash_value;
 
+    key_length= create_table_def_key(thd, key, table_list, 0);
     table_list->mdl_request.init(MDL_key::TABLE,
                                  table_list->db, table_list->table_name,
                                  MDL_EXCLUSIVE, MDL_TRANSACTION);
 
     if (lock_table_names(thd, table_list, table_list->next_global,
-                         thd->variables.lock_wait_timeout, 0))
+                         thd->variables.lock_wait_timeout,
+                         MYSQL_OPEN_SKIP_TEMPORARY))
       DBUG_RETURN(0);
     has_mdl_lock= TRUE;
-
-    key_length= get_table_def_key(table_list, &key);
 
     hash_value= my_calc_hash(&table_def_cache, (uchar*) key, key_length);
     mysql_mutex_lock(&LOCK_open);
@@ -166,7 +168,7 @@ static int prepare_for_repair(THD *thd, TABLE_LIST *table_list,
     */
     if (wait_while_table_is_used(thd, table, HA_EXTRA_FORCE_REOPEN))
       goto end;
-    close_all_tables_for_name(thd, table_list->table->s, false, NULL);
+    close_all_tables_for_name(thd, table_list->table->s, FALSE, NULL);
     table_list->table= 0;
   }
   /*
@@ -207,7 +209,7 @@ static int prepare_for_repair(THD *thd, TABLE_LIST *table_list,
     Now we should be able to open the partially repaired table
     to finish the repair in the handler later on.
   */
-  if (open_table(thd, table_list, &ot_ctx))
+  if (open_table(thd, table_list, thd->mem_root, &ot_ctx))
   {
     error= send_check_errmsg(thd, table_list, "repair",
                              "Failed to open partially repaired table");
@@ -278,9 +280,6 @@ static bool mysql_admin_table(THD* thd, TABLE_LIST* tables,
   Protocol *protocol= thd->protocol;
   LEX *lex= thd->lex;
   int result_code;
-  bool gtid_rollback_must_be_skipped=
-    ((thd->variables.gtid_next.type == GTID_GROUP) &&
-    (!thd->skip_gtid_rollback));
   DBUG_ENTER("mysql_admin_table");
 
   field_list.push_back(item = new Item_empty_string("Table", NAME_CHAR_LEN*2));
@@ -296,23 +295,7 @@ static bool mysql_admin_table(THD* thd, TABLE_LIST* tables,
                             Protocol::SEND_NUM_ROWS | Protocol::SEND_EOF))
     DBUG_RETURN(TRUE);
 
-  /*
-    Close all temporary tables which were pre-open to simplify
-    privilege checking. Clear all references to closed tables.
-  */
-  close_thread_tables(thd);
-  for (table= tables; table; table= table->next_local)
-    table->table= NULL;
-
-  /*
-    If this statement goes to binlog and GTID_NEXT was set to a GTID_GROUP
-    (like SQL thread do when applying statements from the relay log of a
-    master server with GTIDs enabled) we have to avoid losing the ownership of
-    the GTID_GROUP by some trans_rollback_stmt() when processing individual
-    tables.
-  */
-  if (gtid_rollback_must_be_skipped)
-    thd->skip_gtid_rollback= true;
+  mysql_ha_rm_tables(thd, tables);
 
   for (table= tables; table; table= table->next_local)
   {
@@ -357,7 +340,7 @@ static bool mysql_admin_table(THD* thd, TABLE_LIST* tables,
         to differentiate from ALTER TABLE...CHECK PARTITION on which view is not
         allowed.
       */
-      if (lex->alter_info.flags & Alter_info::ALTER_ADMIN_PARTITION ||
+      if (lex->alter_info.flags & ALTER_ADMIN_PARTITION ||
           view_operator_func == NULL)
         table->required_type=FRMTYPE_TABLE;
 
@@ -372,17 +355,14 @@ static bool mysql_admin_table(THD* thd, TABLE_LIST* tables,
           because it's already known that the table is badly damaged.
         */
 
-        Diagnostics_area *da= thd->get_stmt_da();
-        Warning_info tmp_wi(thd->query_id, false);
+        Warning_info wi(thd->query_id, false);
+        Warning_info *wi_saved= thd->warning_info;
 
-        da->push_warning_info(&tmp_wi);
+        thd->warning_info= &wi;
 
-        open_error= open_temporary_tables(thd, table);
+        open_error= open_and_lock_tables(thd, table, TRUE, 0);
 
-        if (!open_error)
-          open_error= open_and_lock_tables(thd, table, TRUE, 0);
-
-        da->pop_warning_info();
+        thd->warning_info= wi_saved;
       }
       else
       {
@@ -394,10 +374,7 @@ static bool mysql_admin_table(THD* thd, TABLE_LIST* tables,
           mode. It does make sense for the user to see such errors.
         */
 
-        open_error= open_temporary_tables(thd, table);
-
-        if (!open_error)
-          open_error= open_and_lock_tables(thd, table, TRUE, 0);
+        open_error= open_and_lock_tables(thd, table, TRUE, 0);
       }
 
       table->next_global= save_next_global;
@@ -431,20 +408,30 @@ static bool mysql_admin_table(THD* thd, TABLE_LIST* tables,
         */
         Alter_info *alter_info= &lex->alter_info;
 
-        if (alter_info->flags & Alter_info::ALTER_ADMIN_PARTITION)
+        if (alter_info->flags & ALTER_ADMIN_PARTITION)
         {
           if (!table->table->part_info)
           {
             my_error(ER_PARTITION_MGMT_ON_NONPARTITIONED, MYF(0));
-            result_code= HA_ADMIN_FAILED;
-            goto send_result;
+            DBUG_RETURN(TRUE);
           }
-
           if (set_part_state(alter_info, table->table->part_info, PART_ADMIN))
           {
-            my_error(ER_DROP_PARTITION_NON_EXISTENT, MYF(0), table_name);
-            result_code= HA_ADMIN_FAILED;
-            goto send_result;
+            char buff[FN_REFLEN + MYSQL_ERRMSG_SIZE];
+            size_t length;
+            DBUG_PRINT("admin", ("sending non existent partition error"));
+            protocol->prepare_for_resend();
+            protocol->store(table_name, system_charset_info);
+            protocol->store(operator_name, system_charset_info);
+            protocol->store(STRING_WITH_LEN("error"), system_charset_info);
+            length= my_snprintf(buff, sizeof(buff),
+                                ER(ER_DROP_PARTITION_NON_EXISTENT),
+                                table_name);
+            protocol->store(buff, length, system_charset_info);
+            if(protocol->write())
+              goto err;
+            my_eof(thd);
+            goto err;
           }
         }
       }
@@ -459,9 +446,6 @@ static bool mysql_admin_table(THD* thd, TABLE_LIST* tables,
       case  1:           // error, message written to net
         trans_rollback_stmt(thd);
         trans_rollback(thd);
-        /* Make sure this table instance is not reused after the operation. */
-        if (table->table)
-          table->table->m_needs_reopen= true;
         close_thread_tables(thd);
         thd->mdl_context.release_transactional_locks();
         DBUG_PRINT("admin", ("simple error, admin next table"));
@@ -488,16 +472,16 @@ static bool mysql_admin_table(THD* thd, TABLE_LIST* tables,
     if (!table->table)
     {
       DBUG_PRINT("admin", ("open table failed"));
-      if (thd->get_stmt_da()->is_warning_info_empty())
-        push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
+      if (thd->warning_info->is_empty())
+        push_warning(thd, MYSQL_ERROR::WARN_LEVEL_WARN,
                      ER_CHECK_NO_SUCH_TABLE, ER(ER_CHECK_NO_SUCH_TABLE));
       /* if it was a view will check md5 sum */
       if (table->view &&
           view_checksum(thd, table) == HA_ADMIN_WRONG_CHECKSUM)
-        push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
+        push_warning(thd, MYSQL_ERROR::WARN_LEVEL_WARN,
                      ER_VIEW_CHECKSUM, ER(ER_VIEW_CHECKSUM));
-      if (thd->get_stmt_da()->is_error() &&
-          table_not_corrupt_error(thd->get_stmt_da()->sql_errno()))
+      if (thd->stmt_da->is_error() &&
+          table_not_corrupt_error(thd->stmt_da->sql_errno()))
         result_code= HA_ADMIN_FAILED;
       else
         /* Default failure code is corrupt table */
@@ -534,9 +518,6 @@ static bool mysql_admin_table(THD* thd, TABLE_LIST* tables,
       protocol->store(buff, length, system_charset_info);
       trans_commit_stmt(thd);
       trans_commit(thd);
-      /* Make sure this table instance is not reused after the operation. */
-      if (table->table)
-        table->table->m_needs_reopen= true;
       close_thread_tables(thd);
       thd->mdl_context.release_transactional_locks();
       lex->reset_query_tables_list(FALSE);
@@ -548,7 +529,7 @@ static bool mysql_admin_table(THD* thd, TABLE_LIST* tables,
       table->table=0;				// For query cache
       if (protocol->write())
 	goto err;
-      thd->get_stmt_da()->reset_diagnostics_area();
+      thd->stmt_da->reset_diagnostics_area();
       continue;
       /* purecov: end */
     }
@@ -604,31 +585,12 @@ static bool mysql_admin_table(THD* thd, TABLE_LIST* tables,
            HA_ADMIN_NEEDS_ALTER))
       {
         DBUG_PRINT("admin", ("recreating table"));
-        /*
-          Temporary table are always created by current server so they never
-          require upgrade. So we don't need to pre-open them before calling
-          mysql_recreate_table().
-        */
-        DBUG_ASSERT(! table->table->s->tmp_table);
-
         trans_rollback_stmt(thd);
         trans_rollback(thd);
-        /* Make sure this table instance is not reused after the operation. */
-        if (table->table)
-          table->table->m_needs_reopen= true;
         close_thread_tables(thd);
         thd->mdl_context.release_transactional_locks();
-
-        /*
-          table_list->table has been closed and freed. Do not reference
-          uninitialized data. open_tables() could fail.
-        */
-        table->table= NULL;
-        /* Same applies to MDL ticket. */
-        table->mdl_request.ticket= NULL;
-
         tmp_disable_binlog(thd); // binlogging is done by caller if wanted
-        result_code= mysql_recreate_table(thd, table, false);
+        result_code= mysql_recreate_table(thd, table);
         reenable_binlog(thd);
         /*
           mysql_recreate_table() can push OK or ERROR.
@@ -636,8 +598,8 @@ static bool mysql_admin_table(THD* thd, TABLE_LIST* tables,
           we will store the error message in a result set row 
           and then clear.
         */
-        if (thd->get_stmt_da()->is_ok())
-          thd->get_stmt_da()->reset_diagnostics_area();
+        if (thd->stmt_da->is_ok())
+          thd->stmt_da->reset_diagnostics_area();
         table->table= NULL;
         result_code= result_code ? HA_ADMIN_FAILED : HA_ADMIN_OK;
         goto send_result;
@@ -653,9 +615,8 @@ send_result:
     lex->cleanup_after_one_table_open();
     thd->clear_error();  // these errors shouldn't get client
     {
-      Diagnostics_area::Sql_condition_iterator it=
-        thd->get_stmt_da()->sql_conditions();
-      const Sql_condition *err;
+      List_iterator_fast<MYSQL_ERROR> it(thd->warning_info->warn_list());
+      MYSQL_ERROR *err;
       while ((err= it++))
       {
         protocol->prepare_for_resend();
@@ -668,7 +629,7 @@ send_result:
         if (protocol->write())
           goto err;
       }
-      thd->get_stmt_da()->clear_warning_info(thd->query_id);
+      thd->warning_info->clear_warning_info(thd->query_id);
     }
     protocol->prepare_for_resend();
     protocol->store(table_name, system_charset_info);
@@ -691,14 +652,8 @@ send_result_message:
     case HA_ADMIN_NOT_BASE_TABLE:
       {
         char buf[MYSQL_ERRMSG_SIZE];
-
-        String tbl_name;
-        tbl_name.append(String(db,system_charset_info));
-        tbl_name.append('.');
-        tbl_name.append(String(table_name,system_charset_info));
-
         size_t length= my_snprintf(buf, sizeof(buf),
-                                   ER(ER_BAD_TABLE_ERROR), tbl_name.c_ptr());
+                                 ER(ER_BAD_TABLE_ERROR), table_name);
         protocol->store(STRING_WITH_LEN("note"), system_charset_info);
         protocol->store(buf, length, system_charset_info);
       }
@@ -757,18 +712,9 @@ send_result_message:
       trans_commit(thd);
       close_thread_tables(thd);
       thd->mdl_context.release_transactional_locks();
-
-      /*
-         table_list->table has been closed and freed. Do not reference
-         uninitialized data. open_tables() could fail.
-       */
-      table->table= NULL;
-      /* Same applies to MDL ticket. */
-      table->mdl_request.ticket= NULL;
-
       DEBUG_SYNC(thd, "ha_admin_try_alter");
       protocol->store(STRING_WITH_LEN("note"), system_charset_info);
-      if(alter_info->flags & Alter_info::ALTER_ADMIN_PARTITION)
+      if(alter_info->flags & ALTER_ADMIN_PARTITION)
       {
         protocol->store(STRING_WITH_LEN(
         "Table does not support optimize on partitions. All partitions "
@@ -780,16 +726,14 @@ send_result_message:
         "Table does not support optimize, doing recreate + analyze instead"),
         system_charset_info);
       }
-      if (protocol->write())
+     if (protocol->write())
         goto err;
       DBUG_PRINT("info", ("HA_ADMIN_TRY_ALTER, trying analyze..."));
       TABLE_LIST *save_next_local= table->next_local,
                  *save_next_global= table->next_global;
       table->next_local= table->next_global= 0;
       tmp_disable_binlog(thd); // binlogging is done by caller if wanted
-      /* Don't forget to pre-open temporary tables. */
-      result_code= (open_temporary_tables(thd, table) ||
-                    mysql_recreate_table(thd, table, false));
+      result_code= mysql_recreate_table(thd, table);
       reenable_binlog(thd);
       /*
         mysql_recreate_table() can push OK or ERROR.
@@ -797,37 +741,35 @@ send_result_message:
         we will store the error message in a result set row 
         and then clear.
       */
-      if (thd->get_stmt_da()->is_ok())
-        thd->get_stmt_da()->reset_diagnostics_area();
+      if (thd->stmt_da->is_ok())
+        thd->stmt_da->reset_diagnostics_area();
       trans_commit_stmt(thd);
       trans_commit(thd);
       close_thread_tables(thd);
       thd->mdl_context.release_transactional_locks();
-      /* Clear references to TABLE and MDL_ticket after releasing them. */
       table->table= NULL;
-      table->mdl_request.ticket= NULL;
       if (!result_code) // recreation went ok
       {
+        /* Clear the ticket released above. */
+        table->mdl_request.ticket= NULL;
         DEBUG_SYNC(thd, "ha_admin_open_ltable");
-        table->mdl_request.set_type(MDL_SHARED_READ);
-        if (!open_temporary_tables(thd, table) &&
-            (table->table= open_n_lock_single_table(thd, table,
-                                                    TL_READ_NO_INSERT, 0)))
+        table->mdl_request.set_type(MDL_SHARED_WRITE);
+        /*
+          Reset the ALTER_ADMIN_PARTITION bit in alter_info->flags
+          to force analyze on all partitions.
+        */
+        alter_info->flags &= ~(ALTER_ADMIN_PARTITION);
+        if ((table->table= open_ltable(thd, table, lock_type, 0)))
         {
-          /*
-           Reset the ALTER_ADMIN_PARTITION bit in alter_info->flags
-           to force analyze on all partitions.
-          */
-          alter_info->flags &= ~(Alter_info::ALTER_ADMIN_PARTITION);
           result_code= table->table->file->ha_analyze(thd, check_opt);
           if (result_code == HA_ADMIN_ALREADY_DONE)
             result_code= HA_ADMIN_OK;
           else if (result_code)  // analyze failed
             table->table->file->print_error(result_code, MYF(0));
-          alter_info->flags= save_flags;
         }
         else
           result_code= -1; // open failed
+        alter_info->flags= save_flags;
       }
       /* Start a new row for the final status row */
       protocol->prepare_for_resend();
@@ -838,7 +780,7 @@ send_result_message:
         DBUG_ASSERT(thd->is_error() || thd->killed);
         if (thd->is_error())
         {
-          const char *err_msg= thd->get_stmt_da()->message();
+          const char *err_msg= thd->stmt_da->message();
           if (!thd->vio_ok())
           {
             sql_print_error("%s", err_msg);
@@ -857,9 +799,6 @@ send_result_message:
           }
           thd->clear_error();
         }
-        /* Make sure this table instance is not reused after the operation. */
-        if (table->table)
-          table->table->m_needs_reopen= true;
       }
       result_code= result_code ? HA_ADMIN_FAILED : HA_ADMIN_OK;
       table->next_local= save_next_local;
@@ -966,23 +905,18 @@ send_result_message:
   }
 
   my_eof(thd);
-
-  if (gtid_rollback_must_be_skipped)
-    thd->skip_gtid_rollback= false;
-
   DBUG_RETURN(FALSE);
 
 err:
-  if (gtid_rollback_must_be_skipped)
-    thd->skip_gtid_rollback= false;
-
+  /* Make sure this table instance is not reused after the failure. */
+  if (table && table->table)
+    table->table->m_needs_reopen= true;
   trans_rollback_stmt(thd);
   trans_rollback(thd);
-  /* Make sure this table instance is not reused after the operation. */
-  if (table->table)
-    table->table->m_needs_reopen= true;
   close_thread_tables(thd);			// Shouldn't be needed
   thd->mdl_context.release_transactional_locks();
+  if (table)
+    table->table=0;
   DBUG_RETURN(TRUE);
 }
 
@@ -1023,8 +957,8 @@ bool mysql_assign_to_keycache(THD* thd, TABLE_LIST* tables,
   }
   check_opt.key_cache= key_cache;
   DBUG_RETURN(mysql_admin_table(thd, tables, &check_opt,
-                                "assign_to_keycache", TL_READ_NO_INSERT, 0, 0,
-                                0, 0, &handler::assign_to_keycache, 0));
+				"assign_to_keycache", TL_READ_NO_INSERT, 0, 0,
+				0, 0, &handler::assign_to_keycache, 0));
 }
 
 
@@ -1050,122 +984,122 @@ bool mysql_preload_keys(THD* thd, TABLE_LIST* tables)
     outdated information if parallel inserts into cache blocks happen.
   */
   DBUG_RETURN(mysql_admin_table(thd, tables, 0,
-                                "preload_keys", TL_READ_NO_INSERT, 0, 0, 0, 0,
-                                &handler::preload_keys, 0));
+				"preload_keys", TL_READ_NO_INSERT, 0, 0, 0, 0,
+				&handler::preload_keys, 0));
 }
 
 
-bool Sql_cmd_analyze_table::execute(THD *thd)
+bool Analyze_table_statement::execute(THD *thd)
 {
-  TABLE_LIST *first_table= thd->lex->select_lex.table_list.first;
+  TABLE_LIST *first_table= m_lex->select_lex.table_list.first;
   bool res= TRUE;
   thr_lock_type lock_type = TL_READ_NO_INSERT;
-  DBUG_ENTER("Sql_cmd_analyze_table::execute");
+  DBUG_ENTER("Analyze_table_statement::execute");
 
   if (check_table_access(thd, SELECT_ACL | INSERT_ACL, first_table,
                          FALSE, UINT_MAX, FALSE))
     goto error;
   thd->enable_slow_log= opt_log_slow_admin_statements;
-  res= mysql_admin_table(thd, first_table, &thd->lex->check_opt,
+  res= mysql_admin_table(thd, first_table, &m_lex->check_opt,
                          "analyze", lock_type, 1, 0, 0, 0,
                          &handler::ha_analyze, 0);
   /* ! we write after unlocking the table */
-  if (!res && !thd->lex->no_write_to_binlog)
+  if (!res && !m_lex->no_write_to_binlog)
   {
     /*
       Presumably, ANALYZE and binlog writing doesn't require synchronization
     */
     res= write_bin_log(thd, TRUE, thd->query(), thd->query_length());
   }
-  thd->lex->select_lex.table_list.first= first_table;
-  thd->lex->query_tables= first_table;
+  m_lex->select_lex.table_list.first= first_table;
+  m_lex->query_tables= first_table;
 
 error:
   DBUG_RETURN(res);
 }
 
 
-bool Sql_cmd_check_table::execute(THD *thd)
+bool Check_table_statement::execute(THD *thd)
 {
-  TABLE_LIST *first_table= thd->lex->select_lex.table_list.first;
+  TABLE_LIST *first_table= m_lex->select_lex.table_list.first;
   thr_lock_type lock_type = TL_READ_NO_INSERT;
   bool res= TRUE;
-  DBUG_ENTER("Sql_cmd_check_table::execute");
+  DBUG_ENTER("Check_table_statement::execute");
 
   if (check_table_access(thd, SELECT_ACL, first_table,
                          TRUE, UINT_MAX, FALSE))
     goto error; /* purecov: inspected */
   thd->enable_slow_log= opt_log_slow_admin_statements;
 
-  res= mysql_admin_table(thd, first_table, &thd->lex->check_opt, "check",
+  res= mysql_admin_table(thd, first_table, &m_lex->check_opt, "check",
                          lock_type, 0, 0, HA_OPEN_FOR_REPAIR, 0,
                          &handler::ha_check, &view_checksum);
 
-  thd->lex->select_lex.table_list.first= first_table;
-  thd->lex->query_tables= first_table;
+  m_lex->select_lex.table_list.first= first_table;
+  m_lex->query_tables= first_table;
 
 error:
   DBUG_RETURN(res);
 }
 
 
-bool Sql_cmd_optimize_table::execute(THD *thd)
+bool Optimize_table_statement::execute(THD *thd)
 {
-  TABLE_LIST *first_table= thd->lex->select_lex.table_list.first;
+  TABLE_LIST *first_table= m_lex->select_lex.table_list.first;
   bool res= TRUE;
-  DBUG_ENTER("Sql_cmd_optimize_table::execute");
+  DBUG_ENTER("Optimize_table_statement::execute");
 
   if (check_table_access(thd, SELECT_ACL | INSERT_ACL, first_table,
                          FALSE, UINT_MAX, FALSE))
     goto error; /* purecov: inspected */
   thd->enable_slow_log= opt_log_slow_admin_statements;
-  res= (specialflag & SPECIAL_NO_NEW_FUNC) ?
-    mysql_recreate_table(thd, first_table, true) :
-    mysql_admin_table(thd, first_table, &thd->lex->check_opt,
+  res= (specialflag & (SPECIAL_SAFE_MODE | SPECIAL_NO_NEW_FUNC)) ?
+    mysql_recreate_table(thd, first_table) :
+    mysql_admin_table(thd, first_table, &m_lex->check_opt,
                       "optimize", TL_WRITE, 1, 0, 0, 0,
                       &handler::ha_optimize, 0);
   /* ! we write after unlocking the table */
-  if (!res && !thd->lex->no_write_to_binlog)
+  if (!res && !m_lex->no_write_to_binlog)
   {
     /*
       Presumably, OPTIMIZE and binlog writing doesn't require synchronization
     */
     res= write_bin_log(thd, TRUE, thd->query(), thd->query_length());
   }
-  thd->lex->select_lex.table_list.first= first_table;
-  thd->lex->query_tables= first_table;
+  m_lex->select_lex.table_list.first= first_table;
+  m_lex->query_tables= first_table;
 
 error:
   DBUG_RETURN(res);
 }
 
 
-bool Sql_cmd_repair_table::execute(THD *thd)
+bool Repair_table_statement::execute(THD *thd)
 {
-  TABLE_LIST *first_table= thd->lex->select_lex.table_list.first;
+  TABLE_LIST *first_table= m_lex->select_lex.table_list.first;
   bool res= TRUE;
-  DBUG_ENTER("Sql_cmd_repair_table::execute");
+  DBUG_ENTER("Repair_table_statement::execute");
 
   if (check_table_access(thd, SELECT_ACL | INSERT_ACL, first_table,
                          FALSE, UINT_MAX, FALSE))
     goto error; /* purecov: inspected */
   thd->enable_slow_log= opt_log_slow_admin_statements;
-  res= mysql_admin_table(thd, first_table, &thd->lex->check_opt, "repair",
+  res= mysql_admin_table(thd, first_table, &m_lex->check_opt, "repair",
                          TL_WRITE, 1,
-                         MY_TEST(thd->lex->check_opt.sql_flags & TT_USEFRM),
+                         test(m_lex->check_opt.sql_flags & TT_USEFRM),
                          HA_OPEN_FOR_REPAIR, &prepare_for_repair,
                          &handler::ha_repair, 0);
 
   /* ! we write after unlocking the table */
-  if (!res && !thd->lex->no_write_to_binlog)
+  if (!res && !m_lex->no_write_to_binlog)
   {
     /*
       Presumably, REPAIR and binlog writing doesn't require synchronization
     */
     res= write_bin_log(thd, TRUE, thd->query(), thd->query_length());
   }
-  thd->lex->select_lex.table_list.first= first_table;
-  thd->lex->query_tables= first_table;
+  m_lex->select_lex.table_list.first= first_table;
+  m_lex->query_tables= first_table;
 
 error:
   DBUG_RETURN(res);

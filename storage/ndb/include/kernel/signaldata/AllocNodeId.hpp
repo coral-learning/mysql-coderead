@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2006 MySQL AB, 2009 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef ALLOC_NODE_ID_HPP
 #define ALLOC_NODE_ID_HPP
@@ -27,28 +25,21 @@
  */
 class AllocNodeIdReq {
 public:
-  STATIC_CONST( SignalLength = 5 );
-  STATIC_CONST( SignalLengthQMGR = 7 );
+  STATIC_CONST( SignalLength = 4 );
 
   Uint32 senderRef;
   Uint32 senderData;
   Uint32 nodeId;
   Uint32 nodeType;
-  Uint32 timeout;
-
-  Uint32 secret_lo;
-  Uint32 secret_hi;
 };
 
 class AllocNodeIdConf {
 public:
-  STATIC_CONST( SignalLength = 5 );
+  STATIC_CONST( SignalLength = 3 );
 
   Uint32 senderRef;
   Uint32 senderData;
   Uint32 nodeId;
-  Uint32 secret_lo;
-  Uint32 secret_hi;
 };
 
 class AllocNodeIdRef {

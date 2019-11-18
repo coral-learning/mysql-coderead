@@ -4,7 +4,7 @@
 # Scope: GLOBAL                                                               #
 # Access Type: Dynamic                                                        #
 # Data Type: numeric                                                          #
-# Default Value:  100                                                         #
+# Default Value:  10                                                          #
 # Range:    1-4294967295                                                      #
 #                                                                             #
 #                                                                             #
@@ -53,7 +53,7 @@ SELECT @@global.max_connect_errors;
 ############################################### 
 
 SET @@global.max_connect_errors = @start_value;
-SELECT @@global.max_connect_errors = 100;
+SELECT @@global.max_connect_errors = 10;
 
 --echo '#--------------------FN_DYNVARS_073_03------------------------#'
 ##################################################################

@@ -133,7 +133,7 @@ typedef struct st_ft_info
 {
   struct _ft_vft *please;
   MI_INFO   *info;
-  const CHARSET_INFO *charset;
+  CHARSET_INFO *charset;
   FTB_EXPR  *root;
   FTB_WORD **list;
   FTB_WORD  *last_word;
@@ -289,7 +289,7 @@ static int ftb_parse_query_internal(MYSQL_FTPARSER_PARAM *param,
 {
   MY_FTB_PARAM *ftb_param= param->mysql_ftparam;
   MYSQL_FTPARSER_BOOLEAN_INFO info;
-  const CHARSET_INFO *cs= ftb_param->ftb->charset;
+  CHARSET_INFO *cs= ftb_param->ftb->charset;
   uchar **start= (uchar**) &query;
   uchar *end= (uchar*) query + len;
   FT_WORD w;
@@ -332,7 +332,7 @@ static int _ftb_parse_query(FTB *ftb, uchar *query, uint len,
 }
 
 
-static int _ftb_no_dupes_cmp(const void* not_used MY_ATTRIBUTE((unused)),
+static int _ftb_no_dupes_cmp(void* not_used __attribute__((unused)),
                              const void *a,const void *b)
 {
   return CMP_NUM((*((my_off_t*)a)), (*((my_off_t*)b)));
@@ -536,7 +536,7 @@ static void _ftb_init_index_search(FT_INFO *ftb)
       {
         if (ftbe->flags & FTB_FLAG_NO ||                     /* 2 */
             ftbe->up->ythresh - ftbe->up->yweaks >
-            (uint) MY_TEST(ftbe->flags & FTB_FLAG_YES))      /* 1 */
+            (uint) test(ftbe->flags & FTB_FLAG_YES))         /* 1 */
         {
           FTB_EXPR *top_ftbe=ftbe->up;
           ftbw->docid[0]=HA_OFFSET_ERROR;
@@ -567,7 +567,7 @@ static void _ftb_init_index_search(FT_INFO *ftb)
 
 
 FT_INFO * ft_init_boolean_search(MI_INFO *info, uint keynr, uchar *query,
-                                 uint query_len, const CHARSET_INFO *cs)
+                                 uint query_len, CHARSET_INFO *cs)
 {
   FTB       *ftb;
   FTB_EXPR  *ftbe;
@@ -583,7 +583,7 @@ FT_INFO * ft_init_boolean_search(MI_INFO *info, uint keynr, uchar *query,
   DBUG_ASSERT(keynr==NO_SUCH_KEY || cs == info->s->keyinfo[keynr].seg->charset);
   ftb->with_scan=0;
   ftb->lastpos=HA_OFFSET_ERROR;
-  memset(&ftb->no_dupes, 0, sizeof(TREE));
+  bzero(& ftb->no_dupes, sizeof(TREE));
   ftb->last_word= 0;
 
   init_alloc_root(&ftb->mem_root, 1024, 1024);
@@ -634,7 +634,7 @@ typedef struct st_my_ftb_phrase_param
 {
   LIST *phrase;
   LIST *document;
-  const CHARSET_INFO *cs;
+  CHARSET_INFO *cs;
   uint phrase_length;
   uint document_length;
   uint match;
@@ -643,7 +643,7 @@ typedef struct st_my_ftb_phrase_param
 
 static int ftb_phrase_add_word(MYSQL_FTPARSER_PARAM *param,
                                char *word, int word_len,
-    MYSQL_FTPARSER_BOOLEAN_INFO *boolean_info MY_ATTRIBUTE((unused)))
+    MYSQL_FTPARSER_BOOLEAN_INFO *boolean_info __attribute__((unused)))
 {
   MY_FTB_PHRASE_PARAM *phrase_param= param->mysql_ftparam;
   FT_WORD *w= (FT_WORD *)phrase_param->document->data;
@@ -901,7 +901,7 @@ typedef struct st_my_ftb_find_param
 
 static int ftb_find_relevance_add_word(MYSQL_FTPARSER_PARAM *param,
                                        char *word, int len,
-             MYSQL_FTPARSER_BOOLEAN_INFO *boolean_info MY_ATTRIBUTE((unused)))
+             MYSQL_FTPARSER_BOOLEAN_INFO *boolean_info __attribute__((unused)))
 {
   MY_FTB_FIND_PARAM *ftb_param= param->mysql_ftparam;
   FT_INFO *ftb= ftb_param->ftb;

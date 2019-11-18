@@ -1,4 +1,4 @@
-/* Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -12,6 +12,10 @@
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface			/* gcc class implementation */
+#endif
 
 #include "thr_lock.h"                           /* THR_LOCK */
 #include "handler.h"                            /* handler */
@@ -54,7 +58,7 @@ public:
   {
     return(HA_NULL_IN_KEY | HA_CAN_FULLTEXT | HA_CAN_SQL_HANDLER |
            HA_BINLOG_STMT_CAPABLE | HA_BINLOG_ROW_CAPABLE |
-           HA_CAN_INDEX_BLOBS | HA_AUTO_PART_KEY | HA_READ_OUT_OF_SYNC |
+           HA_CAN_INDEX_BLOBS | HA_AUTO_PART_KEY |
            HA_FILE_BASED | HA_CAN_GEOMETRY | HA_CAN_INSERT_DELAYED);
   }
   ulong index_flags(uint inx, uint part, bool all_parts) const

@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,16 +12,13 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 
 #include <ndb_global.h>
 #include <getarg.h>
 #include "CpcClient.hpp"
-
-#include <portlib/NdbEnv.h>
-#include <util/NdbOut.hpp>
+#include <NdbEnv.h>
 
 #define DEFAULT_PORT 1234
 #define ENV_HOSTS "NDB_CPCC_HOSTS"
@@ -36,7 +33,6 @@ int connect(Vector<SimpleCpcClient*>&);
 
 class Expression {
 public:
-  virtual ~Expression() {}
   virtual bool evaluate(SimpleCpcClient*, const SimpleCpcClient::Process &)= 0;
 };
 
@@ -46,7 +42,6 @@ int start_stop(const char * cmd, Vector<SimpleCpcClient*>& list,
 
 class True : public Expression {
 public:
-  virtual ~True() {}
   virtual bool evaluate(SimpleCpcClient*, const SimpleCpcClient::Process & p){
     return true;
   }
@@ -108,7 +103,6 @@ public:
     cmd = c;
     host = 0;
   }
-  virtual ~Operate() {}
   
   virtual bool evaluate(SimpleCpcClient*, const SimpleCpcClient::Process & p);
 };
@@ -120,7 +114,7 @@ public:
   ProcEQ(SimpleCpcClient* h, Uint32 i){
     host = h; id = i;
   }
-  virtual ~ProcEQ() {}
+
   virtual bool evaluate(SimpleCpcClient* c,const SimpleCpcClient::Process & p){
     return p.m_id == (int)id && c == host;
   }
@@ -186,11 +180,11 @@ main(int argc, const char** argv){
   struct getargs args[] = {
     { "cmd", 'c', arg_string, &cmd, "command", "command to run (default ls)" }
     ,{ "name", 'n', arg_string, &name, 
-       "apply command for all processes with name", "" }
+       "apply command for all processes with name" }
     ,{ "group", 'g', arg_string, &group, 
-       "apply command for all processes in group", "" }
+       "apply command for all processes in group" }
     ,{ "owner", 'g', arg_string, &owner,
-       "apply command for all processes with owner", "" }
+       "apply command for all processes with owner" }
     ,{ "long", 'l', arg_flag, &g_settings.m_longl, "long", "long listing"}
     ,{ "usage", '?', arg_flag, &help, "Print help", "" }
     ,{ "ls",  0, arg_flag, &list, "-c list", "list process(es)" }

@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003-2007 MySQL AB
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef UTIL_LOCK_HPP
 #define UTIL_LOCK_HPP
@@ -36,21 +34,16 @@ class UtilLockReq {
 
   friend bool printUTIL_LOCK_REQ(FILE *, const Uint32 *, Uint32, Uint16);
 public:
-  STATIC_CONST( SignalLength = 5 );
+  STATIC_CONST( SignalLength = 4 );
 
   enum RequestInfo {
-    TryLock    = 1,
-    SharedLock = 2,
-    Notify     = 4,
-    Granted    = 8
+    TryLock = 1
   };
-
 public:
   Uint32 senderData;  
   Uint32 senderRef;
   Uint32 lockId;
   Uint32 requestInfo;
-  Uint32 extra;
 };
 
 class UtilLockConf {
@@ -74,7 +67,7 @@ public:
   Uint32 senderData;
   Uint32 senderRef;
   Uint32 lockId;
-  Uint32 extra;
+  Uint32 lockKey;
 };
 
 class UtilLockRef {
@@ -92,23 +85,21 @@ class UtilLockRef {
   
   friend bool printUTIL_LOCK_REF(FILE *, const Uint32 *, Uint32, Uint16);
 public:
-  STATIC_CONST( SignalLength = 5 );
+  STATIC_CONST( SignalLength = 4 );
   
   enum ErrorCode {
     OK = 0,
     NoSuchLock = 1,
     OutOfLockRecords = 2,
     DistributedLockNotSupported = 3,
-    LockAlreadyHeld = 4,
-    InLockQueue = 5 // lock + notify
+    LockAlreadyHeld = 4
+    
   };
 public:
-
   Uint32 senderData;
   Uint32 senderRef;
   Uint32 lockId;
   Uint32 errorCode;
-  Uint32 extra;
 };
 
 class UtilUnlockReq {
@@ -126,12 +117,13 @@ class UtilUnlockReq {
 
   friend bool printUTIL_UNLOCK_REQ(FILE *, const Uint32 *, Uint32, Uint16);
 public:
-  STATIC_CONST( SignalLength = 3 );
+  STATIC_CONST( SignalLength = 4 );
   
 public:
   Uint32 senderData;  
   Uint32 senderRef;
   Uint32 lockId;
+  Uint32 lockKey;
 };
 
 class UtilUnlockConf {
@@ -177,8 +169,7 @@ public:
   enum ErrorCode {
     OK = 0,
     NoSuchLock = 1,
-    NotLockOwner = 2,
-    NotInLockQueue = 3
+    NotLockOwner = 2
   };
 public:
   Uint32 senderData;
@@ -288,6 +279,7 @@ public:
   Uint32 senderData;
   Uint32 senderRef;
   Uint32 lockId;
+  Uint32 lockKey;
 };
 
 class UtilDestroyLockRef {

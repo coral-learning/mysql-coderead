@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include "NdbPoolImpl.hpp"
 
@@ -418,8 +417,8 @@ NdbPool::get_hint_ndb(Uint32 hint_id, Uint32 hash_entry)
 void
 NdbPool::remove_free_list(Uint32 id)
 {
-  Uint16 next_free_entry = m_pool_reference[id].next_free_object;
-  Uint16 prev_free_entry = m_pool_reference[id].prev_free_object;
+  Uint8 next_free_entry = m_pool_reference[id].next_free_object;
+  Uint8 prev_free_entry = m_pool_reference[id].prev_free_object;
   if (prev_free_entry == (Uint8)NULL_POOL) {
     m_first_free = next_free_entry;
   } else {
@@ -438,10 +437,10 @@ NdbPool::remove_free_list(Uint32 id)
 void
 NdbPool::remove_db_hash(Uint32 id, Uint32 hash_entry)
 {
-  Uint16 next_free_entry = m_pool_reference[id].next_db_object;
-  Uint16 prev_free_entry = m_pool_reference[id].prev_db_object;
+  Uint8 next_free_entry = m_pool_reference[id].next_db_object;
+  Uint8 prev_free_entry = m_pool_reference[id].prev_db_object;
   if (prev_free_entry == (Uint8)NULL_HASH) {
-    m_hash_entry[hash_entry] = (Uint8)next_free_entry;
+    m_hash_entry[hash_entry] = next_free_entry;
   } else {
     m_pool_reference[prev_free_entry].next_db_object = next_free_entry;
   }
@@ -457,7 +456,7 @@ NdbPool::remove_db_hash(Uint32 id, Uint32 hash_entry)
 Uint32
 NdbPool::compute_hash(const char *a_schema_name)
 {
-  Uint32 len = Uint32(strlen(a_schema_name));
+  Uint32 len = strlen(a_schema_name);
   Uint32 h = 147;
   for (Uint32 i = 0; i < len; i++) {
     Uint32 c = a_schema_name[i];
@@ -518,7 +517,7 @@ void
 NdbPool::switch_condition_queue()
 {
   m_signal_count = m_input_queue;
-  Uint16 move_queue = m_input_queue;
+  Uint8 move_queue = m_input_queue;
   m_input_queue = m_output_queue;
   m_output_queue = move_queue;
 

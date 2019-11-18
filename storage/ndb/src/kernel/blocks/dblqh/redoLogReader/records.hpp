@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003, 2005-2007 MySQL AB, 2009 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2005, 2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include <NdbMain.h>
 #include <NdbOut.hpp>
@@ -32,19 +30,20 @@
 #define ZINVALID_COMMIT_TYPE 9
 
 #define MAX_FILE_DESCRIPTORS 40
+#define NO_MBYTE_IN_FILE 16
 
 #define PAGESIZE 8192
 #define NO_PAGES_IN_MBYTE 32
+#define NO_MBYTE_IN_FILE 16
 
 #define COMMITTRANSACTIONRECORDSIZE 9
 #define COMPLETEDGCIRECORDSIZE 2
 #define PAGEHEADERSIZE 32
 #define FILEDESCRIPTORHEADERSIZE 3
-#define FILEDESCRIPTORENTRYSIZE 3
+#define FILEDESCRIPTORRECORDSIZE 48
 #define NEXTMBYTERECORDSIZE 1
 #define ABORTTRANSACTIONRECORDSIZE 3
 
-extern unsigned NO_MBYTE_IN_FILE;
 
 //----------------------------------------------------------------
 // 
@@ -137,7 +136,7 @@ public:
   Uint32 getLogRecordSize();
   bool lastPage();
   Uint32 lastWord();
-//protected:
+protected:
   Uint32 m_checksum;
   Uint32 m_lap;
   Uint32 m_max_gci_completed;
@@ -174,8 +173,14 @@ public:
   Uint32 m_fileNo;
 };
 
-class FileDescriptor 
-{
+class FileDescriptorRecord {
+public:
+  Uint32 m_maxGciCompleted[16];
+  Uint32 m_maxGciStarted[16];
+  Uint32 m_lastPreparedReference[16];
+};
+
+class FileDescriptor {
   friend NdbOut& operator<<(NdbOut&, const FileDescriptor&);
 public:
   bool check();
@@ -183,7 +188,7 @@ public:
 protected:
   void printARecord( Uint32 ) const;
   FileDescriptorHeader m_fdHeader;
-  Uint32 m_fdRecord[1];
+  FileDescriptorRecord m_fdRecord[1];
 };
 
 

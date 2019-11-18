@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, 2015, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2010, 2016, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -23,10 +23,7 @@
 #include "sql_base.h"    // close_cached_tables
 #include "sql_db.h"      // my_dbopt_cleanup
 #include "hostname.h"    // hostname_cache_refresh
-#include "rpl_master.h"  // reset_master
-#include "rpl_slave.h"   // reset_slave
-#include "rpl_rli.h"     // rotate_relay_log
-#include "rpl_mi.h"
+#include "sql_repl.h"    // reset_master, reset_slave
 #include "debug_sync.h"
 #include "des_key_file.h"
 
@@ -140,55 +137,30 @@ bool reload_acl_and_cache(THD *thd, unsigned long options,
   if (options & REFRESH_ENGINE_LOG)
     if (ha_flush_logs(NULL))
       result= 1;
-  if ((options & REFRESH_BINARY_LOG) || (options & REFRESH_RELAY_LOG ))
+
+  if (options & REFRESH_BINARY_LOG)
   {
     /*
-      If reload_acl_and_cache() is called from SIGHUP handler we have to
-      allocate temporary THD for execution of binlog/relay log rotation.
-     */
-    THD *tmp_thd= 0;
-    if (!thd && (thd= (tmp_thd= new THD)))
+      Writing this command to the binlog may result in infinite loops
+      when doing mysqlbinlog|mysql, and anyway it does not really make
+      sense to log it automatically (would cause more trouble to users
+      than it would help them)
+    */
+    tmp_write_to_binlog= 0;
+    if (mysql_bin_log.is_open())
     {
-      thd->thread_stack= (char *) (&tmp_thd);
-      thd->store_globals();
+      if (mysql_bin_log.rotate_and_purge(true))
+        *write_to_binlog= -1;
     }
-
-    if (options & REFRESH_BINARY_LOG)
-    {
-      /*
-        Writing this command to the binlog may result in infinite loops
-        when doing mysqlbinlog|mysql, and anyway it does not really make
-        sense to log it automatically (would cause more trouble to users
-        than it would help them)
-       */
-      tmp_write_to_binlog= 0;
-      if (mysql_bin_log.is_open())
-      {
-        if (mysql_bin_log.rotate_and_purge(thd, true))
-          *write_to_binlog= -1;
-      }
-    }
-    if (options & REFRESH_RELAY_LOG)
-    {
+  }
+  if (options & REFRESH_RELAY_LOG)
+  {
 #ifdef HAVE_REPLICATION
-      mysql_mutex_lock(&LOCK_active_mi);
-      if (active_mi != NULL)
-      {
-        mysql_mutex_lock(&active_mi->data_lock);
-        if (rotate_relay_log(active_mi))
-          *write_to_binlog= -1;
-        mysql_mutex_unlock(&active_mi->data_lock);
-      }
-      mysql_mutex_unlock(&LOCK_active_mi);
+    mysql_mutex_lock(&LOCK_active_mi);
+    if (rotate_relay_log(active_mi))
+      *write_to_binlog= -1;
+    mysql_mutex_unlock(&LOCK_active_mi);
 #endif
-    }
-    if (tmp_thd)
-    {
-      delete tmp_thd;
-      /* Remember that we don't have a THD */
-      my_pthread_setspecific_ptr(THR_THD,  0);
-      thd= 0;
-    }
   }
 #ifdef HAVE_QUERY_CACHE
   if (options & REFRESH_QUERY_CACHE_FREE)
@@ -313,7 +285,7 @@ bool reload_acl_and_cache(THD *thd, unsigned long options,
   if (thd && (options & REFRESH_STATUS))
     refresh_status(thd);
   if (options & REFRESH_THREADS)
-    kill_blocked_pthreads();
+    flush_thread_cache();
 #ifdef HAVE_REPLICATION
   if (options & REFRESH_MASTER)
   {
@@ -341,15 +313,10 @@ bool reload_acl_and_cache(THD *thd, unsigned long options,
  {
    tmp_write_to_binlog= 0;
    mysql_mutex_lock(&LOCK_active_mi);
-   if (active_mi != NULL && reset_slave(thd, active_mi))
+   if (reset_slave(thd, active_mi))
    {
      /* NOTE: my_error() has been already called by reset_slave(). */
      result= 1;
-   }
-   else if (active_mi == NULL)
-   {
-     result= 1;
-     my_error(ER_SLAVE_CONFIGURATION, MYF(0));
    }
    mysql_mutex_unlock(&LOCK_active_mi);
  }
@@ -481,7 +448,7 @@ bool flush_tables_with_read_lock(THD *thd, TABLE_LIST *all_tables)
   /*
     Before opening and locking tables the below call also waits
     for old shares to go away, so the fact that we don't pass
-    MYSQL_OPEN_IGNORE_FLUSH flag to it is important.
+    MYSQL_LOCK_IGNORE_FLUSH flag to it is important.
     Also we don't pass MYSQL_OPEN_HAS_MDL_LOCK flag as we want
     to open underlying tables if merge table is flushed.
     For underlying tables of the merge the below call has to
@@ -511,79 +478,4 @@ error:
 }
 
 
-/**
-  Prepare tables for export (transportable tablespaces) by
-  a) waiting until write transactions/DDL operations using these
-     tables have completed.
-  b) block new write operations/DDL operations on these tables.
 
-  Once this is done, notify the storage engines using handler::extra().
-
-  Finally, enter LOCK TABLES mode, so that locks are held
-  until UNLOCK TABLES is executed.
-
-  @param thd         Thread handler
-  @param all_tables  TABLE_LIST for tables to be exported
-
-  @retval false  Ok
-  @retval true   Error
-*/
-
-bool flush_tables_for_export(THD *thd, TABLE_LIST *all_tables)
-{
-  Lock_tables_prelocking_strategy lock_tables_prelocking_strategy;
-
-  /*
-    This is called from SQLCOM_FLUSH, the transaction has
-    been committed implicitly.
-  */
-
-  if (thd->locked_tables_mode)
-  {
-    my_error(ER_LOCK_OR_ACTIVE_TRANSACTION, MYF(0));
-    return true;
-  }
-
-  /*
-    Acquire SNW locks on tables to be exported. Don't acquire
-    global IX as this will make this statement incompatible
-    with FLUSH TABLES WITH READ LOCK.
-  */
-  if (open_and_lock_tables(thd, all_tables, false,
-                           MYSQL_OPEN_SKIP_SCOPED_MDL_LOCK,
-                           &lock_tables_prelocking_strategy))
-  {
-    return true;
-  }
-
-  // Check if all storage engines support FOR EXPORT.
-  for (TABLE_LIST *table_list= all_tables; table_list;
-       table_list= table_list->next_global)
-  {
-    if (!(table_list->table->file->ha_table_flags() & HA_CAN_EXPORT))
-    {
-      my_error(ER_ILLEGAL_HA, MYF(0), table_list->table_name);
-      return true;
-    }
-  }
-
-  // Notify the storage engines that the tables should be made ready for export.
-  for (TABLE_LIST *table_list= all_tables; table_list;
-       table_list= table_list->next_global)
-  {
-    handler *handler_file= table_list->table->file;
-    int error= handler_file->extra(HA_EXTRA_EXPORT);
-    if (error)
-    {
-      handler_file->print_error(error, MYF(0));
-      return true;
-    }
-  }
-
-  // Enter LOCKED TABLES mode.
-  if (thd->locked_tables_list.init_locked_tables(thd))
-    return true;
-  thd->variables.option_bits|= OPTION_TABLE_LOCK;
-
-  return false;
-}

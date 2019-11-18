@@ -1,3 +1,2 @@
---slow-query-log
---slow-query-log-file=slow-log
+--log-slow-queries=slow.log
 --log-queries-not-using-indexes

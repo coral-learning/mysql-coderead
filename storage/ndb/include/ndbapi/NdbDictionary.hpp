@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef NdbDictionary_H
 #define NdbDictionary_H
@@ -23,9 +22,6 @@
 class Ndb;
 struct charset_info_st;
 typedef struct charset_info_st CHARSET_INFO;
-
-/* Forward declaration only. */
-class NdbRecord;
 
 /**
  * @class NdbDictionary
@@ -116,13 +112,10 @@ public:
       IndexTrigger = 8,       ///< Index maintenance, internal
       SubscriptionTrigger = 9,///< Backup or replication, internal
       ReadOnlyConstraint = 10,///< Trigger, internal
-      TableEvent = 11,        ///< Table event
       Tablespace = 20,        ///< Tablespace
       LogfileGroup = 21,      ///< Logfile group
       Datafile = 22,          ///< Datafile
-      Undofile = 23,          ///< Undofile
-      ReorgTrigger = 19,
-      HashMap = 24
+      Undofile = 23           ///< Undofile
     };
 
     /**
@@ -166,11 +159,8 @@ public:
       FragAllLarge = 4,       ///< Four fragments per node.
       DistrKeyHash = 5,
       DistrKeyLin = 6,
-      UserDefined = 7,
-      HashMapPartition = 9
+      UserDefined = 7
     };
-  private:
-    Object&operator=(const Object&);
   };
 
   class Dictionary; // Forward declaration
@@ -196,14 +186,10 @@ public:
   private:
     friend class NdbDictObjectImpl;
     class NdbDictObjectImpl & m_impl;
-
-    ObjectId(const ObjectId&); // Not impl.
-    ObjectId&operator=(const ObjectId&);
   };
   
   class Table; // forward declaration
   class Tablespace; // forward declaration
-  class HashMap; // Forward
 //  class NdbEventOperation; // forward declaration
 
   /**
@@ -287,8 +273,7 @@ public:
      */
     enum StorageType {
       StorageTypeMemory = NDB_STORAGETYPE_MEMORY,
-      StorageTypeDisk = NDB_STORAGETYPE_DISK,
-      StorageTypeDefault = NDB_STORAGETYPE_DEFAULT
+      StorageTypeDisk = NDB_STORAGETYPE_DISK
     };
 
     /** 
@@ -365,14 +350,11 @@ public:
      */
     CHARSET_INFO* getCharset() const;
 
-    /**
-     * Returns mysql's internal number for the column's character set.
-     */
-    int getCharsetNumber() const;
 
     /**
      * For blob, get "inline size" i.e. number of initial bytes
-     * to store in table's blob attribute.
+     * to store in table's blob attribute.  This part is normally in
+     * main memory and can be indexed and interpreted.
      */
     int getInlineSize() const;
 
@@ -419,17 +401,6 @@ public:
 
     ArrayType getArrayType() const;
     StorageType getStorageType() const;
-
-    /**
-     * Get if the column is dynamic (NULL values not stored)
-     */
-    bool getDynamic() const;
-
-    /**
-     * Determine if the column is defined relative to an Index
-     * This affects the meaning of the attrId, column no and primary key,
-     */
-    bool getIndexSourced() const;
 
     /** @} *******************************************************************/
 
@@ -507,38 +478,22 @@ public:
     void setCharset(CHARSET_INFO* cs);
 
     /**
-     * For blob, set "inline size" i.e. number of initial bytes
+     * For blob, get "inline size" i.e. number of initial bytes
      * to store in table's blob attribute.  This part is normally in
-     * main memory.  It can not currently be indexed.
+     * main memory and can be indexed and interpreted.
      */
     void setInlineSize(int size);
 
     /**
-     * For blob, set "part size" i.e. number of bytes to store in
+     * For blob, get "part size" i.e. number of bytes to store in
      * each tuple of the "blob table".  Can be set to zero to omit parts
      * and to allow only inline bytes ("tinyblob").
      */
     void setPartSize(int size);
 
     /**
-     * For blob, set "stripe size" i.e. number of consecutive
-     * <em>parts</em> to store in a fragment, before moving to
-     * another (random) fragment.
-     *
-     * Striping may improve performance for large blobs
-     * since blob part operations are done in parallel.
-     * Optimal stripe size depends on the transport e.g. tcp/ip.
-     *
-     * Example: Given part size 2048 bytes, set stripe size 8.
-     * This assigns i/o in 16k chunks to each fragment.
-     *
-     * Blobs V1 required non-zero stripe size.  Blobs V2
-     * (created in version >= 5.1.x) have following behaviour:
-     *
-     * Default stripe size is zero, which means no striping and
-     * also that blob part data is stored in the same node group
-     * as the primary table row.  This is done by giving blob parts
-     * table same partition key as the primary table.
+     * For blob, get "stripe size" i.e. number of consecutive
+     * <em>parts</em> to store in each node group.
      */
     void setStripeSize(int size);
 
@@ -558,32 +513,7 @@ public:
     void setArrayType(ArrayType type);
     void setStorageType(StorageType type);
 
-    /**
-     * Set whether column is dynamic.
-     */
-    void setDynamic(bool);
-
     /** @} *******************************************************************/
-
-#ifndef DOXYGEN_SHOULD_SKIP_DEPRECATED
-    int setDefaultValue(const char*);
-#endif
-    /* setDefaultValue
-     * Set buf to NULL for no default value, or null default value for
-     * NULLABLE column, otherwise set buf to pointer to default value.
-     * The len parameter is the number of significant bytes of default
-     * value supplied, which is the type size for fixed size types.
-     * For variable length types, the leading 1 or 2 bytes pointed to 
-     * by buf also contain length information as normal for the type.
-     */
-    int setDefaultValue(const void* buf, unsigned int len);
-
-    /* getDefaultValue
-     * Get the default value data for this column.
-     * Optional int len* will be updated with the significant length 
-     * of the default value, or set to 0 for NULL or no default.
-     */
-    const void* getDefaultValue(unsigned int* len = 0) const;
 
 #ifndef DOXYGEN_SHOULD_SKIP_INTERNAL
     const Table * getBlobTable() const;
@@ -591,6 +521,8 @@ public:
     void setAutoIncrement(bool);
     bool getAutoIncrement() const;
     void setAutoIncrementInitialValue(Uint64 val);
+    int setDefaultValue(const char*);   
+    const char* getDefaultValue() const;
 
     static const Column * FRAGMENT;
     static const Column * FRAGMENT_FIXED_MEMORY;
@@ -603,26 +535,10 @@ public:
     static const Column * RECORDS_IN_RANGE;
     static const Column * ROWID;
     static const Column * ROW_GCI;
-    static const Column * ROW_GCI64;
-    static const Column * ROW_AUTHOR;
     static const Column * ANY_VALUE;
     static const Column * COPY_ROWID;
-    static const Column * LOCK_REF;
-    static const Column * OP_ID;
-    static const Column * OPTIMIZE;
-    static const Column * FRAGMENT_EXTENT_SPACE;
-    static const Column * FRAGMENT_FREE_EXTENT_SPACE;
-
+    
     int getSizeInBytes() const;
-
-    int getBlobVersion() const; // NDB_BLOB_V1 or NDB_BLOB_V2
-    void setBlobVersion(int blobVersion); // default NDB_BLOB_V2
-
-    /**
-     * 0 = yes
-     * -1 = no
-     */
-    int isBindable(const Column&) const;
 #endif
     
   private:
@@ -773,11 +689,6 @@ public:
     int getNoOfColumns() const;
     
     /**
-     * Get number of auto_increment columns in the table
-     */
-    int getNoOfAutoIncrementColumns() const;
-    
-    /**
      * Get number of primary keys in the table
      */
     int getNoOfPrimaryKeys() const;
@@ -799,11 +710,22 @@ public:
     Uint32 getFrmLength() const;
 
     /**
-     * Get default NdbRecord object for this table
-     * This NdbRecord object becomes invalid at the same time as
-     * the table object - when the ndb_cluster_connection is closed.
+     * Get Fragment Data (id, state and node group)
      */
-    const NdbRecord* getDefaultRecord() const;
+    const void *getFragmentData() const;
+    Uint32 getFragmentDataLen() const;
+
+    /**
+     * Get Range or List Array (value, partition)
+     */
+    const void *getRangeListData() const;
+    Uint32 getRangeListDataLen() const;
+
+    /**
+     * Get Tablespace Data (id, version)
+     */
+    const void *getTablespaceData() const;
+    Uint32 getTablespaceDataLen() const;
 
     /** @} *******************************************************************/
 
@@ -904,9 +826,6 @@ public:
     int setTablespace(const class Tablespace &);
     bool getTablespace(Uint32 *id= 0, Uint32 *version= 0) const;
 
-    bool getHashMap(Uint32* id = 0, Uint32* version = 0) const;
-    int setHashMap(const class HashMap &);
-
     /**
      * Get table object type
      */
@@ -940,46 +859,34 @@ public:
     int setFrm(const void* data, Uint32 len);
 
     /**
-     * Set fragmentation
-     *   One Uint32 per fragment, containing nodegroup of fragment
-     *   nodegroups[0] - correspondce to fragment 0
-     *
-     * Note: This calls also modifies <em>setFragmentCount</em>
-     *
+     * Set array of fragment information containing
+     * Fragment Identity
+     * Node group identity
+     * Fragment State
      */
-    int setFragmentData(const Uint32 * nodegroups, Uint32 cnt);
+    int setFragmentData(const void* data, Uint32 len);
 
     /**
-     * Get Fragment Data (array of node groups)
+     * Set/Get tablespace names per fragment
      */
-    const Uint32 *getFragmentData() const;
-    Uint32 getFragmentDataLen() const;
+    int setTablespaceNames(const void* data, Uint32 len);
+    const void *getTablespaceNames();
+    Uint32 getTablespaceNamesLen() const;
+
+    /**
+     * Set tablespace information per fragment
+     * Contains a tablespace id and a tablespace version
+     */
+    int setTablespaceData(const void* data, Uint32 len);
 
     /**
      * Set array of information mapping range values and list values
-     * to fragments.
-     *
-     * For range, this is a sorted list of range values
-     * For list, this is a list of pairs { value, partition }
+     * to fragments. This is essentially a sorted map consisting of
+     * pairs of value, fragment identity. For range partitions there is
+     * one pair per fragment. For list partitions it could be any number
+     * of pairs, at least as many as there are fragments.
      */
-    int setRangeListData(const Int32* data, Uint32 cnt);
-
-    /**
-     * Get Range or List Array (value, partition)
-     */
-    const Int32 *getRangeListData() const;
-    Uint32 getRangeListDataLen() const;
-
-    /**
-     * Get list of nodes storing given fragment, primary
-     * is normally entry 0
-     * Returns : 0 for error, > 0 for fragment count
-     * If fragment count is > arraySize param, only arraySize
-     * entries are written.
-     */
-    Uint32 getFragmentNodes(Uint32 fragmentId, 
-                            Uint32* nodeIdArrayPtr,
-                            Uint32 arraySize) const;
+    int setRangeListData(const void* data, Uint32 len);
 
     /**
      * Set table object type
@@ -1029,7 +936,7 @@ public:
 
     int getReplicaCount() const ;
 
-    bool getTemporary() const;
+    bool getTemporary();
     void setTemporary(bool); 
 
     /**
@@ -1049,32 +956,6 @@ public:
      *   passing NULL pointer will equal to bitmap with all columns set
      */
     int checkColumns(const Uint32* bitmap, unsigned len_in_bytes) const;
-
-    /**
-     * Set tableId,tableVersion on a table...
-     *   this is a "work-around" since createIndex can't (currently)
-     *   accept an ObjectId instead of table-object in createIndex
-     *   this as way way too much stuff is pushed into NdbDictInterface
-     */
-    void assignObjId(const ObjectId &);
-
-    /**
-     * set/get table-storage-method
-     */
-    void setStorageType(Column::StorageType);
-    Column::StorageType getStorageType() const;
-
-    /**
-     * Get/set extra GCI bits (max 31)
-     */
-    void setExtraRowGciBits(Uint32);
-    Uint32 getExtraRowGciBits() const;
-
-    /**
-     * Get/set extra row author bits (max 31)
-     */
-    void setExtraRowAuthorBits(Uint32);
-    Uint32 getExtraRowAuthorBits() const;
 #endif
 
     // these 2 are not de-doxygenated
@@ -1108,19 +989,6 @@ public:
      */
     int validate(struct NdbError& error);
 
-    /**
-     * Return partitionId given a hashvalue
-     *   Note, if table is not retreived (e.i using getTable) result
-     *   will most likely be wrong
-     */
-    Uint32 getPartitionId(Uint32 hashvalue) const ;
-
-    /*
-     * Return TRUE if any of the columns in the table have a 
-     * non NULL default value defined
-     */ 
-    bool hasDefaultValues() const;
-
   private:
 #ifndef DOXYGEN_SHOULD_SKIP_INTERNAL
     friend class Ndb;
@@ -1150,7 +1018,7 @@ public:
     const char * getName() const;
     
     /**
-     * Get the name of the underlying table being indexed
+     * Get the name of the table being indexed
      */
     const char * getTable() const;
 
@@ -1162,7 +1030,7 @@ public:
 #ifndef DOXYGEN_SHOULD_SKIP_DEPRECATED
     /**
      * Get the number of columns in the index
-     * Deprecated, use getNoOfColumns instead.
+     * Depricated, use getNoOfColumns instead.
      */
     int getNoOfIndexColumns() const;
 #endif
@@ -1175,7 +1043,7 @@ public:
 #ifndef DOXYGEN_SHOULD_SKIP_DEPRECATED
     /**
      * Get a specific column name in the index
-     * Deprecated, use getColumn instead.
+     * Depricated, use getColumn instead.
      */
     const char * getIndexColumn(int no) const ;
 #endif
@@ -1198,7 +1066,7 @@ public:
     /**
      * Check if index is set to be stored on disk
      *
-     * @return if true then logging is enabled
+     * @return if true then logging id enabled
      *
      * @note Non-logged indexes are rebuilt at system restart.
      * @note Ordered index does not currently support logging.
@@ -1219,14 +1087,6 @@ public:
      * Get object id
      */
     virtual int getObjectId() const;
-
-    /**
-     * Get default NdbRecord object for this index
-     * This NdbRecord object becomes invalid at the same time as
-     * the index object does - when the ndb_cluster_connection 
-     * is closed.
-     */
-    const NdbRecord* getDefaultRecord() const;
 
     /** @} *******************************************************************/
 
@@ -1275,7 +1135,7 @@ public:
      * Add a column name to the index definition
      * Note that the order of indexes will be in
      * the order they are added (only matters for ordered indexes).
-     * Deprecated, use addColumnName instead.
+     * Depricated, use addColumnName instead.
      */
     int addIndexColumn(const char * name);
 #endif
@@ -1292,7 +1152,7 @@ public:
      * Add several column names to the index definition
      * Note that the order of indexes will be in
      * the order they are added (only matters for ordered indexes).
-     * Deprecated, use addColumnNames instead.
+     * Depricated, use addColumnNames instead.
      */
     int addIndexColumns(int noOfNames, const char ** names);
 #endif
@@ -1315,7 +1175,7 @@ public:
     void setStoredIndex(bool x) { setLogging(x); }
     bool getStoredIndex() const { return getLogging(); }
 
-    bool getTemporary() const;
+    bool getTemporary();
     void setTemporary(bool); 
 #endif
     
@@ -1328,73 +1188,6 @@ public:
 #endif
     class NdbIndexImpl & m_impl;
     Index(NdbIndexImpl&);
-  };
-
-  /**
-   * @brief Represents a Table Optimization Handle
-   * Passed as argument to optimizeTable
-   */
-  class OptimizeTableHandle {
-  public:
-    /**
-     * Supported operations for OptimizeTableHandle
-     */
-    OptimizeTableHandle();
-    ~OptimizeTableHandle();
-    /**
-     * Optimize one more batch of records
-     * @return 1 for more records left to optimize,
-     *         0 when completed
-     *         -1 encountered some error 
-     */
-    int next();
-    /**
-     * Close the handle object
-     * @return 0 when completed
-     *         -1 encountered some error      
-     */
-    int close();
-  private:
-#ifndef DOXYGEN_SHOULD_SKIP_INTERNAL
-    friend class NdbOptimizeTableHandleImpl;
-    friend class NdbOptimizeIndexHandleImpl;
-    friend class NdbDicitionaryImpl;
-#endif
-    class NdbOptimizeTableHandleImpl & m_impl;
-    OptimizeTableHandle(NdbOptimizeTableHandleImpl &);
-  };
-
-  /**
-   * @brief Represents a Index Optimization Handle
-   * passed as argument to optimizeIndex
-   */
-  class OptimizeIndexHandle {
-  public:
-    /**
-     * Supported operations for OptimizeIndexHandle
-     */
-    OptimizeIndexHandle();
-    ~OptimizeIndexHandle();
-    /**
-     * Optimize one more batch of records
-     * @return 1 for more records left to optimize,
-     *         0 when completed
-     *         -1 encountered some error 
-     */
-    int next();
-    /**
-     * Close the handle object
-     * @return 0 when completed
-     *         -1 encountered some error      
-     */
-    int close();
-  private:
-#ifndef DOXYGEN_SHOULD_SKIP_INTERNAL
-    friend class NdbOptimizeIndexHandleImpl;
-    friend class NdbDicitionaryImpl;
-#endif
-    class NdbOptimizeIndexHandleImpl & m_impl;
-    OptimizeIndexHandle(NdbOptimizeIndexHandleImpl &);
   };
 
   /**
@@ -1480,8 +1273,7 @@ public:
     enum EventReport {
       ER_UPDATED = 0,
       ER_ALL = 1, // except not-updated blob inlines
-      ER_SUBSCRIBE = 2,
-      ER_DDL = 4
+      ER_SUBSCRIBE = 2
     };
 
     /**
@@ -1645,176 +1437,6 @@ public:
     Event(NdbEventImpl&);
   };
 
-  /* Flags for createRecord(). */
-  enum NdbRecordFlags {
-    /*
-      Use special mysqld varchar format in index keys, used only from
-      inside mysqld.
-    */
-    RecMysqldShrinkVarchar= 0x1,
-    /* Use the mysqld record format for bitfields, only used inside mysqld. */
-    RecMysqldBitfield= 0x2
-  };
-  struct RecordSpecification {
-    /*
-      Column described by this entry (the column maximum size defines field
-      size in row).
-      Note that even when creating an NdbRecord for an index, the column
-      pointers must be to columns obtained from the underlying table, not
-      from the index itself.
-      Note that pseudo columns cannot be used as part of a RecordSpecification.
-      To read pesudo column values, use the extra get value and set value 
-      APIs.
-    */
-    const Column *column;
-    /*
-      Offset of data from start of a row.
-      
-      For reading blobs, the blob handle (NdbBlob *) will be written into the
-      result row when the operation is created, not the actual blob data. 
-      So at least sizeof(NdbBlob *) must be available in the row.  Other 
-      operations do not write the blob handle into the row.
-      In any case, a blob handle can always be obtained with a call to 
-      NdbOperation/NdbScanOperation::getBlobHandle().
-    */
-    Uint32 offset;
-    /*
-      Offset from start of row of byte containing NULL bit.
-      Not used for columns that are not NULLable.
-    */
-    Uint32 nullbit_byte_offset;
-    /* NULL bit, 0-7. Not used for columns that are not NULLable. */
-    Uint32 nullbit_bit_in_byte;
-  };
-
-  /* Types of NdbRecord object */
-  enum RecordType {
-    TableAccess,
-    IndexAccess
-  };
-  
-  /*
-    Return the type of the passed NdbRecord object
-  */
-  static RecordType getRecordType(const NdbRecord* record);
-  
-  /*
-    Return the name of the table object that the NdbRecord
-    refers to.
-    This method returns Null if the NdbRecord object is not a 
-    TableAccess NdbRecord.
-  */
-  static const char* getRecordTableName(const NdbRecord* record);
-  
-  /*
-    Return the name of the index object that the NdbRecord
-    refers to.
-    This method returns Null if the NdbRecord object is not an
-    IndexAccess NdbRecord
-  */
-  static const char* getRecordIndexName(const NdbRecord* record);
-  
-  /*
-    Get the first Attribute Id specified in the NdbRecord object.
-    Returns false if no Attribute Ids are specified.
-  */
-  static bool getFirstAttrId(const NdbRecord* record, Uint32& firstAttrId);
-
-  /* Get the next Attribute Id specified in the NdbRecord object
-     after the attribute Id passed in.
-     Returns false if there are no more attribute Ids
-  */
-  static bool getNextAttrId(const NdbRecord* record, Uint32& attrId);
-
-  /* Get offset of the given attribute id's storage from the start
-     of the NdbRecord row.
-     Returns false if the attribute id is not present
-  */
-  static bool getOffset(const NdbRecord* record, Uint32 attrId, Uint32& offset);
-  
-  /* Get offset of the given attribute id's null bit from the start
-     of the NdbRecord row.
-     Returns false if the attribute is not present or if the
-     attribute is not nullable
-  */
-  static bool getNullBitOffset(const NdbRecord* record, 
-                               Uint32 attrId, 
-                               Uint32& nullbit_byte_offset,
-                               Uint32& nullbit_bit_in_byte);
-
-  /*
-    Return pointer to beginning of storage of data specified by
-    attrId.
-    This method looks up the offset of the column which is stored in
-    the NdbRecord object, and returns the value of row + offset.
-    There are row-const and non-row-const versions.
-    
-    @param record : Pointer to NdbRecord object describing the row format
-    @param row : Pointer to the start of row data
-    @param attrId : Attribute id of column
-    @return : Pointer to start of the attribute in the row.  Null if the
-    attribute is not part of the NdbRecord definition
-  */
-  static const char* getValuePtr(const NdbRecord* record,
-                                 const char* row,
-                                 Uint32 attrId);
-  
-  static char* getValuePtr(const NdbRecord* record,
-                           char* row,
-                           Uint32 attrId);
-  
-  /*
-    Return a bool indicating whether the null bit for the given
-    column is set to true or false.
-    The location of the null bit in relation to the row pointer is
-    obtained from the passed NdbRecord object.
-    If the column is not nullable, false will be returned.
-    If the column is not part of the NdbRecord definition, false will
-    be returned.
-    
-    @param record : Pointer to NdbRecord object describing the row format
-    @param row : Pointer to the start of row data
-    @param attrId : Attibute id of column
-    @return : true if attrId exists in NdbRecord, is nullable, and null bit
-    in row is set, false otherwise.
-  */
-  static bool isNull(const NdbRecord* record,
-                     const char* row,
-                     Uint32 attrId);
-  
-  /*
-    Set the null bit for the given column to the supplied value.
-    The offset for the null bit is obtained from the passed 
-    NdbRecord object.
-    
-    If the attrId is not part of the NdbRecord, or is not nullable
-    then an error will be returned.
-    
-    @param record : Pointer to NdbRecord object describing the row format
-    @param row : Pointer to the start of row data
-    @param atrId : Attribute id of the column
-    @param value : Value to set null bit to
-    @returns : 0 in success, -1 if the attrId is not part of the record,
-    or is not nullable
-  */
-  static int setNull(const NdbRecord* record,
-                     char* row,
-                     Uint32 attrId,
-                     bool value);
-  
-  /*
-    Return the number of bytes needed to store one row of data
-    laid out as described by the passed NdbRecord structure.
-  */
-  static Uint32 getRecordRowLength(const NdbRecord* record);
-  
-  /*
-    Return an empty column presence bitmask.
-    This bitmask can be used with any NdbRecord to specify that
-    no NdbRecord columns are to be included in the operation.
-  */
-  static const unsigned char* getEmptyBitmask();
-  
   struct AutoGrowSpecification {
     Uint32 min_free;
     Uint64 max_size;
@@ -1997,51 +1619,6 @@ public:
   };
 
   /**
-   * @class HashMap
-   * @brief Represents a HashMap in an NDB Cluster
-   *
-   */
-  class HashMap : public Object {
-  public:
-    HashMap();
-    HashMap(const HashMap&);
-    virtual ~HashMap();
-
-    void setName(const char *);
-    const char * getName() const;
-
-    void setMap(const Uint32* values, Uint32 len);
-    Uint32 getMapLen() const;
-    int getMapValues(Uint32* dst, Uint32 len) const;
-
-    /**
-     * equal
-     *   compares *values* only
-     */
-    bool equal(const HashMap&) const;
-
-    /**
-     * Get object status
-     */
-    virtual Object::Status getObjectStatus() const;
-
-    /**
-     * Get object version
-     */
-    virtual int getObjectVersion() const;
-
-    /**
-     * Get object id
-     */
-    virtual int getObjectId() const;
-
-  private:
-    friend class NdbHashMapImpl;
-    class NdbHashMapImpl & m_impl;
-    HashMap(NdbHashMapImpl&);
-  };
-
-  /**
    * @class Dictionary
    * @brief Dictionary for defining and retreiving meta data
    */
@@ -2109,14 +1686,9 @@ public:
      * @return       -1 if error.
      *
      */
-#ifndef DOXYGEN_SHOULD_SKIP_DEPRECATED
     int listObjects(List & list, Object::Type type = Object::TypeUndefined);
-#endif
     int listObjects(List & list,
 		    Object::Type type = Object::TypeUndefined) const;
-    int listObjects(List & list,
-                    Object::Type type,
-                    bool fullyQualified) const;
 
     /**
      * Get the latest error
@@ -2124,13 +1696,6 @@ public:
      * @return   Error object.
      */			     
     const struct NdbError & getNdbError() const;
-
-    /**
-     * Get warning flags.  The value is valid only if the operation did
-     * not return an error and can return warnings.  The flags are
-     * specific to the operation.
-     */
-    int getWarningFlags() const;
 
     /** @} *******************************************************************/
 
@@ -2175,9 +1740,7 @@ public:
      * @param tableName  Name of table that index belongs to.
      * @return  0 if successful, otherwise -1
      */
-#ifndef DOXYGEN_SHOULD_SKIP_DEPRECATED
     int listIndexes(List & list, const char * tableName);
-#endif
     int listIndexes(List & list, const char * tableName) const;
 
 #ifndef DOXYGEN_SHOULD_SKIP_INTERNAL
@@ -2208,7 +1771,7 @@ public:
      * @param eventName  Name of event to drop.
      * @return 0 if successful otherwise -1.
      */
-    int dropEvent(const char * eventName, int force= 0);
+    int dropEvent(const char * eventName);
     
     /**
      * Get event with given name.
@@ -2216,16 +1779,6 @@ public:
      * @return an Event if successful, otherwise NULL.
      */
     const Event * getEvent(const char * eventName);
-
-    /**
-     * List defined events
-     * @param list   List of events returned in the dictionary
-     * @return 0 if successful otherwise -1.
-     */
-#ifndef DOXYGEN_SHOULD_SKIP_DEPRECATED
-    int listEvents(List & list);
-#endif
-    int listEvents(List & list) const;
 
     /** @} *******************************************************************/
 
@@ -2245,32 +1798,6 @@ public:
     int createTable(const Table &table);
 
     /**
-     * Create defined table given defined Table instance
-     *   return ObjectId
-     * @param table Table to create
-     * @return 0 if successful otherwise -1.
-     */
-    int createTable(const Table &table, ObjectId * objid);
-
-    /**
-     * Start table optimization given defined table object
-     * @param t Object of table to optimize
-     * @param Pre-allocated OptimizeTableHandle
-     * @return 0 if successful otherwise -1.
-     */
-    int
-    optimizeTable(const Table &t, OptimizeTableHandle &h);
-
-    /**
-     * Start index optimization given defined index object
-     * @param ind Object of index to optimize
-     * @param Pre-allocated OptimizeIndexHandle
-     * @return 0 if successful otherwise -1.
-     */
-    int
-    optimizeIndex(const Index &ind, OptimizeIndexHandle &h);
-
-    /**
      * Drop table given retrieved Table instance
      * @param table Table to drop
      * @return 0 if successful otherwise -1.
@@ -2284,26 +1811,15 @@ public:
      */
     int dropTable(const char * name);
     
-    /**
-     * Check if alter of table given defined
-     * Table instance to new definition is supported
-     * @param f Table to alter
-     * @param t New definition of table
-     * @return  TRUE supported      <br>
-     *          FALSE not supported <br>
-     */
-    bool supportedAlterTable(const Table & f, const Table & t);
-
 #ifndef DOXYGEN_SHOULD_SKIP_INTERNAL
     /**
      * Alter defined table given defined Table instance
-     * @param f Table to alter
-     * @param t New definition of table
+     * @param table Table to alter
      * @return  -2 (incompatible version) <br>
      *          -1 general error          <br>
      *           0 success                 
      */
-    int alterTable(const Table & f, const Table & t);
+    int alterTable(const Table &table);
 
     /**
      * Invalidate cached table object
@@ -2337,8 +1853,8 @@ public:
      * @param index Index to create
      * @return 0 if successful otherwise -1.
      */
-    int createIndex(const Index &index, bool offline = false);
-    int createIndex(const Index &index, const Table &table, bool offline = false);
+    int createIndex(const Index &index);
+    int createIndex(const Index &index, const Table &table);
 
     /**
      * Drop index with given name
@@ -2348,30 +1864,6 @@ public:
      */
     int dropIndex(const char * indexName,
 		  const char * tableName);
-
-    /*
-     * Force update of ordered index stats.  Scans an assigned fragment
-     * in the kernel and updates result in stats tables.  This one-time
-     * update is independent of IndexStatAuto settings.  Common use case
-     * is mysql "analyze table".
-     */
-    int updateIndexStat(const Index&, const Table&);
-
-    /*
-     * Force update of ordered index stats where index is given by id.
-     */
-    int updateIndexStat(Uint32 indexId, Uint32 indexVersion, Uint32 tableId);
-
-    /*
-     * Delete ordered index stats.  If IndexStatAutoUpdate is set, also
-     * stops automatic updates, until another forced update is done.
-     */
-    int deleteIndexStat(const Index&, const Table&);
-
-    /*
-     * Delete ordered index stats where index is given by id.
-     */
-    int deleteIndexStat(Uint32 indexId, Uint32 indexVersion, Uint32 tableId);
     
 #ifndef DOXYGEN_SHOULD_SKIP_INTERNAL
     void removeCachedTable(const Table *table);
@@ -2387,12 +1879,6 @@ public:
      * Force gcp and wait for gcp complete
      */
     int forceGCPWait();
-    int forceGCPWait(int type);
-
-    /**
-     * Get restart gci
-     */
-    int getRestartGCI(Uint32 * gci);
 #endif
 
     /** @} *******************************************************************/
@@ -2403,18 +1889,6 @@ public:
      * @{
      */
     
-    /*
-     * The four "create" operations can return warning flags defined
-     * below.  See getWarningFlags().
-     */
-    enum {
-      WarnUndobufferRoundUp = 0x1,  // rounded up to kernel page size
-      WarnUndofileRoundDown = 0x2,  // rounded down to kernel page size
-      WarnExtentRoundUp = 0x4,      // rounded up to kernel page size
-      WarnDatafileRoundDown = 0x8,  // rounded down to kernel page size
-      WarnDatafileRoundUp = 0x10    // rounded up to extent size
-    };
-
     int createLogfileGroup(const LogfileGroup &, ObjectId* = 0);
     int dropLogfileGroup(const LogfileGroup&);
     LogfileGroup getLogfileGroup(const char * name);
@@ -2432,124 +1906,8 @@ public:
     int dropUndofile(const Undofile&);
     Undofile getUndofile(Uint32 node, const char * path);
     
-
     /** @} *******************************************************************/
-    /**
-     * @name HashMap
-     * @{
-     */
-
-    /**
-     * Create a HashMap in database
-     */
-    int createHashMap(const HashMap&, ObjectId* = 0);
-
-    /**
-     * Get a HashMap by name
-     */
-    int getHashMap(HashMap& dst, const char* name);
-
-    /**
-     * Get a HashMap for a table
-     */
-    int getHashMap(HashMap& dst, const Table* table);
-
-    /**
-     * Get default HashMap
-     */
-    int getDefaultHashMap(HashMap& dst, Uint32 fragments);
-
-
-    /**
-     * Init a default HashMap
-     */
-    int initDefaultHashMap(HashMap& dst, Uint32 fragments);
-
-    /**
-     * create (or retreive) a HashMap suitable for alter
-     * NOTE: Requires a started schema transaction
-     */
-    int prepareHashMap(const Table& oldTable, Table& newTable);
-
-    /** @} *******************************************************************/
-
-    /**
-     * @name Schema transactions
-     *
-     * Metadata operations are create, alter, and drop of objects of
-     * various types.  An operation may create additional sub-operations
-     * in the kernel.
-     *
-     * By default, each user operation is executed separately.  That is,
-     * a schema transaction is started implicitly, the operation and its
-     * suboperations are executed, and the transaction is closed.
-     *
-     * The Ndb object and its associated Dictionary support one schema
-     * transaction at a time.
-     *
-     * Using begin and end transaction explicitly it is possible to
-     * execute a set of user defined operations atomically i.e. either
-     * all operations succeed or all are aborted (rolled back).
-     *
-     * The steps are 1) beginSchemaTrans 2) submit operations such as
-     * createTable 3) endSchemaTrans.
-     *
-     * Each operation is sent to the kernel which parses and saves it.
-     * Parse failure does rollback to previous user operation before
-     * returning.  The user can continue or abort entire transaction.
-     *
-     * After all operations have been submitted, endSchemaTrans with
-     * flags 0 (the default) processes and commits them.  On error
-     * return the transaction is already aborted.
-     *
-     * If the user exits before calling endSchemaTrans, the kernel
-     * aborts the transaction.  If the user exits before the call to
-     * endSchemaTrans returns, the kernel continues with the request.
-     * Completion status is reported in cluster log.
-     */
-
-    //@{
-    /**
-     * Begin schema transaction.  Returns error if a transaction is
-     * already active or if the kernel metadata is locked.
-     *
-     * @return 0 on success, -1 on error
-     */
-    int beginSchemaTrans();
-
-    /**
-     * End schema transaction, with commit or with abort.  Combines
-     * execute and close which do not exist separately.  May be called
-     * and succeeds even if no transaction is active.
-     *
-     * @note Like any method, may overwrite current error code.
-     *       First save error code from any failed operation.
-     *
-     * @param flags
-     *        Bitmask of options.
-     *        Default 0 commits the transaction.
-     *        Including option 1 aborts the transaction.
-     *        See SchemaTransFlag for others.
-     * @return 0 on success, -1 on error
-     */
-    int endSchemaTrans(Uint32 flags = 0);
-
-    /**
-     * Flags for endSchemaTrans, or-ed together.
-     */
-    enum SchemaTransFlag {
-      // abort transaction
-      SchemaTransAbort = 1,
-      // do not wait for reply, status is reported in cluster log
-      SchemaTransBackground = 2
-    };
-
-    /**
-     * Check if a schema transaction exists currently.
-     */
-    bool hasSchemaTrans() const;
-    //@}
-
+    
   protected:
     Dictionary(Ndb & ndb);
     ~Dictionary();
@@ -2571,77 +1929,15 @@ public:
 
     const Index * getIndexGlobal(const char * indexName,
                                  const Table &ndbtab) const;
-    const Index * getIndexGlobal(const char * indexName,
-                                 const char * tableName) const;
     const Table * getTableGlobal(const char * tableName) const;
     int alterTableGlobal(const Table &f, const Table &t);
     int dropTableGlobal(const Table &ndbtab);
     int dropIndexGlobal(const Index &index);
     int removeIndexGlobal(const Index &ndbidx, int invalidate) const;
     int removeTableGlobal(const Table &ndbtab, int invalidate) const;
-    void invalidateDbGlobal(const char * dbname);
 #endif
-
-    /*
-      Create an NdbRecord for use in table operations.
-    */
-    NdbRecord *createRecord(const Table *table,
-                            const RecordSpecification *recSpec,
-                            Uint32 length,
-                            Uint32 elemSize,
-                            Uint32 flags= 0);
-
-    /*
-      Create an NdbRecord for use in index operations.
-    */
-    NdbRecord *createRecord(const Index *index,
-                            const Table *table,
-                            const RecordSpecification *recSpec,
-                            Uint32 length,
-                            Uint32 elemSize,
-                            Uint32 flags= 0);
-    /*
-      Create an NdbRecord for use in index operations.
-      This variant assumes that the index is for a table in 
-      the current database and schema
-    */
-    NdbRecord *createRecord(const Index *index,
-                            const RecordSpecification *recSpec,
-                            Uint32 length,
-                            Uint32 elemSize,
-                            Uint32 flags= 0);
-
-    /*
-      Free an NdbRecord object created earlier with
-      createRecord
-    */
-    void releaseRecord(NdbRecord *rec);
-  }; // class Dictionary
-
-  class NdbDataPrintFormat
-  {
-  public:
-    NdbDataPrintFormat();
-    virtual ~NdbDataPrintFormat();
-    const char *lines_terminated_by;
-    const char *fields_terminated_by;
-    const char *start_array_enclosure;
-    const char *end_array_enclosure;
-    const char *fields_enclosed_by;
-    const char *fields_optionally_enclosed_by;
-    const char *hex_prefix;
-    const char *null_string;
-    int hex_format;
   };
-
-  static 
-  class NdbOut& printFormattedValue(class NdbOut& out, 
-                                    const NdbDataPrintFormat& format,
-                                    const NdbDictionary::Column* c,
-                                    const void* val);
-  
-
-}; // class NdbDictionary
+};
 
 class NdbOut& operator <<(class NdbOut& out, const NdbDictionary::Column& col);
 

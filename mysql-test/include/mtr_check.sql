@@ -17,38 +17,6 @@ delimiter ||;
 
 use mtr||
 
-CREATE DEFINER=root@localhost PROCEDURE check_testcase_perfschema()
-BEGIN
-  IF ((SELECT count(*) from information_schema.engines
-       where engine='PERFORMANCE_SCHEMA' and support='YES') = 1) THEN
-  BEGIN
-
-    BEGIN
-      -- For tests tampering with performance_schema table structure
-      DECLARE CONTINUE HANDLER for SQLEXCEPTION
-      BEGIN
-      END;
-
-      -- Leave the instruments in the same state
-      SELECT * from performance_schema.setup_instruments
-        where enabled='NO' order by NAME;
-    END;
-
-    -- Leave the consumers in the same state
-    SELECT * from performance_schema.setup_consumers
-      order by NAME;
-
-    -- Leave the actors setup in the same state
-    SELECT * from performance_schema.setup_actors
-      order by USER, HOST;
-
-    -- Leave the objects setup in the same state
-    SELECT * from performance_schema.setup_objects
-      order by OBJECT_TYPE, OBJECT_SCHEMA, OBJECT_NAME;
-  END;
-  END IF;
-END||
-
 --
 -- Procedure used to check if server has been properly
 -- restored after testcase has been run
@@ -56,15 +24,11 @@ END||
 CREATE DEFINER=root@localhost PROCEDURE check_testcase()
 BEGIN
 
-  CALL check_testcase_perfschema();
-
-  -- Dump all global variables except those that may change.
-  -- timestamp changes if time passes. server_uuid changes if server restarts.
+  -- Dump all global variables except those
+  -- that are supposed to change
   SELECT * FROM INFORMATION_SCHEMA.GLOBAL_VARIABLES
-    WHERE variable_name NOT IN ('timestamp', 'server_uuid',
-                                'innodb_file_format_max',
-                                'gtid_executed', 'gtid_purged')
-    ORDER BY VARIABLE_NAME;
+    WHERE variable_name NOT IN ('timestamp', 'innodb_file_format_max')
+      ORDER BY VARIABLE_NAME;
 
   -- Dump all databases, there should be none
   -- except those that was created during bootstrap
@@ -80,7 +44,7 @@ BEGIN
       WHERE table_schema='mysql' AND table_name != 'ndb_apply_status'
         ORDER BY tables_in_mysql;
   SELECT CONCAT(table_schema, '.', table_name) AS columns_in_mysql,
-         column_name, ordinal_position, column_default, is_nullable,
+  	 column_name, ordinal_position, column_default, is_nullable,
          data_type, character_maximum_length, character_octet_length,
          numeric_precision, numeric_scale, character_set_name,
          collation_name, column_type, column_key, extra, column_comment
@@ -90,7 +54,7 @@ BEGIN
 
   -- Dump all events, there should be none
   SELECT * FROM INFORMATION_SCHEMA.EVENTS;
-  -- Dump all triggers except mtr internals, there should be none
+  -- Dump all triggers	 except mtr internals, there should be none
   SELECT * FROM INFORMATION_SCHEMA.TRIGGERS
          WHERE TRIGGER_NAME NOT IN ('gs_insert', 'ts_insert');
   -- Dump all created procedures, there should be none

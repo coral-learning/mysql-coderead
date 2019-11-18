@@ -1,4 +1,4 @@
-# Copyright (c) 2006, 2016, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2006, 2018, Oracle and/or its affiliates. All rights reserved.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/strings
   ${SSL_INCLUDE_DIRS}
   ${SSL_INTERNAL_INCLUDE_DIRS}
-  ${ZLIB_INCLUDE_DIR})
+  )
 ADD_DEFINITIONS(${SSL_DEFINES})
 
 SET(CLIENT_API_FUNCTIONS
@@ -131,13 +131,6 @@ mysql_server_end
 mysql_set_character_set
 mysql_get_character_set_info
 mysql_stmt_next_result
-my_init
-mysql_client_find_plugin
-mysql_client_register_plugin
-mysql_load_plugin
-mysql_load_plugin_v
-mysql_options4
-mysql_plugin_options
 
 CACHE INTERNAL "Functions exported by client API"
 
@@ -150,24 +143,15 @@ SET(CLIENT_SOURCES
   ../sql-common/client.c 
   ../sql-common/my_time.c 
   ../sql-common/client_plugin.c 
-  ../sql-common/client_authentication.cc
   ../sql/net_serv.cc
   ../sql-common/pack.c 
   ../sql/password.c
 )
-
-IF (WIN32 AND OPENSSL_APPLINK_C)
-  SET_SOURCE_FILES_PROPERTIES(
-    ../sql-common/client_authentication.cc
-    PROPERTIES COMPILE_FLAGS "-DHAVE_OPENSSL_APPLINK_C"
-  )
-ENDIF()
-
 ADD_CONVENIENCE_LIBRARY(clientlib ${CLIENT_SOURCES})
 DTRACE_INSTRUMENT(clientlib)
 ADD_DEPENDENCIES(clientlib GenError)
 
-SET(LIBS clientlib dbug strings vio mysys mysys_ssl ${ZLIB_LIBRARY} ${SSL_LIBRARIES} ${LIBDL})
+SET(LIBS clientlib dbug strings vio mysys ${ZLIB_LIBRARY} ${SSL_LIBRARIES} ${LIBDL})
 
 #
 # On Windows platform client library includes the client-side 
@@ -180,6 +164,7 @@ IF(WIN32)
 ENDIF()
 
 # Merge several convenience libraries into one big mysqlclient
+# and link them together into shared library.
 MERGE_LIBRARIES(mysqlclient STATIC ${LIBS} COMPONENT Development)
 
 # Visual Studio users need debug  static library for debug projects
@@ -216,8 +201,6 @@ IF(UNIX)
 ENDIF()
 
 IF(NOT DISABLE_SHARED)
-  # Merge several convenience libraries into one big mysqlclient
-  # and link them together into shared library.
   MERGE_LIBRARIES(libmysql SHARED ${LIBS}
     EXPORTS ${CLIENT_API_FUNCTIONS}
     COMPONENT SharedLibraries)
@@ -225,6 +208,8 @@ IF(NOT DISABLE_SHARED)
     # libtool compatability
     IF(CMAKE_SYSTEM_NAME MATCHES "FreeBSD" OR APPLE)
       SET(OS_SHARED_LIB_VERSION "${SHARED_LIB_MAJOR_VERSION}")
+    ELSEIF(CMAKE_SYSTEM_NAME MATCHES "HP-UX")
+      SET(OS_SHARED_LIB_VERSION "${SHARED_LIB_MAJOR_VERSION}.0")
     ELSE()
       SET(OS_SHARED_LIB_VERSION
         "${SHARED_LIB_MAJOR_VERSION}.${SHARED_LIB_MINOR_VERSION}.0")
@@ -234,28 +219,13 @@ IF(NOT DISABLE_SHARED)
       OUTPUT_NAME mysqlclient 
       VERSION "${OS_SHARED_LIB_VERSION}" 
       SOVERSION "${SHARED_LIB_MAJOR_VERSION}")
-    IF(WITH_SYMVER16)
-      CONFIGURE_FILE(libmysql.ver16.in ${CMAKE_CURRENT_BINARY_DIR}/libmysql.ver)
-    ELSE()
-      CONFIGURE_FILE(libmysql.ver.in ${CMAKE_CURRENT_BINARY_DIR}/libmysql.ver)
-    ENDIF()
-
-    GET_TARGET_PROPERTY(libmysql_link_flags libmysql LINK_FLAGS)
-    IF(NOT libmysql_link_flag)
-      SET(libmysql_link_flags)
-    ENDIF()
-    SET(libmysql_link_flags
-      "${CMAKE_SHARED_LIBRARY_C_FLAGS} ${libmysql_link_flags}")
-    SET_TARGET_PROPERTIES(libmysql
-      PROPERTIES LINK_FLAGS "${libmysql_link_flags}")
-
     IF(LINK_FLAG_NO_UNDEFINED)
-      SET(libmysql_link_flags
+      GET_TARGET_PROPERTY(libmysql_link_flags libmysql LINK_FLAGS)
+      IF(NOT libmysql_link_flag)
+        SET(libmysql_link_flags)
+      ENDIF()
+      SET_TARGET_PROPERTIES(libmysql PROPERTIES LINK_FLAGS 
         "${libmysql_link_flags} ${LINK_FLAG_NO_UNDEFINED}")
-      SET(libmysql_link_flags
-        "${libmysql_link_flags} -Wl,--version-script=libmysql.ver")
-      SET_TARGET_PROPERTIES(libmysql
-        PROPERTIES LINK_FLAGS "${libmysql_link_flags}")
     ENDIF() 
     # clean direct output needs to be set several targets have the same name
     #(mysqlclient in this case)

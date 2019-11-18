@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003-2007 MySQL AB
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef SIGNAL_COUNTER_HPP
 #define SIGNAL_COUNTER_HPP
@@ -46,7 +44,9 @@ public:
   const char * getText() const;
 
   SignalCounter& operator=(const NdbNodeBitmask & bitmask);
-  SignalCounter& operator=(const NodeReceiverGroup& rg);
+  SignalCounter& operator=(const NodeReceiverGroup& rg) { 
+    return (* this) = rg.m_nodes;
+  }
 
   /**
    * When sending to same node
@@ -150,7 +150,7 @@ inline
 const char *
 SignalCounter::getText() const {
   static char buf[255];
-  static char nodes[NdbNodeBitmask::TextLength+1];
+  static char nodes[NodeBitmask::TextLength+1];
   BaseString::snprintf(buf, sizeof(buf), "[SignalCounter: m_count=%d %s]", m_count, m_nodes.getText(nodes));
   return buf;
 }
@@ -160,15 +160,6 @@ SignalCounter&
 SignalCounter::operator=(const NdbNodeBitmask & bitmask){
   m_nodes = bitmask;
   m_count = bitmask.count();
-  return * this;
-}
-
-inline
-SignalCounter&
-SignalCounter::operator=(const NodeReceiverGroup & rg){
-  assert(rg.m_nodes.find(65) == NodeBitmask::NotFound);
-  memcpy(&m_nodes, &rg.m_nodes, sizeof(m_nodes));
-  m_count = m_nodes.count();
   return * this;
 }
 

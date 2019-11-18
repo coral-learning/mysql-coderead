@@ -36,7 +36,7 @@ CREATE FUNCTION func_retval_1() RETURNS VARCHAR(100) BEGIN INSERT INTO ta1 VALUE
 INSERT INTO t1 VALUES (func_retval_1());
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT func_retval_1();
@@ -47,7 +47,7 @@ CREATE FUNCTION func_retval_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUE
 INSERT INTO t2 VALUES (func_retval_2());
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT func_retval_2();
@@ -59,7 +59,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -69,7 +69,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO t1 VALUES (func_retval_1()); INSERT 
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -79,17 +79,19 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
 Invoking view view_retval_2 returning value from function func_retval_1 returning value from unsafe UUID() function.
 CREATE VIEW view_retval_2 AS SELECT func_retval_1();
+Warnings:
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 * binlog_format = STATEMENT: expect 1 warnings.
 INSERT INTO t2 SELECT * FROM view_retval_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT * FROM view_retval_2;
@@ -101,7 +103,7 @@ PREPARE prep_2 FROM "INSERT INTO t1 VALUES (func_retval_1())";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP FUNCTION func_retval_1;
@@ -112,7 +114,7 @@ CREATE FUNCTION func_sidef_1() RETURNS VARCHAR(100) BEGIN INSERT INTO ta1 VALUES
 INSERT INTO t1 SELECT func_sidef_1();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking function func_sidef_1 invoking unsafe UUID() function.
@@ -121,7 +123,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -131,7 +133,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO t1 SELECT func_sidef_1(); INSERT INT
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -141,17 +143,19 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
 Invoking view view_sidef_2 invoking function func_sidef_1 invoking unsafe UUID() function.
 CREATE VIEW view_sidef_2 AS SELECT func_sidef_1();
+Warnings:
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 * binlog_format = STATEMENT: expect 1 warnings.
 INSERT INTO t2 SELECT * FROM view_sidef_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP VIEW view_sidef_2;
 
@@ -161,7 +165,7 @@ PREPARE prep_2 FROM "INSERT INTO t1 SELECT func_sidef_1()";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP FUNCTION func_sidef_1;
@@ -172,7 +176,7 @@ CREATE PROCEDURE proc_1() BEGIN INSERT INTO t0 VALUES (UUID()); INSERT INTO ta1 
 CALL proc_1();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking procedure proc_1 invoking unsafe UUID() function.
@@ -181,7 +185,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -191,7 +195,7 @@ CREATE PROCEDURE proc_2() BEGIN CALL proc_1(); INSERT INTO ta2 VALUES (47); END;
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -201,7 +205,7 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -211,7 +215,7 @@ PREPARE prep_2 FROM "CALL proc_1()";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP PROCEDURE proc_1;
@@ -222,7 +226,7 @@ CREATE TRIGGER trig_1 BEFORE INSERT ON trigger_table_1 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_1 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking trigger trig_1 invoking unsafe UUID() function.
@@ -231,7 +235,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -241,7 +245,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO trigger_table_1 VALUES (1); INSERT I
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -251,7 +255,7 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -261,7 +265,7 @@ PREPARE prep_2 FROM "INSERT INTO trigger_table_1 VALUES (1)";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP TRIGGER trig_1;
@@ -272,7 +276,7 @@ CREATE VIEW view_retval_1 AS SELECT UUID();
 INSERT INTO t1 SELECT * FROM view_retval_1;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT * FROM view_retval_1;
@@ -283,7 +287,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -293,7 +297,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO t1 SELECT * FROM view_retval_1; INSE
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -303,7 +307,7 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -313,7 +317,7 @@ CREATE VIEW view_retval_2 AS SELECT * FROM view_retval_1;
 INSERT INTO t2 SELECT * FROM view_retval_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT * FROM view_retval_2;
@@ -325,7 +329,7 @@ PREPARE prep_2 FROM "INSERT INTO t1 SELECT * FROM view_retval_1";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP VIEW view_retval_1;
@@ -336,7 +340,7 @@ PREPARE prep_1 FROM "INSERT INTO t0 VALUES (UUID())";
 EXECUTE prep_1;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_1;
 
@@ -345,7 +349,7 @@ Invoking unsafe UUID() function.
 INSERT INTO t0 VALUES (UUID());
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT UUID();
@@ -358,7 +362,7 @@ CREATE FUNCTION func_retval_1() RETURNS VARCHAR(100) BEGIN INSERT INTO ta1 VALUE
 INSERT INTO t1 VALUES (func_retval_1());
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT func_retval_1();
@@ -369,7 +373,7 @@ CREATE FUNCTION func_retval_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUE
 INSERT INTO t2 VALUES (func_retval_2());
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT func_retval_2();
@@ -381,7 +385,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -391,7 +395,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO t1 VALUES (func_retval_1()); INSERT 
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -401,17 +405,19 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
 Invoking view view_retval_2 returning value from function func_retval_1 returning value from unsafe @@hostname variable.
 CREATE VIEW view_retval_2 AS SELECT func_retval_1();
+Warnings:
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 * binlog_format = STATEMENT: expect 1 warnings.
 INSERT INTO t2 SELECT * FROM view_retval_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT * FROM view_retval_2;
@@ -423,7 +429,7 @@ PREPARE prep_2 FROM "INSERT INTO t1 VALUES (func_retval_1())";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP FUNCTION func_retval_1;
@@ -434,7 +440,7 @@ CREATE FUNCTION func_sidef_1() RETURNS VARCHAR(100) BEGIN INSERT INTO ta1 VALUES
 INSERT INTO t1 SELECT func_sidef_1();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking function func_sidef_1 invoking unsafe @@hostname variable.
@@ -443,7 +449,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -453,7 +459,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO t1 SELECT func_sidef_1(); INSERT INT
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -463,17 +469,19 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
 Invoking view view_sidef_2 invoking function func_sidef_1 invoking unsafe @@hostname variable.
 CREATE VIEW view_sidef_2 AS SELECT func_sidef_1();
+Warnings:
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 * binlog_format = STATEMENT: expect 1 warnings.
 INSERT INTO t2 SELECT * FROM view_sidef_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP VIEW view_sidef_2;
 
@@ -483,7 +491,7 @@ PREPARE prep_2 FROM "INSERT INTO t1 SELECT func_sidef_1()";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP FUNCTION func_sidef_1;
@@ -494,7 +502,7 @@ CREATE PROCEDURE proc_1() BEGIN INSERT INTO t0 VALUES (@@hostname); INSERT INTO 
 CALL proc_1();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking procedure proc_1 invoking unsafe @@hostname variable.
@@ -503,7 +511,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -513,7 +521,7 @@ CREATE PROCEDURE proc_2() BEGIN CALL proc_1(); INSERT INTO ta2 VALUES (47); END;
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -523,7 +531,7 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -533,7 +541,7 @@ PREPARE prep_2 FROM "CALL proc_1()";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP PROCEDURE proc_1;
@@ -544,7 +552,7 @@ CREATE TRIGGER trig_1 BEFORE INSERT ON trigger_table_1 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_1 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking trigger trig_1 invoking unsafe @@hostname variable.
@@ -553,7 +561,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -563,7 +571,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO trigger_table_1 VALUES (1); INSERT I
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -573,7 +581,7 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -583,7 +591,7 @@ PREPARE prep_2 FROM "INSERT INTO trigger_table_1 VALUES (1)";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP TRIGGER trig_1;
@@ -594,7 +602,7 @@ PREPARE prep_1 FROM "INSERT INTO t0 VALUES (@@hostname)";
 EXECUTE prep_1;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_1;
 
@@ -603,7 +611,7 @@ Invoking unsafe @@hostname variable.
 INSERT INTO t0 VALUES (@@hostname);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 ==== Testing SELECT...LIMIT unsafeness ====
@@ -614,7 +622,7 @@ CREATE FUNCTION func_sidef_1() RETURNS VARCHAR(100) BEGIN INSERT INTO ta1 VALUES
 INSERT INTO t1 SELECT func_sidef_1();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking function func_sidef_1 invoking unsafe SELECT...LIMIT statement.
@@ -623,7 +631,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -633,7 +641,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO t1 SELECT func_sidef_1(); INSERT INT
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -643,17 +651,19 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
 Invoking view view_sidef_2 invoking function func_sidef_1 invoking unsafe SELECT...LIMIT statement.
 CREATE VIEW view_sidef_2 AS SELECT func_sidef_1();
+Warnings:
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
 * binlog_format = STATEMENT: expect 1 warnings.
 INSERT INTO t2 SELECT * FROM view_sidef_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP VIEW view_sidef_2;
 
@@ -663,7 +673,7 @@ PREPARE prep_2 FROM "INSERT INTO t1 SELECT func_sidef_1()";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP FUNCTION func_sidef_1;
@@ -674,7 +684,7 @@ CREATE PROCEDURE proc_1() BEGIN INSERT INTO t0 SELECT * FROM data_table LIMIT 1;
 CALL proc_1();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking procedure proc_1 invoking unsafe SELECT...LIMIT statement.
@@ -683,7 +693,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -693,7 +703,7 @@ CREATE PROCEDURE proc_2() BEGIN CALL proc_1(); INSERT INTO ta2 VALUES (47); END;
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -703,7 +713,7 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -713,7 +723,7 @@ PREPARE prep_2 FROM "CALL proc_1()";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP PROCEDURE proc_1;
@@ -724,7 +734,7 @@ CREATE TRIGGER trig_1 BEFORE INSERT ON trigger_table_1 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_1 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking trigger trig_1 invoking unsafe SELECT...LIMIT statement.
@@ -733,7 +743,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -743,7 +753,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO trigger_table_1 VALUES (1); INSERT I
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -753,7 +763,7 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -763,7 +773,7 @@ PREPARE prep_2 FROM "INSERT INTO trigger_table_1 VALUES (1)";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP TRIGGER trig_1;
@@ -774,7 +784,7 @@ CREATE VIEW view_retval_1 AS SELECT * FROM data_table LIMIT 1;
 INSERT INTO t1 SELECT * FROM view_retval_1;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT * FROM view_retval_1;
@@ -785,7 +795,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -795,7 +805,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO t1 SELECT * FROM view_retval_1; INSE
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -805,7 +815,7 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -815,7 +825,7 @@ CREATE VIEW view_retval_2 AS SELECT * FROM view_retval_1;
 INSERT INTO t2 SELECT * FROM view_retval_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT * FROM view_retval_2;
@@ -827,7 +837,7 @@ PREPARE prep_2 FROM "INSERT INTO t1 SELECT * FROM view_retval_1";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP VIEW view_retval_1;
@@ -838,7 +848,7 @@ PREPARE prep_1 FROM "INSERT INTO t0 SELECT * FROM data_table LIMIT 1";
 EXECUTE prep_1;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_1;
 
@@ -847,7 +857,7 @@ Invoking unsafe SELECT...LIMIT statement.
 INSERT INTO t0 SELECT * FROM data_table LIMIT 1;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT * FROM data_table LIMIT 1;
@@ -856,18 +866,16 @@ SELECT * FROM data_table LIMIT 1;
 
 Invoking function func_sidef_1 invoking unsafe INSERT DELAYED statement.
 CREATE FUNCTION func_sidef_1() RETURNS VARCHAR(100) BEGIN INSERT INTO ta1 VALUES (47); INSERT DELAYED INTO t0 VALUES (1), (2); RETURN 0; END;
-Warnings:
-Warning	1287	'INSERT DELAYED' is deprecated and will be removed in a future release. Please use INSERT instead
 * binlog_format = STATEMENT: expect 0 warnings.
 INSERT INTO t1 SELECT func_sidef_1();
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking function func_sidef_1 invoking unsafe INSERT DELAYED statement.
 CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES (47); INSERT INTO t1 SELECT func_sidef_1(); RETURN 0; END;
 * binlog_format = STATEMENT: expect 0 warnings.
 INSERT INTO t2 SELECT func_sidef_2();
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -875,7 +883,7 @@ Invoking procedure proc_2 invoking function func_sidef_1 invoking unsafe INSERT 
 CREATE PROCEDURE proc_2() BEGIN INSERT INTO t1 SELECT func_sidef_1(); INSERT INTO ta2 VALUES (47); END;
 * binlog_format = STATEMENT: expect 0 warnings.
 CALL proc_2();
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -883,7 +891,7 @@ Invoking trigger trig_2 invoking function func_sidef_1 invoking unsafe INSERT DE
 CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT INTO ta2 VALUES (47); INSERT INTO t1 SELECT func_sidef_1(); END;
 * binlog_format = STATEMENT: expect 0 warnings.
 INSERT INTO trigger_table_2 VALUES (1);
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -891,7 +899,7 @@ Invoking view view_sidef_2 invoking function func_sidef_1 invoking unsafe INSERT
 CREATE VIEW view_sidef_2 AS SELECT func_sidef_1();
 * binlog_format = STATEMENT: expect 0 warnings.
 INSERT INTO t2 SELECT * FROM view_sidef_2;
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP VIEW view_sidef_2;
 
@@ -899,25 +907,23 @@ Invoking prepared statement prep_2 invoking function func_sidef_1 invoking unsaf
 PREPARE prep_2 FROM "INSERT INTO t1 SELECT func_sidef_1()";
 * binlog_format = STATEMENT: expect 0 warnings.
 EXECUTE prep_2;
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP FUNCTION func_sidef_1;
 
 Invoking procedure proc_1 invoking unsafe INSERT DELAYED statement.
 CREATE PROCEDURE proc_1() BEGIN INSERT DELAYED INTO t0 VALUES (1), (2); INSERT INTO ta1 VALUES (47); END;
-Warnings:
-Warning	1287	'INSERT DELAYED' is deprecated and will be removed in a future release. Please use INSERT instead
 * binlog_format = STATEMENT: expect 0 warnings.
 CALL proc_1();
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking procedure proc_1 invoking unsafe INSERT DELAYED statement.
 CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES (47); CALL proc_1(); RETURN 0; END;
 * binlog_format = STATEMENT: expect 0 warnings.
 INSERT INTO t2 SELECT func_sidef_2();
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -925,7 +931,7 @@ Invoking procedure proc_2 invoking procedure proc_1 invoking unsafe INSERT DELAY
 CREATE PROCEDURE proc_2() BEGIN CALL proc_1(); INSERT INTO ta2 VALUES (47); END;
 * binlog_format = STATEMENT: expect 0 warnings.
 CALL proc_2();
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -933,7 +939,7 @@ Invoking trigger trig_2 invoking procedure proc_1 invoking unsafe INSERT DELAYED
 CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT INTO ta2 VALUES (47); CALL proc_1(); END;
 * binlog_format = STATEMENT: expect 0 warnings.
 INSERT INTO trigger_table_2 VALUES (1);
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -941,25 +947,23 @@ Invoking prepared statement prep_2 invoking procedure proc_1 invoking unsafe INS
 PREPARE prep_2 FROM "CALL proc_1()";
 * binlog_format = STATEMENT: expect 0 warnings.
 EXECUTE prep_2;
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP PROCEDURE proc_1;
 
 Invoking trigger trig_1 invoking unsafe INSERT DELAYED statement.
 CREATE TRIGGER trig_1 BEFORE INSERT ON trigger_table_1 FOR EACH ROW BEGIN INSERT INTO ta1 VALUES (47); INSERT DELAYED INTO t0 VALUES (1), (2); END;
-Warnings:
-Warning	1287	'INSERT DELAYED' is deprecated and will be removed in a future release. Please use INSERT instead
 * binlog_format = STATEMENT: expect 0 warnings.
 INSERT INTO trigger_table_1 VALUES (1);
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking trigger trig_1 invoking unsafe INSERT DELAYED statement.
 CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES (47); INSERT INTO trigger_table_1 VALUES (1); RETURN 0; END;
 * binlog_format = STATEMENT: expect 0 warnings.
 INSERT INTO t2 SELECT func_sidef_2();
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -967,7 +971,7 @@ Invoking procedure proc_2 invoking trigger trig_1 invoking unsafe INSERT DELAYED
 CREATE PROCEDURE proc_2() BEGIN INSERT INTO trigger_table_1 VALUES (1); INSERT INTO ta2 VALUES (47); END;
 * binlog_format = STATEMENT: expect 0 warnings.
 CALL proc_2();
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -975,7 +979,7 @@ Invoking trigger trig_2 invoking trigger trig_1 invoking unsafe INSERT DELAYED s
 CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT INTO ta2 VALUES (47); INSERT INTO trigger_table_1 VALUES (1); END;
 * binlog_format = STATEMENT: expect 0 warnings.
 INSERT INTO trigger_table_2 VALUES (1);
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -983,32 +987,24 @@ Invoking prepared statement prep_2 invoking trigger trig_1 invoking unsafe INSER
 PREPARE prep_2 FROM "INSERT INTO trigger_table_1 VALUES (1)";
 * binlog_format = STATEMENT: expect 0 warnings.
 EXECUTE prep_2;
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP TRIGGER trig_1;
 
 Invoking prepared statement prep_1 invoking unsafe INSERT DELAYED statement.
 PREPARE prep_1 FROM "INSERT DELAYED INTO t0 VALUES (1), (2)";
-Warnings:
-Warning	1287	'INSERT DELAYED' is deprecated and will be removed in a future release. Please use INSERT instead
 * binlog_format = STATEMENT: expect 0 warnings.
 EXECUTE prep_1;
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_1;
 
 Invoking unsafe INSERT DELAYED statement.
-* binlog_format = STATEMENT: expect 1 warnings. 0 with ps-protocol.
+* binlog_format = STATEMENT: expect 0 warnings.
 INSERT DELAYED INTO t0 VALUES (1), (2);
-Warnings:
-Warning	1287	'INSERT DELAYED' is deprecated and will be removed in a future release. Please use INSERT instead
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
-Warnings:
-Warning	1287	'INSERT DELAYED' is deprecated and will be removed in a future release. Please use INSERT instead
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
-Warnings:
-Warning	1287	'INSERT DELAYED' is deprecated and will be removed in a future release. Please use INSERT instead
 
 ==== Testing unsafeness of insert of two autoinc values ====
 
@@ -1018,7 +1014,7 @@ CREATE FUNCTION func_sidef_1() RETURNS VARCHAR(100) BEGIN INSERT INTO ta1 VALUES
 INSERT INTO t1 SELECT func_sidef_1();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking function func_sidef_1 invoking unsafe update of two autoinc columns.
@@ -1027,7 +1023,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -1037,7 +1033,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO t1 SELECT func_sidef_1(); INSERT INT
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -1047,17 +1043,19 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
 Invoking view view_sidef_2 invoking function func_sidef_1 invoking unsafe update of two autoinc columns.
 CREATE VIEW view_sidef_2 AS SELECT func_sidef_1();
+Warnings:
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
 * binlog_format = STATEMENT: expect 1 warnings.
 INSERT INTO t2 SELECT * FROM view_sidef_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP VIEW view_sidef_2;
 
@@ -1067,7 +1065,7 @@ PREPARE prep_2 FROM "INSERT INTO t1 SELECT func_sidef_1()";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP FUNCTION func_sidef_1;
@@ -1078,7 +1076,7 @@ CREATE PROCEDURE proc_1() BEGIN INSERT INTO double_autoinc_table VALUES (NULL); 
 CALL proc_1();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking procedure proc_1 invoking unsafe update of two autoinc columns.
@@ -1087,7 +1085,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -1097,7 +1095,7 @@ CREATE PROCEDURE proc_2() BEGIN CALL proc_1(); INSERT INTO ta2 VALUES (47); END;
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -1107,7 +1105,7 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -1117,7 +1115,7 @@ PREPARE prep_2 FROM "CALL proc_1()";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP PROCEDURE proc_1;
@@ -1128,7 +1126,7 @@ CREATE TRIGGER trig_1 BEFORE INSERT ON trigger_table_1 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_1 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking trigger trig_1 invoking unsafe update of two autoinc columns.
@@ -1137,7 +1135,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -1147,7 +1145,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO trigger_table_1 VALUES (1); INSERT I
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -1157,7 +1155,7 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -1167,7 +1165,7 @@ PREPARE prep_2 FROM "INSERT INTO trigger_table_1 VALUES (1)";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP TRIGGER trig_1;
@@ -1178,7 +1176,7 @@ PREPARE prep_1 FROM "INSERT INTO double_autoinc_table VALUES (NULL)";
 EXECUTE prep_1;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_1;
 
@@ -1187,7 +1185,7 @@ Invoking unsafe update of two autoinc columns.
 INSERT INTO double_autoinc_table VALUES (NULL);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 ==== Testing unsafeness of UDF's ====
@@ -1198,7 +1196,7 @@ CREATE FUNCTION func_retval_1() RETURNS VARCHAR(100) BEGIN INSERT INTO ta1 VALUE
 INSERT INTO t1 VALUES (func_retval_1());
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT func_retval_1();
@@ -1209,7 +1207,7 @@ CREATE FUNCTION func_retval_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUE
 INSERT INTO t2 VALUES (func_retval_2());
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT func_retval_2();
@@ -1221,7 +1219,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -1231,7 +1229,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO t1 VALUES (func_retval_1()); INSERT 
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -1241,17 +1239,19 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
 Invoking view view_retval_2 returning value from function func_retval_1 returning value from unsafe UDF.
 CREATE VIEW view_retval_2 AS SELECT func_retval_1();
+Warnings:
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
 * binlog_format = STATEMENT: expect 1 warnings.
 INSERT INTO t2 SELECT * FROM view_retval_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT * FROM view_retval_2;
@@ -1263,7 +1263,7 @@ PREPARE prep_2 FROM "INSERT INTO t1 VALUES (func_retval_1())";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP FUNCTION func_retval_1;
@@ -1274,7 +1274,7 @@ CREATE FUNCTION func_sidef_1() RETURNS VARCHAR(100) BEGIN INSERT INTO ta1 VALUES
 INSERT INTO t1 SELECT func_sidef_1();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking function func_sidef_1 invoking unsafe UDF.
@@ -1283,7 +1283,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -1293,7 +1293,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO t1 SELECT func_sidef_1(); INSERT INT
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -1303,17 +1303,19 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
 Invoking view view_sidef_2 invoking function func_sidef_1 invoking unsafe UDF.
 CREATE VIEW view_sidef_2 AS SELECT func_sidef_1();
+Warnings:
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
 * binlog_format = STATEMENT: expect 1 warnings.
 INSERT INTO t2 SELECT * FROM view_sidef_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP VIEW view_sidef_2;
 
@@ -1323,7 +1325,7 @@ PREPARE prep_2 FROM "INSERT INTO t1 SELECT func_sidef_1()";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP FUNCTION func_sidef_1;
@@ -1334,7 +1336,7 @@ CREATE PROCEDURE proc_1() BEGIN INSERT INTO t0 VALUES (myfunc_int(10)); INSERT I
 CALL proc_1();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking procedure proc_1 invoking unsafe UDF.
@@ -1343,7 +1345,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -1353,7 +1355,7 @@ CREATE PROCEDURE proc_2() BEGIN CALL proc_1(); INSERT INTO ta2 VALUES (47); END;
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -1363,7 +1365,7 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -1373,7 +1375,7 @@ PREPARE prep_2 FROM "CALL proc_1()";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP PROCEDURE proc_1;
@@ -1384,7 +1386,7 @@ CREATE TRIGGER trig_1 BEFORE INSERT ON trigger_table_1 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_1 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking trigger trig_1 invoking unsafe UDF.
@@ -1393,7 +1395,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -1403,7 +1405,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO trigger_table_1 VALUES (1); INSERT I
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -1413,7 +1415,7 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -1423,7 +1425,7 @@ PREPARE prep_2 FROM "INSERT INTO trigger_table_1 VALUES (1)";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP TRIGGER trig_1;
@@ -1434,7 +1436,7 @@ CREATE VIEW view_sidef_1 AS SELECT myfunc_int(10);
 INSERT INTO t1 SELECT * FROM view_sidef_1;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking view view_sidef_1 invoking unsafe UDF.
@@ -1443,7 +1445,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -1453,7 +1455,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO t1 SELECT * FROM view_sidef_1; INSER
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -1463,7 +1465,7 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -1473,7 +1475,7 @@ CREATE VIEW view_sidef_2 AS SELECT * FROM view_sidef_1;
 INSERT INTO t2 SELECT * FROM view_sidef_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP VIEW view_sidef_2;
 
@@ -1483,7 +1485,7 @@ PREPARE prep_2 FROM "INSERT INTO t1 SELECT * FROM view_sidef_1";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP VIEW view_sidef_1;
@@ -1494,7 +1496,7 @@ PREPARE prep_1 FROM "INSERT INTO t0 VALUES (myfunc_int(10))";
 EXECUTE prep_1;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_1;
 
@@ -1503,7 +1505,7 @@ Invoking unsafe UDF.
 INSERT INTO t0 VALUES (myfunc_int(10));
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 ==== Testing unsafeness of access to mysql.general_log ====
@@ -1514,7 +1516,7 @@ CREATE FUNCTION func_sidef_1() RETURNS VARCHAR(100) BEGIN INSERT INTO ta1 VALUES
 INSERT INTO t1 SELECT func_sidef_1();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking function func_sidef_1 invoking unsafe use of mysql.general_log.
@@ -1523,7 +1525,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -1533,7 +1535,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO t1 SELECT func_sidef_1(); INSERT INT
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -1543,17 +1545,19 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
 Invoking view view_sidef_2 invoking function func_sidef_1 invoking unsafe use of mysql.general_log.
 CREATE VIEW view_sidef_2 AS SELECT func_sidef_1();
+Warnings:
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
 * binlog_format = STATEMENT: expect 1 warnings.
 INSERT INTO t2 SELECT * FROM view_sidef_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP VIEW view_sidef_2;
 
@@ -1563,7 +1567,7 @@ PREPARE prep_2 FROM "INSERT INTO t1 SELECT func_sidef_1()";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP FUNCTION func_sidef_1;
@@ -1574,7 +1578,7 @@ CREATE PROCEDURE proc_1() BEGIN INSERT INTO t0 SELECT COUNT(*) FROM mysql.genera
 CALL proc_1();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking procedure proc_1 invoking unsafe use of mysql.general_log.
@@ -1583,7 +1587,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -1593,7 +1597,7 @@ CREATE PROCEDURE proc_2() BEGIN CALL proc_1(); INSERT INTO ta2 VALUES (47); END;
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -1603,7 +1607,7 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -1613,7 +1617,7 @@ PREPARE prep_2 FROM "CALL proc_1()";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP PROCEDURE proc_1;
@@ -1624,7 +1628,7 @@ CREATE TRIGGER trig_1 BEFORE INSERT ON trigger_table_1 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_1 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking trigger trig_1 invoking unsafe use of mysql.general_log.
@@ -1633,7 +1637,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -1643,7 +1647,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO trigger_table_1 VALUES (1); INSERT I
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -1653,7 +1657,7 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -1663,7 +1667,7 @@ PREPARE prep_2 FROM "INSERT INTO trigger_table_1 VALUES (1)";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP TRIGGER trig_1;
@@ -1674,7 +1678,7 @@ CREATE VIEW view_retval_1 AS SELECT COUNT(*) FROM mysql.general_log;
 INSERT INTO t1 SELECT * FROM view_retval_1;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT * FROM view_retval_1;
@@ -1685,7 +1689,7 @@ CREATE FUNCTION func_sidef_2() RETURNS VARCHAR(100) BEGIN INSERT INTO ta2 VALUES
 INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -1695,7 +1699,7 @@ CREATE PROCEDURE proc_2() BEGIN INSERT INTO t1 SELECT * FROM view_retval_1; INSE
 CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -1705,7 +1709,7 @@ CREATE TRIGGER trig_2 BEFORE INSERT ON trigger_table_2 FOR EACH ROW BEGIN INSERT
 INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -1715,7 +1719,7 @@ CREATE VIEW view_retval_2 AS SELECT * FROM view_retval_1;
 INSERT INTO t2 SELECT * FROM view_retval_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT * FROM view_retval_2;
@@ -1727,7 +1731,7 @@ PREPARE prep_2 FROM "INSERT INTO t1 SELECT * FROM view_retval_1";
 EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP VIEW view_retval_1;
@@ -1738,7 +1742,7 @@ PREPARE prep_1 FROM "INSERT INTO t0 SELECT COUNT(*) FROM mysql.general_log";
 EXECUTE prep_1;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_1;
 
@@ -1747,7 +1751,7 @@ Invoking unsafe use of mysql.general_log.
 INSERT INTO t0 SELECT COUNT(*) FROM mysql.general_log;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 * Invoke statement so that return value is dicarded: expect no warning.
 SELECT COUNT(*) FROM mysql.general_log;
@@ -1756,8 +1760,6 @@ SELECT COUNT(*) FROM mysql.general_log;
 
 Invoking function func_sidef_1 invoking statement that is unsafe in many ways.
 CREATE FUNCTION func_sidef_1() RETURNS VARCHAR(100) BEGIN INSERT INTO ta1 VALUES (47); INSERT DELAYED INTO double_autoinc_table SELECT CONCAT(UUID(), @@hostname, myfunc_int(), NULL) FROM mysql.general_log LIMIT 1; RETURN 0; END;
-Warnings:
-Warning	1287	'INSERT DELAYED' is deprecated and will be removed in a future release. Please use INSERT instead
 * binlog_format = STATEMENT: expect 7 warnings.
 INSERT INTO t1 SELECT func_sidef_1();
 Warnings:
@@ -1768,7 +1770,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking function func_sidef_1 invoking statement that is unsafe in many ways.
@@ -1783,7 +1785,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -1799,7 +1801,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -1815,12 +1817,20 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
 Invoking view view_sidef_2 invoking function func_sidef_1 invoking statement that is unsafe in many ways.
 CREATE VIEW view_sidef_2 AS SELECT func_sidef_1();
+Warnings:
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a UDF which may not return the same value on the slave.
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
 * binlog_format = STATEMENT: expect 7 warnings.
 INSERT INTO t2 SELECT * FROM view_sidef_2;
 Warnings:
@@ -1831,7 +1841,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP VIEW view_sidef_2;
 
@@ -1847,15 +1857,13 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP FUNCTION func_sidef_1;
 
 Invoking procedure proc_1 invoking statement that is unsafe in many ways.
 CREATE PROCEDURE proc_1() BEGIN INSERT DELAYED INTO double_autoinc_table SELECT CONCAT(UUID(), @@hostname, myfunc_int(), NULL) FROM mysql.general_log LIMIT 1; INSERT INTO ta1 VALUES (47); END;
-Warnings:
-Warning	1287	'INSERT DELAYED' is deprecated and will be removed in a future release. Please use INSERT instead
 * binlog_format = STATEMENT: expect 7 warnings.
 CALL proc_1();
 Warnings:
@@ -1866,7 +1874,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking procedure proc_1 invoking statement that is unsafe in many ways.
@@ -1881,7 +1889,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -1897,7 +1905,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -1913,7 +1921,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -1929,15 +1937,13 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP PROCEDURE proc_1;
 
 Invoking trigger trig_1 invoking statement that is unsafe in many ways.
 CREATE TRIGGER trig_1 BEFORE INSERT ON trigger_table_1 FOR EACH ROW BEGIN INSERT INTO ta1 VALUES (47); INSERT DELAYED INTO double_autoinc_table SELECT CONCAT(UUID(), @@hostname, myfunc_int(), NULL) FROM mysql.general_log LIMIT 1; END;
-Warnings:
-Warning	1287	'INSERT DELAYED' is deprecated and will be removed in a future release. Please use INSERT instead
 * binlog_format = STATEMENT: expect 7 warnings.
 INSERT INTO trigger_table_1 VALUES (1);
 Warnings:
@@ -1948,7 +1954,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking trigger trig_1 invoking statement that is unsafe in many ways.
@@ -1963,7 +1969,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -1979,7 +1985,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -1995,7 +2001,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -2011,15 +2017,13 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP TRIGGER trig_1;
 
 Invoking prepared statement prep_1 invoking statement that is unsafe in many ways.
 PREPARE prep_1 FROM "INSERT DELAYED INTO double_autoinc_table SELECT CONCAT(UUID(), @@hostname, myfunc_int(), NULL) FROM mysql.general_log LIMIT 1";
-Warnings:
-Warning	1287	'INSERT DELAYED' is deprecated and will be removed in a future release. Please use INSERT instead
 * binlog_format = STATEMENT: expect 7 warnings.
 EXECUTE prep_1;
 Warnings:
@@ -2030,15 +2034,14 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_1;
 
 Invoking statement that is unsafe in many ways.
-* binlog_format = STATEMENT: expect 8 warnings. 7 with ps-protocol.
+* binlog_format = STATEMENT: expect 7 warnings.
 INSERT DELAYED INTO double_autoinc_table SELECT CONCAT(UUID(), @@hostname, myfunc_int(), NULL) FROM mysql.general_log LIMIT 1;
 Warnings:
-Warning	1287	'INSERT DELAYED' is deprecated and will be removed in a future release. Please use INSERT instead
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses a LIMIT clause. This is unsafe because the set of rows included cannot be predicted.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. The statement is unsafe because it uses the general log, slow query log, or performance_schema table(s). This is unsafe because system tables may differ on slaves.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it invokes a trigger or a stored function that inserts into an AUTO_INCREMENT column. Inserted values cannot be logged correctly.
@@ -2046,12 +2049,8 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statements writing to a table with an auto-increment column after selecting from another table are unsafe because the order in which rows are retrieved determines what (if any) rows will be written. This order cannot be predicted and may differ on master and the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
-Warnings:
-Warning	1287	'INSERT DELAYED' is deprecated and will be removed in a future release. Please use INSERT instead
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
-Warnings:
-Warning	1287	'INSERT DELAYED' is deprecated and will be removed in a future release. Please use INSERT instead
 
 ==== Testing a statement that is unsafe several times ====
 
@@ -2062,7 +2061,7 @@ INSERT INTO t1 SELECT func_sidef_1();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking function func_sidef_1 invoking statement that is unsafe several times.
@@ -2072,7 +2071,7 @@ INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -2083,7 +2082,7 @@ CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -2094,18 +2093,21 @@ INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
 Invoking view view_sidef_2 invoking function func_sidef_1 invoking statement that is unsafe several times.
 CREATE VIEW view_sidef_2 AS SELECT func_sidef_1();
+Warnings:
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 * binlog_format = STATEMENT: expect 2 warnings.
 INSERT INTO t2 SELECT * FROM view_sidef_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP VIEW view_sidef_2;
 
@@ -2116,7 +2118,7 @@ EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP FUNCTION func_sidef_1;
@@ -2128,7 +2130,7 @@ CALL proc_1();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking procedure proc_1 invoking statement that is unsafe several times.
@@ -2138,7 +2140,7 @@ INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -2149,7 +2151,7 @@ CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -2160,7 +2162,7 @@ INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -2171,7 +2173,7 @@ EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP PROCEDURE proc_1;
@@ -2183,7 +2185,7 @@ INSERT INTO trigger_table_1 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking trigger trig_1 invoking statement that is unsafe several times.
@@ -2193,7 +2195,7 @@ INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -2204,7 +2206,7 @@ CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -2215,7 +2217,7 @@ INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
@@ -2226,19 +2228,22 @@ EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP TRIGGER trig_1;
 
 Invoking view view_sidef_1 invoking statement that is unsafe several times.
 CREATE VIEW view_sidef_1 AS SELECT multi_unsafe_func();
+Warnings:
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 * binlog_format = STATEMENT: expect 2 warnings.
 INSERT INTO t1 SELECT * FROM view_sidef_1;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 
 Invoking function func_sidef_2 invoking view view_sidef_1 invoking statement that is unsafe several times.
@@ -2248,7 +2253,7 @@ INSERT INTO t2 SELECT func_sidef_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP FUNCTION func_sidef_2;
 
@@ -2259,7 +2264,7 @@ CALL proc_2();
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PROCEDURE proc_2;
 
@@ -2270,18 +2275,21 @@ INSERT INTO trigger_table_2 VALUES (1);
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER trig_2;
 
 Invoking view view_sidef_2 invoking view view_sidef_1 invoking statement that is unsafe several times.
 CREATE VIEW view_sidef_2 AS SELECT * FROM view_sidef_1;
+Warnings:
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 * binlog_format = STATEMENT: expect 2 warnings.
 INSERT INTO t2 SELECT * FROM view_sidef_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP VIEW view_sidef_2;
 
@@ -2292,7 +2300,7 @@ EXECUTE prep_2;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_2;
 DROP VIEW view_sidef_1;
@@ -2304,7 +2312,7 @@ EXECUTE prep_1;
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP PREPARE prep_1;
 
@@ -2314,7 +2322,7 @@ INSERT INTO ta0 VALUES (multi_unsafe_func());
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system variable that may have a different value on the slave.
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-* SQL_LOG_BIN = 0: expect nothing logged and only deprecation warnings.
+* SQL_LOG_BIN = 0: expect nothing logged and no warning.
 * binlog_format = MIXED: expect row events in binlog and no warning.
 DROP TRIGGER double_autoinc_trig;
 DROP TABLE t0, t1, t2, t3, ta0, ta1, ta2, ta3,
@@ -2496,8 +2504,6 @@ CREATE PROCEDURE proc_insert_delayed ()
 BEGIN
 INSERT DELAYED INTO t1 VALUES (1), (2);
 END|
-Warnings:
-Warning	1287	'INSERT DELAYED' is deprecated and will be removed in a future release. Please use INSERT instead
 CREATE FUNCTION func_limit ()
 RETURNS INT
 BEGIN
@@ -2509,7 +2515,7 @@ CALL proc_insert_delayed();
 SELECT func_limit();
 func_limit()
 1
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Query	#	#	use `test`; INSERT DELAYED INTO t1 VALUES (1), (2)
@@ -2539,7 +2545,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 SET SESSION binlog_format = MIXED;
 # Check if the statement is logged in row format.
 INSERT INTO t2 SET a = func_modify_t1();
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.t2)
@@ -2566,7 +2572,7 @@ Note	1592	Unsafe statement written to the binary log using statement format sinc
 SET SESSION binlog_format = MIXED;
 # Check if the statement is logged in row format.
 INSERT INTO t1 SET a = 2;
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.t1)
@@ -2634,15 +2640,6 @@ INSERT INTO t1 VALUES (VERSION());
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 INSERT INTO t1 VALUES (RAND());
-Warnings:
-Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-INSERT INTO t1 VALUES (RANDOM_BYTES(16));
-Warnings:
-Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-INSERT INTO t1 VALUES (AES_ENCRYPT('a', 'a'));
-Warnings:
-Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
-INSERT INTO t1 VALUES (AES_DECRYPT('a', 'a'));
 Warnings:
 Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it uses a system function that may return a different value on the slave.
 DELETE FROM t1;

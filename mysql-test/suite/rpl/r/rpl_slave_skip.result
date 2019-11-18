@@ -1,7 +1,4 @@
 include/master-slave.inc
-Warnings:
-Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
 [connection master]
 **** On Slave ****
 STOP SLAVE;
@@ -13,7 +10,7 @@ CREATE TABLE t2 (c INT, d INT) ENGINE=MyISAM;
 INSERT INTO t1 VALUES (1,1),(2,4),(3,9);
 INSERT INTO t2 VALUES (1,1),(2,8),(3,27);
 UPDATE t1,t2 SET b = d, d = b * 2 WHERE a = c;
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	use `test`; CREATE TABLE t1 (a INT, b INT) ENGINE=MyISAM
 master-bin.000001	#	Query	#	#	use `test`; CREATE TABLE t2 (c INT, d INT) ENGINE=MyISAM
@@ -46,7 +43,7 @@ START SLAVE UNTIL MASTER_LOG_FILE='master-bin.000001', MASTER_LOG_POS=MASTER_LOG
 include/wait_for_slave_sql_to_stop.inc
 include/check_slave_param.inc [Exec_Master_Log_Pos]
 include/check_slave_no_error.inc
-SET GLOBAL SQL_SLAVE_SKIP_COUNTER=2;
+SET GLOBAL SQL_SLAVE_SKIP_COUNTER=1;
 START SLAVE;
 include/wait_for_slave_to_start.inc
 SELECT * FROM t1;
@@ -66,7 +63,7 @@ RESET MASTER;
 SET SESSION BINLOG_FORMAT=STATEMENT;
 SET @foo = 12;
 INSERT INTO t1 VALUES(@foo, 2*@foo);
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	User var	#	#	@`foo`=12
@@ -74,12 +71,11 @@ master-bin.000001	#	Query	#	#	use `test`; INSERT INTO t1 VALUES(@foo, 2*@foo)
 master-bin.000001	#	Query	#	#	COMMIT
 START SLAVE UNTIL MASTER_LOG_FILE='master-bin.000001', MASTER_LOG_POS=MASTER_LOG_POS;
 include/wait_for_slave_sql_to_stop.inc
-SET GLOBAL SQL_SLAVE_SKIP_COUNTER=2;
+SET GLOBAL SQL_SLAVE_SKIP_COUNTER=1;
 START SLAVE;
 include/wait_for_slave_to_start.inc
 **** On Master ****
 DROP TABLE t1, t2;
-include/sync_slave_sql_with_master.inc
 SET SESSION BINLOG_FORMAT=ROW;
 SET AUTOCOMMIT=0;
 CREATE TABLE t1 (a INT, b VARCHAR(20)) ENGINE=myisam;
@@ -98,7 +94,6 @@ BEGIN
 UPDATE t3 SET a =2, b = 'master only';
 END|
 **** On Slave ****
-include/sync_slave_sql_with_master.inc
 include/stop_slave.inc
 **** On Master ****
 UPDATE t1 SET a = 2, b = 'master only' WHERE a = 1;
@@ -121,7 +116,7 @@ a	b
 2	master only
 3	master/slave
 *** On Slave ***
-SET GLOBAL SQL_SLAVE_SKIP_COUNTER=2;
+SET GLOBAL SQL_SLAVE_SKIP_COUNTER=1;
 include/start_slave.inc
 SELECT * FROM t1 ORDER BY a;
 a	b
@@ -136,14 +131,12 @@ a	b
 1	master/slave
 3	master/slave
 DROP TABLE t1, t2, t3;
-include/sync_slave_sql_with_master.inc
 **** Case 2: Row binlog format and transactional tables ****
 *** On Master ***
 CREATE TABLE t4 (a INT, b VARCHAR(20)) ENGINE=innodb;
 CREATE TABLE t5 (a INT, b VARCHAR(20)) ENGINE=innodb;
 CREATE TABLE t6 (a INT, b VARCHAR(20)) ENGINE=innodb;
 **** On Slave ****
-include/sync_slave_sql_with_master.inc
 include/stop_slave.inc
 *** On Master ***
 BEGIN;
@@ -169,7 +162,7 @@ a	b
 2	master only
 3	master/slave
 *** On Slave ***
-SET GLOBAL SQL_SLAVE_SKIP_COUNTER=2;
+SET GLOBAL SQL_SLAVE_SKIP_COUNTER=1;
 include/start_slave.inc
 SELECT * FROM t4 ORDER BY a;
 a	b
@@ -212,7 +205,7 @@ a	b
 6	master only
 7	master only
 *** On Slave ***
-SET GLOBAL SQL_SLAVE_SKIP_COUNTER=11;
+SET GLOBAL SQL_SLAVE_SKIP_COUNTER=10;
 include/start_slave.inc
 SELECT * FROM t4 ORDER BY a;
 a	b
@@ -258,7 +251,7 @@ a	b
 6	master only
 7	master only
 *** On Slave ***
-SET GLOBAL SQL_SLAVE_SKIP_COUNTER=2;
+SET GLOBAL SQL_SLAVE_SKIP_COUNTER=1;
 include/start_slave.inc
 SELECT * FROM t4 ORDER BY a;
 a	b
@@ -273,12 +266,10 @@ a	b
 3	master/slave
 5	master/slave
 DROP TABLE t4, t5, t6;
-include/sync_slave_sql_with_master.inc
 **** Case 3: Statement logging format and LOAD DATA with non-transactional table ****
 *** On Master ***
 CREATE TABLE t10 (a INT, b VARCHAR(20)) ENGINE=myisam;
 *** On Slave ***
-include/sync_slave_sql_with_master.inc
 include/stop_slave.inc
 *** On Master ***
 SET SESSION BINLOG_FORMAT=STATEMENT;
@@ -289,10 +280,9 @@ a	b
 2	master only
 3	master only
 *** On Slave ***
-SET GLOBAL SQL_SLAVE_SKIP_COUNTER=2;
+SET GLOBAL SQL_SLAVE_SKIP_COUNTER=1;
 include/start_slave.inc
 SELECT * FROM t10 ORDER BY a;
 a	b
 DROP TABLE t10;
-include/sync_slave_sql_with_master.inc
 include/rpl_end.inc

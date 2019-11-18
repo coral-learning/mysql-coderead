@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,8 +11,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 
 /* Analyse database */
@@ -23,36 +23,39 @@
 **	 - type set is out of optimization yet
 */
 
+#ifdef USE_PRAGMA_IMPLEMENTATION
+#pragma implementation				// gcc: Class implementation
+#endif
+
 #define MYSQL_LEX 1
 
 #include "sql_priv.h"
 #include "procedure.h"
 #include "sql_analyse.h"
-#include "sql_class.h"
 #include <m_ctype.h>
 
-using std::min;
-using std::max;
+#define MAX_TREEMEM	  8192
+#define MAX_TREE_ELEMENTS 256
 
-int sortcmp2(void* cmp_arg MY_ATTRIBUTE((unused)),
+int sortcmp2(void* cmp_arg __attribute__((unused)),
 	     const String *a,const String *b)
 {
   return sortcmp(a,b,a->charset());
 }
 
-int compare_double2(void* cmp_arg MY_ATTRIBUTE((unused)),
+int compare_double2(void* cmp_arg __attribute__((unused)),
 		    const double *s, const double *t)
 {
   return compare_double(s,t);
 }
 
-int compare_longlong2(void* cmp_arg MY_ATTRIBUTE((unused)),
+int compare_longlong2(void* cmp_arg __attribute__((unused)),
 		      const longlong *s, const longlong *t)
 {
   return compare_longlong(s,t);
 }
 
-int compare_ulonglong2(void* cmp_arg MY_ATTRIBUTE((unused)),
+int compare_ulonglong2(void* cmp_arg __attribute__((unused)),
 		       const ulonglong *s, const ulonglong *t)
 {
   return compare_ulonglong(s,t);
@@ -63,30 +66,82 @@ int compare_decimal2(int* len, const char *s, const char *t)
   return memcmp(s, t, *len);
 }
 
-/**
-  Create column data accumulator structures 
 
-  @param field_list     Output columns of the original SELECT
-
-  @retval false         Success
-  @retval true          Failure (OOM)
-*/
-bool
-select_analyse::init(List<Item> &field_list)
+Procedure *
+proc_analyse_init(THD *thd, ORDER *param, select_result *result,
+		  List<Item> &field_list)
 {
+  char *proc_name = (*param->item)->name;
+  analyse *pc = new analyse(result);
+  field_info **f_info;
   DBUG_ENTER("proc_analyse_init");
 
-  DBUG_ASSERT(thd->lex->sql_command == SQLCOM_SELECT);
+  if (!pc)
+    DBUG_RETURN(0);
 
-  if (!(f_info=
+  if (!(param = param->next))
+  {
+    pc->max_tree_elements = MAX_TREE_ELEMENTS;
+    pc->max_treemem = MAX_TREEMEM;
+  }
+  else if (param->next)
+  {
+    // first parameter
+    if (!(*param->item)->fixed && (*param->item)->fix_fields(thd, param->item))
+    {
+      DBUG_PRINT("info", ("fix_fields() for the first parameter failed"));
+      goto err;
+    }
+    if ((*param->item)->type() != Item::INT_ITEM ||
+	(*param->item)->val_real() < 0)
+    {
+      my_error(ER_WRONG_PARAMETERS_TO_PROCEDURE, MYF(0), proc_name);
+      goto err;
+    }
+    pc->max_tree_elements = (uint) (*param->item)->val_int();
+    param = param->next;
+    if (param->next)  // no third parameter possible
+    {
+      my_error(ER_WRONG_PARAMCOUNT_TO_PROCEDURE, MYF(0), proc_name);
+      goto err;
+    }
+    // second parameter
+    if (!(*param->item)->fixed && (*param->item)->fix_fields(thd, param->item))
+    {
+      DBUG_PRINT("info", ("fix_fields() for the second parameter failed"));
+      goto err;
+    }
+    if ((*param->item)->type() != Item::INT_ITEM ||
+	(*param->item)->val_real() < 0)
+    {
+      my_error(ER_WRONG_PARAMETERS_TO_PROCEDURE, MYF(0), proc_name);
+      goto err;
+    }
+    pc->max_treemem = (uint) (*param->item)->val_int();
+  }
+  else if ((*param->item)->type() != Item::INT_ITEM ||
+	   (*param->item)->val_real() < 0)
+  {
+    my_error(ER_WRONG_PARAMETERS_TO_PROCEDURE, MYF(0), proc_name);
+    goto err;
+  }
+  // if only one parameter was given, it will be the value of max_tree_elements
+  else
+  {
+    pc->max_tree_elements = (uint) (*param->item)->val_int();
+    pc->max_treemem = MAX_TREEMEM;
+  }
+
+  if (!(pc->f_info=
         (field_info**)sql_alloc(sizeof(field_info*)*field_list.elements)))
-    DBUG_RETURN(true);
-
-  f_end= f_info + field_list.elements;
+    goto err;
+  pc->f_end = pc->f_info + field_list.elements;
+  pc->fields = field_list;
 
   {
-    List_iterator_fast<Item> it(field_list);
-    field_info **info= f_info;
+    List_iterator_fast<Item> it(pc->fields);
+    f_info = pc->f_info;
+
     Item *item;
     while ((item = it++))
     {
@@ -97,28 +152,29 @@ select_analyse::init(List<Item> &field_list)
         if (item->type() == Item::FIELD_ITEM &&
             ((Item_field*) item)->field->type() == MYSQL_TYPE_LONGLONG &&
             ((Field_longlong*) ((Item_field*) item)->field)->unsigned_flag)
-          new_field= new field_ulonglong(item, this);
+          new_field= new field_ulonglong(item, pc);
         else
-          new_field= new field_longlong(item, this);
+          new_field= new field_longlong(item, pc);
         break;
       case REAL_RESULT:
-        new_field= new field_real(item, this);
+        new_field= new field_real(item, pc);
         break;
       case DECIMAL_RESULT:
-        new_field= new field_decimal(item, this);
+        new_field= new field_decimal(item, pc);
         break;
       case STRING_RESULT:
-        new_field= new field_str(item, this);
+        new_field= new field_str(item, pc);
         break;
       default:
-        DBUG_RETURN(true);
+        goto err;
       }
-      if (new_field == NULL)
-        DBUG_RETURN(true);
-      *info++= new_field;
+      *f_info++= new_field;
     }
   }
-  DBUG_RETURN(false);
+  DBUG_RETURN(pc);
+err:
+  delete pc;
+  DBUG_RETURN(0);
 }
 
 
@@ -225,16 +281,16 @@ bool get_ev_num_info(EV_NUM_INFO *ev_info, NUM_INFO *info, const char *num)
   {
     if (((longlong) info->ullval) < 0)
       return 0; // Impossible to store as a negative number
-    ev_info->llval =  - max<longlong>((ulonglong) -ev_info->llval, 
-                                           info->ullval);
-    ev_info->min_dval = - max<double>(-ev_info->min_dval, info->dval);
+    ev_info->llval =  -(longlong) max((ulonglong) -ev_info->llval, 
+				      info->ullval);
+    ev_info->min_dval = (double) -max(-ev_info->min_dval, info->dval);
   }
   else		// ulonglong is as big as bigint in MySQL
   {
     if ((check_ulonglong(num, info->integers) == DECIMAL_NUM))
       return 0;
-    ev_info->ullval = max<ulonglong>(ev_info->ullval, info->ullval);
-    ev_info->max_dval = max<double>(ev_info->max_dval, info->dval);
+    ev_info->ullval = (ulonglong) max(ev_info->ullval, info->ullval);
+    ev_info->max_dval =  (double) max(ev_info->max_dval, info->dval);
   }
   return 1;
 } // get_ev_num_info
@@ -252,7 +308,7 @@ void field_str::add()
   String s(buff, sizeof(buff),&my_charset_bin), *res;
   ulong length;
 
-  if (!(res= item->str_result(&s)))
+  if (!(res = item->val_str(&s)))
   {
     nulls++;
     return;
@@ -269,12 +325,12 @@ void field_str::add()
 
   if (can_be_still_num)
   {
-    memset(&num_info, 0, sizeof(num_info));
+    bzero((char*) &num_info, sizeof(num_info));
     if (!test_if_number(&num_info, res->ptr(), (uint) length))
       can_be_still_num = 0;
     if (!found)
     {
-      memset(&ev_num_info, 0, sizeof(ev_num_info));
+      bzero((char*) &ev_num_info, sizeof(ev_num_info));
       was_zero_fill = num_info.zerofill;
     }
     else if (num_info.zerofill != was_zero_fill && !was_maybe_zerofill)
@@ -320,7 +376,7 @@ void field_str::add()
       }
       else
       {
-	memset(&s, 0, sizeof(s));  // Let tree handle free of this
+	bzero((char*) &s, sizeof(s));  // Let tree handle free of this
 	if ((treemem += length) > pc->max_treemem)
 	{
 	  room_in_tree = 0;	 // Remove tree, too big tree
@@ -339,7 +395,7 @@ void field_str::add()
 void field_real::add()
 {
   char buff[MAX_FIELD_WIDTH], *ptr, *end;
-  double num= item->val_result();
+  double num= item->val_real();
   uint length, zero_count, decs;
   TREE_ELEMENT *element;
 
@@ -422,7 +478,7 @@ void field_real::add()
 void field_decimal::add()
 {
   /*TODO - remove rounding stuff after decimal_div returns proper frac */
-  my_decimal dec_buf, *dec= item->val_decimal_result(&dec_buf);
+  my_decimal dec_buf, *dec= item->val_decimal(&dec_buf);
   my_decimal rounded;
   uint length;
   TREE_ELEMENT *element;
@@ -499,8 +555,8 @@ void field_decimal::add()
 void field_longlong::add()
 {
   char buff[MAX_FIELD_WIDTH];
-  longlong num= item->val_int_result();
-  uint length= (uint) (longlong10_to_str(num, buff, -10) - buff);
+  longlong num = item->val_int();
+  uint length = (uint) (longlong10_to_str(num, buff, -10) - buff);
   TREE_ELEMENT *element;
 
   if (item->null_value)
@@ -555,8 +611,8 @@ void field_longlong::add()
 void field_ulonglong::add()
 {
   char buff[MAX_FIELD_WIDTH];
-  longlong num= item->val_int_result();
-  uint length= (uint) (longlong10_to_str(num, buff, 10) - buff);
+  longlong num = item->val_int();
+  uint length = (uint) (longlong10_to_str(num, buff, 10) - buff);
   TREE_ELEMENT *element;
 
   if (item->null_value)
@@ -608,7 +664,7 @@ void field_ulonglong::add()
 } // field_ulonglong::add
 
 
-bool select_analyse::send_data(List<Item> & /* field_list */)
+int analyse::send_row(List<Item> & /* field_list */)
 {
   field_info **f = f_info;
 
@@ -618,20 +674,17 @@ bool select_analyse::send_data(List<Item> & /* field_list */)
   {
     (*f)->add();
   }
-  return false;
-}
+  return 0;
+} // analyse::send_row
 
 
-bool select_analyse::send_eof()
+int analyse::end_of_records()
 {
   field_info **f = f_info;
   char buff[MAX_FIELD_WIDTH];
   String *res, s_min(buff, sizeof(buff),&my_charset_bin), 
 	 s_max(buff, sizeof(buff),&my_charset_bin),
 	 ans(buff, sizeof(buff),&my_charset_bin);
-
-  if (rows == 0) // for backward compatibility
-    goto ok;
 
   for (; f != f_end; f++)
   {
@@ -696,7 +749,7 @@ bool select_analyse::send_eof()
       output_str_length = tmp_str.length();
       func_items[9]->set(tmp_str.ptr(), tmp_str.length(), tmp_str.charset());
       if (result->send_data(result_fields))
-	goto error;
+	return -1;
       continue;
     }
 
@@ -741,14 +794,10 @@ bool select_analyse::send_eof()
       ans.append(STRING_WITH_LEN(" NOT NULL"));
     func_items[9]->set(ans.ptr(), ans.length(), ans.charset());
     if (result->send_data(result_fields))
-      goto error;
+      return -1;
   }
-ok:
-  return result->send_eof();
-error:
-  abort_result_set();
-  return true;
-} // select_analyse::send_eof
+  return 0;
+} // analyse::end_of_records
 
 
 void field_str::get_opt_type(String *answer, ha_rows total_rows)
@@ -835,7 +884,7 @@ void field_str::get_opt_type(String *answer, ha_rows total_rows)
 
 
 void field_real::get_opt_type(String *answer,
-			      ha_rows total_rows MY_ATTRIBUTE((unused)))
+			      ha_rows total_rows __attribute__((unused)))
 {
   char buff[MAX_FIELD_WIDTH];
 
@@ -888,7 +937,7 @@ void field_real::get_opt_type(String *answer,
 
 
 void field_longlong::get_opt_type(String *answer,
-				  ha_rows total_rows MY_ATTRIBUTE((unused)))
+				  ha_rows total_rows __attribute__((unused)))
 {
   char buff[MAX_FIELD_WIDTH];
 
@@ -919,7 +968,7 @@ void field_longlong::get_opt_type(String *answer,
 
 
 void field_ulonglong::get_opt_type(String *answer,
-				   ha_rows total_rows MY_ATTRIBUTE((unused)))
+				   ha_rows total_rows __attribute__((unused)))
 {
   char buff[MAX_FIELD_WIDTH];
 
@@ -944,7 +993,7 @@ void field_ulonglong::get_opt_type(String *answer,
 
 
 void field_decimal::get_opt_type(String *answer,
-                                 ha_rows total_rows MY_ATTRIBUTE((unused)))
+                                 ha_rows total_rows __attribute__((unused)))
 {
   my_decimal zero;
   char buff[MAX_FIELD_WIDTH];
@@ -1022,7 +1071,7 @@ String *field_decimal::std(String *s, ha_rows rows)
 
 
 int collect_string(String *element,
-		   element_count count MY_ATTRIBUTE((unused)),
+		   element_count count __attribute__((unused)),
 		   TREE_INFO *info)
 {
   if (info->found)
@@ -1037,7 +1086,7 @@ int collect_string(String *element,
 } // collect_string
 
 
-int collect_real(double *element, element_count count MY_ATTRIBUTE((unused)),
+int collect_real(double *element, element_count count __attribute__((unused)),
 		 TREE_INFO *info)
 {
   char buff[MAX_FIELD_WIDTH];
@@ -1058,7 +1107,7 @@ int collect_real(double *element, element_count count MY_ATTRIBUTE((unused)),
 int collect_decimal(uchar *element, element_count count,
                     TREE_INFO *info)
 {
-  char buff[DECIMAL_MAX_STR_LENGTH + 1];
+  char buff[DECIMAL_MAX_STR_LENGTH];
   String s(buff, sizeof(buff),&my_charset_bin);
 
   if (info->found)
@@ -1078,7 +1127,7 @@ int collect_decimal(uchar *element, element_count count,
 
 
 int collect_longlong(longlong *element,
-		     element_count count MY_ATTRIBUTE((unused)),
+		     element_count count __attribute__((unused)),
 		     TREE_INFO *info)
 {
   char buff[MAX_FIELD_WIDTH];
@@ -1097,7 +1146,7 @@ int collect_longlong(longlong *element,
 
 
 int collect_ulonglong(ulonglong *element,
-		      element_count count MY_ATTRIBUTE((unused)),
+		      element_count count __attribute__((unused)),
 		      TREE_INFO *info)
 {
   char buff[MAX_FIELD_WIDTH];
@@ -1115,11 +1164,10 @@ int collect_ulonglong(ulonglong *element,
 } // collect_ulonglong
 
 
-/**
-  Create items for substituted output columns (both metadata and data)
-*/
-bool select_analyse::change_columns()
+bool analyse::change_columns(List<Item> &field_list)
 {
+  field_list.empty();
+
   func_items[0] = new Item_proc_string("Field_name", 255);
   func_items[1] = new Item_proc_string("Min_value", 255);
   func_items[1]->maybe_null = 1;
@@ -1133,44 +1181,13 @@ bool select_analyse::change_columns()
   func_items[8] = new Item_proc_string("Std", 255);
   func_items[8]->maybe_null = 1;
   func_items[9] = new Item_proc_string("Optimal_fieldtype",
-				       max(64U, output_str_length));
-  result_fields.empty();
+				       max(64, output_str_length));
+
   for (uint i = 0; i < array_elements(func_items); i++)
-  {
-    if (func_items[i] == NULL)
-      return true;
-    result_fields.push_back(func_items[i]);
-  }
-  return false;
-} // select_analyse::change_columns
-
-
-void select_analyse::cleanup()
-{
-  if (f_info)
-  {
-    for (field_info **f= f_info; f != f_end; f++)
-      delete (*f);
-    f_info= f_end= NULL;
-  }
-  rows= 0;
-  output_str_length= 0;
-}
-
-
-bool select_analyse::send_result_set_metadata(List<Item> &fields, uint flag)
-{
-  return (init(fields) || change_columns() ||
-	  result->send_result_set_metadata(result_fields, flag));
-}
-
-
-void select_analyse::abort_result_set()
-{
-  cleanup();
-  return result->abort_result_set();
-}
-
+    field_list.push_back(func_items[i]);
+  result_fields = field_list;
+  return 0;
+} // analyse::change_columns
 
 int compare_double(const double *s, const double *t)
 {
@@ -1274,4 +1291,3 @@ bool append_escaped(String *to_str, String *from_str)
   }
   return 0;
 }
-

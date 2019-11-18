@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -62,10 +62,8 @@ int my_getwd(char * buf, size_t size, myf MyFlags)
       DBUG_RETURN(-1);
     if (!getcwd(buf,(uint) (size-2)) && MyFlags & MY_WME)
     {
-      char errbuf[MYSYS_STRERROR_SIZE];
       my_errno=errno;
-      my_error(EE_GETWD, MYF(ME_BELL+ME_WAITTANG),
-               errno, my_strerror(errbuf, sizeof(errbuf), errno));
+      my_error(EE_GETWD,MYF(ME_BELL+ME_WAITTANG),errno);
       DBUG_RETURN(-1);
     }
 #elif defined(HAVE_GETWD)
@@ -105,11 +103,7 @@ int my_setwd(const char *dir, myf MyFlags)
   {
     my_errno=errno;
     if (MyFlags & MY_WME)
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      my_error(EE_SETWD, MYF(ME_BELL+ME_WAITTANG), start,
-               errno, my_strerror(errbuf, sizeof(errbuf), errno));
-    }
+      my_error(EE_SETWD,MYF(ME_BELL+ME_WAITTANG),start,errno);
   }
   else
   {
@@ -162,12 +156,12 @@ int test_if_hard_path(register const char *dir_name)
 
 my_bool has_path(const char *name)
 {
-  return MY_TEST(strchr(name, FN_LIBCHAR)) 
+  return test(strchr(name, FN_LIBCHAR)) 
 #if FN_LIBCHAR != '/'
-    || MY_TEST(strchr(name,'/'))
+    || test(strchr(name,'/'))
 #endif
 #ifdef FN_DEVCHAR
-    || MY_TEST(strchr(name, FN_DEVCHAR))
+    || test(strchr(name, FN_DEVCHAR))
 #endif
     ;
 }

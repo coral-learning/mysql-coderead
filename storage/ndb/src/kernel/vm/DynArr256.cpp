@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2006, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003, 2006, 2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include "DynArr256.hpp"
 #include <stdio.h>
@@ -46,8 +45,7 @@ struct DA256Page
   struct DA256Node m_nodes[30];
 };
 
-#undef require
-#define require(x) require_exit_or_core_with_printer((x), 0, ndbout_printer)
+#define require(x) require_impl(x, __LINE__)
 //#define DA256_USE_PX
 //#define DA256_USE_PREFETCH
 #define DA256_EXTRA_SAFE
@@ -85,16 +83,9 @@ DynArr256Pool::DynArr256Pool()
 void
 DynArr256Pool::init(Uint32 type_id, const Pool_context & pc)
 {
-  init(0, type_id, pc);
-}
-
-void
-DynArr256Pool::init(NdbMutex* m, Uint32 type_id, const Pool_context & pc)
-{
   m_ctx = pc;
   m_type_id = type_id;
   m_memroot = (DA256Page*)m_ctx.get_memroot();
-  m_mutex = m;
 }
 
 static const Uint32 g_max_sizes[5] = { 0, 256, 65536, 16777216, ~0 };
@@ -333,7 +324,7 @@ DynArr256::expand(Uint32 pos)
   
   alloc[idx] = m_head.m_ptr_i;
   m_head.m_sz = 1;
-  for (i = 0; i<idx; i++)
+  for (Uint32 i = 0; i<idx; i++)
   {
     m_head.m_ptr_i = alloc[i];
     Uint32 * ptr = get(0);
@@ -568,12 +559,11 @@ releasenode(DA256Page* page, Uint32 idx, Uint32 type_id)
 Uint32
 DynArr256Pool::seize()
 {
+  Uint32 ff = m_first_free;
   Uint32 type_id = m_type_id;
+
   DA256Page* page;
   DA256Page * memroot = m_memroot;
-
-  Guard2 g(m_mutex);
-  Uint32 ff = m_first_free;
   if (ff == RNIL)
   { 
     Uint32 page_no;
@@ -615,6 +605,7 @@ DynArr256Pool::seize()
 void
 DynArr256Pool::release(Uint32 ptrI)
 {
+  Uint32 ff = m_first_free;
   Uint32 type_id = m_type_id;
 
   Uint32 page_no = ptrI >> DA256_BITS;
@@ -625,10 +616,8 @@ DynArr256Pool::release(Uint32 ptrI)
   DA256Free * ptr = (DA256Free*)(page->m_nodes + page_idx);
   if (likely(releasenode(page, page_idx, type_id)))
   {
-    ptr->m_magic = type_id;
-    Guard2 g(m_mutex);
-    Uint32 ff = m_first_free;
     ptr->m_next_free = ff;
+    ptr->m_magic = type_id;
     m_first_free = ptrI;
     return;
   }
@@ -989,6 +978,21 @@ main(int argc, char** argv)
 Uint32 g_currentStartPhase;
 Uint32 g_start_type;
 NdbNodeBitmask g_nowait_nodes;
+
+void childExit(int code, Uint32 currentStartPhase)
+{
+  abort();
+}
+
+void childAbort(int code, Uint32 currentStartPhase)
+{
+  abort();
+}
+
+void childReportError(int error)
+{
+  abort();
+}
 
 void
 UpgradeStartup::sendCmAppChg(Ndbcntr& cntr, Signal* signal, Uint32 startLevel){

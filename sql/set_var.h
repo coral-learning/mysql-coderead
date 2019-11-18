@@ -13,15 +13,18 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 /**
   @file
   "public" interface to sys_var - server configuration variables.
 */
 
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface                       /* gcc class implementation */
+#endif
+
 #include <my_getopt.h>
-#include <vector>
 
 class sys_var;
 class set_var;
@@ -57,7 +60,7 @@ public:
   sys_var *next;
   LEX_CSTRING name;
   enum flag_enum { GLOBAL, SESSION, ONLY_SESSION, SCOPE_MASK=1023,
-                   READONLY=1024, ALLOCATED=2048, INVISIBLE=4096 };
+                   READONLY=1024, ALLOCATED=2048 };
   static const int PARSE_EARLY= 1;
   static const int PARSE_NORMAL= 2;
   /**
@@ -104,8 +107,6 @@ public:
 
   bool check(THD *thd, set_var *var);
   uchar *value_ptr(THD *thd, enum_var_type type, LEX_STRING *base);
-  virtual void update_default(longlong new_def_value)
-  { option.def_value= new_def_value; }
 
   /**
      Update the system variable with the default value from either
@@ -117,9 +118,8 @@ public:
 
   SHOW_TYPE show_type() { return show_val_type; }
   int scope() const { return flags & SCOPE_MASK; }
-  const CHARSET_INFO *charset(THD *thd);
+  CHARSET_INFO *charset(THD *thd);
   bool is_readonly() const { return flags & READONLY; }
-  bool not_visible() const { return flags & INVISIBLE; }
   /**
     the following is only true for keycache variables,
     that support the syntax @@keycache_name.variable_name
@@ -138,10 +138,10 @@ public:
     }
     return true; // keep gcc happy
   }
-  bool register_option(std::vector<my_option> *array, int parse_flags)
+  bool register_option(DYNAMIC_ARRAY *array, int parse_flags)
   {
     return (option.id != -1) && (m_parse_flag & parse_flags) &&
-      (array->push_back(option), false);
+           insert_dynamic(array, (uchar*)&option);
   }
   void do_deprecated_warning(THD *thd);
 
@@ -157,6 +157,7 @@ private:
   virtual void global_save_default(THD *thd, set_var *var) = 0;
   virtual bool session_update(THD *thd, set_var *var) = 0;
   virtual bool global_update(THD *thd, set_var *var) = 0;
+
 protected:
   /**
     A pointer to a value of the variable for SHOW.
@@ -178,7 +179,6 @@ protected:
   { return ((uchar*)&global_system_variables) + offset; }
 };
 
-#include "binlog.h"                           /* binlog_format_typelib */
 #include "sql_plugin.h"                    /* SHOW_HA_ROWS, SHOW_MY_BOOL */
 
 /****************************************************************************
@@ -198,9 +198,6 @@ public:
   virtual int check(THD *thd)=0;           /* To check privileges etc. */
   virtual int update(THD *thd)=0;                  /* To set the value */
   virtual int light_check(THD *thd) { return check(thd); }   /* for PS */
-  virtual void print(THD *thd, String *str)=0;	/* To self-print */
-  /// @returns whether this variable is @@@@optimizer_trace.
-  virtual bool is_var_optimizer_trace() const { return false; }
 };
 
 
@@ -220,7 +217,7 @@ public:
     plugin_ref plugin;                  ///< for Sys_var_plugin
     Time_zone *time_zone;               ///< for Sys_var_tz
     LEX_STRING string_value;            ///< for Sys_var_charptr and others
-    const void *ptr;                    ///< for Sys_var_struct
+    void *ptr;                          ///< for Sys_var_struct
   } save_result;
   LEX_STRING base; /**< for structured variables, like keycache_name.variable_name */
 
@@ -256,14 +253,6 @@ public:
   int check(THD *thd);
   int update(THD *thd);
   int light_check(THD *thd);
-  void print(THD *thd, String *str);	/* To self-print */
-#ifdef OPTIMIZER_TRACE
-  virtual bool is_var_optimizer_trace() const
-  {
-    extern sys_var *Sys_optimizer_trace_ptr;
-    return var == Sys_optimizer_trace_ptr;
-  }
-#endif
 };
 
 
@@ -278,7 +267,6 @@ public:
   int check(THD *thd);
   int update(THD *thd);
   int light_check(THD *thd);
-  void print(THD *thd, String *str);	/* To self-print */
 };
 
 /* For SET PASSWORD */
@@ -293,7 +281,6 @@ public:
   {}
   int check(THD *thd);
   int update(THD *thd);
-  void print(THD *thd, String *str);	/* To self-print */
 };
 
 
@@ -301,29 +288,24 @@ public:
 
 class set_var_collation_client: public set_var_base
 {
-  int   set_cs_flags;
-  const CHARSET_INFO *character_set_client;
-  const CHARSET_INFO *character_set_results;
-  const CHARSET_INFO *collation_connection;
+  CHARSET_INFO *character_set_client;
+  CHARSET_INFO *character_set_results;
+  CHARSET_INFO *collation_connection;
 public:
-  enum  set_cs_flags_enum { SET_CS_NAMES=1, SET_CS_DEFAULT=2, SET_CS_COLLATE=4 };
-  set_var_collation_client(int set_cs_flags_arg,
-                           const CHARSET_INFO *client_coll_arg,
-                           const CHARSET_INFO *connection_coll_arg,
-                           const CHARSET_INFO *result_coll_arg)
-    :set_cs_flags(set_cs_flags_arg),
-     character_set_client(client_coll_arg),
+  set_var_collation_client(CHARSET_INFO *client_coll_arg,
+                           CHARSET_INFO *connection_coll_arg,
+                           CHARSET_INFO *result_coll_arg)
+    :character_set_client(client_coll_arg),
      character_set_results(result_coll_arg),
      collation_connection(connection_coll_arg)
   {}
   int check(THD *thd);
   int update(THD *thd);
-  void print(THD *thd, String *str);	/* To self-print */
 };
 
 
 /* optional things, have_* variables */
-extern SHOW_COMP_OPTION have_csv;
+extern SHOW_COMP_OPTION have_csv, have_innodb;
 extern SHOW_COMP_OPTION have_ndbcluster, have_partitioning;
 extern SHOW_COMP_OPTION have_profiling;
 
@@ -344,18 +326,15 @@ int sql_set_variables(THD *thd, List<set_var_base> *var_list);
 
 bool fix_delay_key_write(sys_var *self, THD *thd, enum_var_type type);
 
-sql_mode_t expand_sql_mode(sql_mode_t sql_mode);
-bool sql_mode_string_representation(THD *thd, sql_mode_t sql_mode, LEX_STRING *ls);
+ulong expand_sql_mode(ulonglong sql_mode);
+bool sql_mode_string_representation(THD *thd, ulong sql_mode, LEX_STRING *ls);
 
 extern sys_var *Sys_autocommit_ptr;
-extern sys_var *Sys_gtid_next_ptr;
-extern sys_var *Sys_gtid_next_list_ptr;
-extern sys_var *Sys_gtid_purged_ptr;
 
-const CHARSET_INFO *get_old_charset_by_name(const char *old_name);
+CHARSET_INFO *get_old_charset_by_name(const char *old_name);
 
 int sys_var_init();
-int sys_var_add_options(std::vector<my_option> *long_options, int parse_flags);
+int sys_var_add_options(DYNAMIC_ARRAY *long_options, int parse_flags);
 void sys_var_end(void);
 
 #endif

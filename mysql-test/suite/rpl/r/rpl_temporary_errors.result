@@ -1,14 +1,10 @@
 include/master-slave.inc
-Warnings:
-Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
 [connection master]
 call mtr.add_suppression("Deadlock found");
 **** On Master ****
 CREATE TABLE t1 (a INT PRIMARY KEY, b INT);
 INSERT INTO t1 VALUES (1,1), (2,2), (3,3), (4,4);
 **** On Slave ****
-include/sync_slave_sql_with_master.inc
 SHOW STATUS LIKE 'Slave_retried_transactions';
 Variable_name	Value
 Slave_retried_transactions	0
@@ -29,7 +25,6 @@ a	b
 3	3
 4	4
 **** On Slave ****
-include/sync_slave_sql_with_master.inc
 set @@global.slave_exec_mode= default;
 SHOW STATUS LIKE 'Slave_retried_transactions';
 Variable_name	Value

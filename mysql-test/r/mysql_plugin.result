@@ -1,6 +1,3 @@
-call mtr.add_suppression('InnoDB: Resizing redo log');
-call mtr.add_suppression('InnoDB: Starting to delete and rewrite log files');
-call mtr.add_suppression('InnoDB: New log files created');
 #
 # Ensure the plugin isn't loaded.
 #
@@ -105,7 +102,7 @@ ERROR: Missing --plugin_dir option.
 # Show the help.
 #
 mysql_plugin  Ver V.V.VV Distrib XX.XX.XX
-Copyright (c) 2011, 2016, Oracle and/or its affiliates. All rights reserved.
+Copyright (c) 2011, 2015, Oracle and/or its affiliates. All rights reserved.
 
 Enable or disable plugins.
 

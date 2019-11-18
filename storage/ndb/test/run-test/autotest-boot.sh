@@ -1,6 +1,7 @@
 #!/bin/sh
 
-# Copyright (c) 2007, 2010, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2007 MySQL AB
+# Use is subject to license terms.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -26,20 +27,10 @@
 ##############
 
 save_args=$*
-VERSION="autotest-boot.sh version 1.01"
+VERSION="autotest-boot.sh version 1.00"
 
 DATE=`date '+%Y-%m-%d'`
-if [ `uname -s` != "SunOS" ]
-then
-  if [ `uname | grep -ic cygwin || true` -ne 0 ]
-  then
-    HOST=`hostname`
-  else
-    HOST=`hostname -s`
-  fi
-else
-  HOST=`hostname`
-fi
+HOST=`hostname -s`
 export DATE HOST
 
 set -e
@@ -50,17 +41,10 @@ verbose=0
 do_clone=yes
 build=yes
 
-tag0=
-tag1=
+tag=
 conf=
-clonename=
 extra_args=
-extra_clone0=
-extra_clone1=
-install_dir0=
-install_dir1=
-RUN=
-
+extra_clone=
 LOCK=$HOME/.autotest-lock
 
 ############################
@@ -73,17 +57,12 @@ do
                 --no-clone) do_clone="";;
                 --no-build) build="";;
                 --verbose) verbose=`expr $verbose + 1`;;
-                --clone=*) clone0=`echo $1 | sed s/--clone=//`;;
-                --clone0=*) clone0=`echo $1 | sed s/--clone0=//`;;
-                --clone1=*) clone1=`echo $1 | sed s/--clone1=//`;;
+                --clone=*) clone=`echo $1 | sed s/--clone=//`;;
                 --version) echo $VERSION; exit;;
                 --conf=*) conf=`echo $1 | sed s/--conf=//`;;
-	        --tag=*) tag0=`echo $1 | sed s/--tag=//`;;
-	        --tag0=*) tag0=`echo $1 | sed s/--tag0=//`;;
-	        --tag1=*) tag1=`echo $1 | sed s/--tag1=//`;;
-	        --clonename=*) clonename=`echo $1 | sed s/--clonename=//`;;
+	        --tag=*) tag=`echo $1 | sed s/--tag=//`;;
 	        --*) echo "Unknown arg: $1";;
-                *) RUN="$RUN $1";;
+                *) RUN=$*;;
         esac
         shift
 done
@@ -116,7 +95,7 @@ fi
 # Validate that all interesting
 #   variables where set in conf
 ###############################
-vars="src_clone_base install_dir build_dir bzr_src_base"
+vars="src_clone_base install_dir build_dir"
 for i in $vars
 do
   t=`echo echo \\$$i`
@@ -141,17 +120,7 @@ fi
 # Setup the clone source location  #
 ####################################
 
-#src_clone=${src_clone_base}/${clone}
-src_clone0=${bzr_src_base}/${clone0}
-src_clone1=${bzr_src_base}/${clone1}
-
-if [ -z "$clone1" ]
-then
-    install_dir0=$install_dir
-else
-    install_dir0=$install_dir/0
-    install_dir1=$install_dir/1
-fi
+src_clone=${src_clone_base}${clone}
 
 #######################################
 # Check to see if the lock file exists#
@@ -184,27 +153,13 @@ fi
 # You can add more to this path#
 ################################
 
-if [ -z "$tag0" ]
+if [ -z "$tag" ]
 then
-    dst_place0=${build_dir}/clone-$clone0-$DATE.$$
+    dst_place=${build_dir}/clone-$clone-$DATE.$$
 else
-    dst_place0=${build_dir}/clone-$tag0-$DATE.$$
-    extra_args="$extra_args --clone0=$tag0"
-    extra_clone0="-r$tag0"
-fi
-
-if [ -z "$tag1" ]
-then
-    dst_place1=${build_dir}/clone1-$clone1-$DATE.$$
-else
-    dst_place1=${build_dir}/clone1-$tag1-$DATE.$$
-    extra_args="$extra_args --clone1=$tag1"
-    extra_clone1="-r$tag1"
-fi
-
-if [ "$clonename" ]
-then
-    extra_args="$extra_args --clonename=$clonename"
+    dst_place=${build_dir}/clone-$tag-$DATE.$$
+    extra_args="$extra_args --clone=$tag"
+    extra_clone="-r$tag"
 fi
 
 #########################################
@@ -213,25 +168,12 @@ fi
 
 if [ "$do_clone" ]
 then
-	rm -rf $dst_place0
-	mkdir -p ${build_dir}
-	
-	# Can use local copy if clone_dir is set, to speed up
-	if [ ! -z "$clone_dir" ]
+	rm -rf $dst_place
+	if [ `echo $src_clone | grep -c 'file:\/\/'` = 1 ]
 	then
-		if [ -d "$clone_dir/$clone0" ]
-		then
-			echo "Copying $clone_dir/$clone0 to $dst_place0"
-			cp -r $clone_dir/$clone0 $dst_place0
-		fi
+		bk clone -l $extra_clone $src_clone $dst_place
 	else
-		bzr export $dst_place0 $extra_clone0 $src_clone0    
-	fi
-
-	if [ "$clone1" ]
-	then
-	    rm -rf $dst_place1
-	    bzr export $dst_place1 $extra_clone1 $src_clone1
+		bk clone $extra_clone $src_clone $dst_place
 	fi
 fi
 
@@ -242,32 +184,10 @@ fi
 
 if [ "$build" ]
 then
-    rm -rf $install_dir
-    p=`pwd`
-    if [ -z "$clone1" ]
-    then
-        cd $dst_place0
-        if [ `uname | grep -ic cygwin || true` -ne 0 ]
-        then
-            install_dir_dos=`cygpath -w $install_dir`
-            cmd /c cscript win/configure.js WITH_NDBCLUSTER_STORAGE_ENGINE --without-plugins=archive,blackhole,example,federated
-            cmd /c cmake -G "Visual Studio 9 2008" -DWITH_ERROR_INSERT=1 -DWITH_NDB_TEST=1 -DCMAKE_INSTALL_PREFIX=$install_dir_dos
-            cmd /c devenv.com MySql.sln /Build RelWithDebInfo
-            cmd /c devenv.com MySql.sln /Project INSTALL /Build
-        else
-	    BUILD/compile-ndb-autotest --prefix=$install_dir0
-	    make install
-        fi
-    else
-	cd $dst_place0
-	BUILD/compile-ndb-autotest --prefix=$install_dir0
+	cd $dst_place
+        rm -rf $install_dir
+	BUILD/compile-ndb-autotest --prefix=$install_dir
 	make install
-	
-	cd $dst_place1
-	BUILD/compile-ndb-autotest --prefix=$install_dir1
-	make install
-    fi
-    cd $p
 fi
 
 
@@ -275,20 +195,11 @@ fi
 # Start run script             #
 ################################
 
-script=$install_dir0/mysql-test/ndb/autotest-run.sh
-for R in $RUN
-do
-    sh -x $script $save_args --conf=$conf --run-dir=$install_dir --install-dir0=$install_dir0 --install-dir1=$install_dir1 --suite=$R --nolock $extra_args
-done
+script=$install_dir/mysql-test/ndb/autotest-run.sh
+sh -x $script $save_args --conf=$conf --install-dir=$install_dir --suite=$RUN --nolock $extra_args
 
 if [ "$build" ]
 then
-    rm -rf $dst_place0
-
-    if [ "$dst_place1" ]
-    then
-	rm -rf $dst_place1
-    fi
+    rm -rf $dst_place
 fi
-
 rm -f $LOCK

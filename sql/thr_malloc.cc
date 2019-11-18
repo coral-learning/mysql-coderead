@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -21,12 +21,44 @@
 #include "thr_malloc.h"
 #include "sql_class.h"
 
-#include <algorithm>
+extern "C" {
+  void sql_alloc_error_handler(void)
+  {
+    THD *thd= current_thd;
+    if (thd)
+    {
+      if (! thd->is_error())
+      {
+        /*
+          This thread is Out Of Memory.
+          An OOM condition is a fatal error.
+          It should not be caught by error handlers in stored procedures.
+          Also, recording that SQL condition in the condition area could
+          cause more memory allocations, which in turn could raise more
+          OOM conditions, causing recursion in the error handling code itself.
+          As a result, my_error() should not be invoked, and the
+          thread diagnostics area is set to an error status directly.
+          Note that Diagnostics_area::set_error_status() is safe,
+          since it does not call any memory allocation routines.
+          The visible result for a client application will be:
+          - a query fails with an ER_OUT_OF_RESOURCES error,
+          returned in the error packet.
+          - SHOW ERROR/SHOW WARNINGS may be empty.
+        */
+        thd->stmt_da->set_error_status(thd,
+                                       ER_OUT_OF_RESOURCES,
+                                       ER(ER_OUT_OF_RESOURCES),
+                                       NULL);
+      }
+    }
 
-using std::min;
-using std::max;
+    /* Skip writing to the error log to avoid mtr complaints */
+    DBUG_EXECUTE_IF("simulate_out_of_memory", return;);
 
-extern "C" void sql_alloc_error_handler(void);
+    sql_print_error("%s", ER(ER_OUT_OF_RESOURCES));
+
+  }
+}
 
 void init_sql_alloc(MEM_ROOT *mem_root, uint block_size, uint pre_alloc)
 {
@@ -46,7 +78,7 @@ void *sql_calloc(size_t size)
 {
   void *ptr;
   if ((ptr=sql_alloc(size)))
-    memset(ptr, 0, size);
+    bzero(ptr,size);
   return ptr;
 }
 
@@ -83,9 +115,9 @@ void* sql_memdup(const void *ptr, size_t len)
 
 
 char *sql_strmake_with_convert(const char *str, size_t arg_length,
-			       const CHARSET_INFO *from_cs,
+			       CHARSET_INFO *from_cs,
 			       size_t max_res_length,
-			       const CHARSET_INFO *to_cs, size_t *result_length)
+			       CHARSET_INFO *to_cs, size_t *result_length)
 {
   char *pos;
   size_t new_length= to_cs->mbmaxlen*arg_length;

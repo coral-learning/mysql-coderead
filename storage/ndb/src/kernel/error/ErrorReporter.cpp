@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 
 #include <ndb_global.h>
@@ -27,9 +26,6 @@
 #include <NdbConfig.h>
 #include <Configuration.hpp>
 #include "EventLogger.hpp"
-extern EventLogger * g_eventLogger;
-
-#include "TimeModule.hpp"
 
 #include <NdbAutoPtr.hpp>
 
@@ -38,14 +34,14 @@ extern EventLogger * g_eventLogger;
 static int WriteMessage(int thrdMessageID,
 			const char* thrdProblemData, 
 			const char* thrdObjRef,
-                        NdbShutdownType & nst);
+			Uint32 thrdTheEmulatedJamIndex,
+			Uint8 thrdTheEmulatedJam[]);
 
 static void dumpJam(FILE* jamStream, 
 		    Uint32 thrdTheEmulatedJamIndex, 
-		    const Uint32 thrdTheEmulatedJam[],
-                    Uint32 aBlockNumber);
+		    Uint8 thrdTheEmulatedJam[]);
 
-
+extern EventLogger g_eventLogger;
 const char*
 ErrorReporter::formatTimeStampString(){
   TimeModule DateTime;          /* To create "theDateTimeString" */
@@ -110,12 +106,9 @@ ErrorReporter::get_trace_no(){
   return traceFileNo;
 }
 
-// Using my_progname without including all of mysys
-extern "C" const char* my_progname;
 
 void
-ErrorReporter::formatMessage(int thr_no,
-                             Uint32 num_threads, int faultID,
+ErrorReporter::formatMessage(int faultID,
 			     const char* problemData, 
 			     const char* objRef,
 			     const char* theNameOfTheTraceFile,
@@ -126,67 +119,38 @@ ErrorReporter::formatMessage(int thr_no,
   const char *exit_msg = ndbd_exit_message(faultID, &cl);
   const char *exit_cl_msg = ndbd_exit_classification_message(cl, &st);
   const char *exit_st_msg = ndbd_exit_status_message(st);
-  int sofar;
 
   processId = NdbHost_GetProcessId();
-  char thrbuf[100] = "";
-  if (thr_no >= 0)
-  {
-    BaseString::snprintf(thrbuf, sizeof(thrbuf), " thr: %u", thr_no);
-  }
-
+  
   BaseString::snprintf(messptr, MESSAGE_LENGTH,
-                       "Time: %s\n"
-                       "Status: %s\n"
-                       "Message: %s (%s)\n"
-                       "Error: %d\n"
-                       "Error data: %s\n"
-                       "Error object: %s\n"
-                       "Program: %s\n"
-                       "Pid: %d%s\n"
-                       "Version: %s\n"
-                       "Trace: %s",
-                       formatTimeStampString() , 
-                       exit_st_msg,
-                       exit_msg, exit_cl_msg,
-                       faultID, 
-                       (problemData == NULL) ? "" : problemData, 
-                       objRef, 
-                       my_progname, 
-                       processId, 
-                       thrbuf,
-                       NDB_VERSION_STRING,
-                       theNameOfTheTraceFile ? 
-                       theNameOfTheTraceFile : "<no tracefile>");
+	   "Time: %s\n"
+           "Status: %s\n"
+	   "Message: %s (%s)\n"
+	   "Error: %d\n"
+           "Error data: %s\n"
+	   "Error object: %s\n"
+           "Program: %s\n"
+	   "Pid: %d\n"
+           "Trace: %s\n"
+           "Version: %s\n"
+           "***EOM***\n", 
+	   formatTimeStampString() , 
+           exit_st_msg,
+	   exit_msg, exit_cl_msg,
+	   faultID, 
+	   (problemData == NULL) ? "" : problemData, 
+	   objRef, 
+	   my_progname, 
+	   processId, 
+	   theNameOfTheTraceFile ? theNameOfTheTraceFile : "<no tracefile>",
+		       NDB_VERSION_STRING);
 
-  if (theNameOfTheTraceFile)
-  {
-    for (Uint32 i = 1 ; i < num_threads; i++)
-    {
-      sofar = strlen(messptr);
-      if(sofar < MESSAGE_LENGTH)
-      {
-	BaseString::snprintf(messptr + sofar, MESSAGE_LENGTH - sofar,
-			     " %s_t%u", theNameOfTheTraceFile, i);
-      }
-    }
-  }
-
-  sofar = strlen(messptr);
-  if(sofar < MESSAGE_LENGTH)
-  {
-    BaseString::snprintf(messptr + sofar, MESSAGE_LENGTH - sofar,
-                         "\n"
-                         "***EOM***\n");
-  }
-
-  // Add trailing blanks to get a fixed length of the message
+  // Add trailing blanks to get a fixed lenght of the message
   while (strlen(messptr) <= MESSAGE_LENGTH-3){
     strcat(messptr, " ");
   }
   
-  messptr[MESSAGE_LENGTH -2]='\n';
-  messptr[MESSAGE_LENGTH -1]=0;
+  strcat(messptr, "\n");
   
   return;
 }
@@ -194,30 +158,34 @@ ErrorReporter::formatMessage(int thr_no,
 NdbShutdownType ErrorReporter::s_errorHandlerShutdownType = NST_ErrorHandler;
 
 void
+ErrorReporter::setErrorHandlerShutdownType(NdbShutdownType nst)
+{
+  s_errorHandlerShutdownType = nst;
+}
+
+void childReportError(int error);
+
+void
 ErrorReporter::handleAssert(const char* message, const char* file, int line, int ec)
 {
   char refMessage[100];
-  Uint32 jamBlockNumber;
 
 #ifdef NO_EMULATED_JAM
   BaseString::snprintf(refMessage, 100, "file: %s lineNo: %d",
 	   file, line);
-  jam = NULL;
-  jamIndex = 0;
-  jamBlockNumber = 0;
 #else
-  const EmulatedJamBuffer *jamBuffer =
-    (EmulatedJamBuffer *)NdbThread_GetTlsKey(NDB_THREAD_TLS_JAM);
-  jamBlockNumber = jamBuffer->theEmulatedJamBlockNumber;
-  const char *blockName = getBlockName(jamBlockNumber);
+  const Uint32 blockNumber = theEmulatedJamBlockNumber;
+  const char *blockName = getBlockName(blockNumber);
 
   BaseString::snprintf(refMessage, 100, "%s line: %d (block: %s)",
 	   file, line, blockName);
 #endif
-  NdbShutdownType nst = s_errorHandlerShutdownType;
-  WriteMessage(ec, message, refMessage, nst);
+  WriteMessage(ec, message, refMessage,
+	       theEmulatedJamIndex, theEmulatedJam);
 
-  NdbShutdown(ec, nst);
+  childReportError(ec);
+
+  NdbShutdown(s_errorHandlerShutdownType);
   exit(1);                                      // Deadcode
 }
 
@@ -227,40 +195,32 @@ ErrorReporter::handleError(int messageID,
 			   const char* objRef,
 			   NdbShutdownType nst)
 {
-  if(messageID == NDBD_EXIT_ERROR_INSERT)
-  {
-    nst = NST_ErrorInsert;
-  } 
-  else 
-  {
+  WriteMessage(messageID, problemData,
+	       objRef, theEmulatedJamIndex, theEmulatedJam);
+
+  g_eventLogger.info(problemData);
+  g_eventLogger.info(objRef);
+
+  childReportError(messageID);
+
+  if(messageID == NDBD_EXIT_ERROR_INSERT){
+    NdbShutdown(NST_ErrorInsert);
+  } else {
     if (nst == NST_ErrorHandler)
       nst = s_errorHandlerShutdownType;
+    NdbShutdown(nst);
   }
-  
-  WriteMessage(messageID, problemData, objRef, nst);
-
-  g_eventLogger->info("%s", problemData);
-  g_eventLogger->info("%s", objRef);
-
-  NdbShutdown(messageID, nst);
-  exit(1); // kill warning
 }
 
 int 
 WriteMessage(int thrdMessageID,
-	     const char* thrdProblemData, 
-             const char* thrdObjRef,
-             NdbShutdownType & nst){
+	     const char* thrdProblemData, const char* thrdObjRef,
+	     Uint32 thrdTheEmulatedJamIndex,
+	     Uint8 thrdTheEmulatedJam[]){
   FILE *stream;
   unsigned offset;
   unsigned long maxOffset;  // Maximum size of file.
   char theMessage[MESSAGE_LENGTH];
-  Uint32 thrdTheEmulatedJamIndex;
-  const Uint32 *thrdTheEmulatedJam;
-  Uint32 jamBlockNumber;
-
-  Uint32 threadCount = globalScheduler.traceDumpGetNumThreads();
-  int thr_no = globalScheduler.traceDumpGetCurrentThread();
 
   /**
    * Format trace file name
@@ -294,8 +254,7 @@ WriteMessage(int thrdMessageID,
 	    "                        \n\n\n");   
     
     // ...and write the error-message...
-    ErrorReporter::formatMessage(thr_no,
-                                 threadCount, thrdMessageID,
+    ErrorReporter::formatMessage(thrdMessageID,
 				 thrdProblemData, thrdObjRef,
 				 theTraceFileName, theMessage);
     fprintf(stream, "%s", theMessage);
@@ -322,8 +281,7 @@ WriteMessage(int thrdMessageID,
     fseek(stream, offset, SEEK_SET);
     
     // ...and write the error-message there...
-    ErrorReporter::formatMessage(thr_no,
-                                 threadCount, thrdMessageID,
+    ErrorReporter::formatMessage(thrdMessageID,
 				 thrdProblemData, thrdObjRef,
 				 theTraceFileName, theMessage);
     fprintf(stream, "%s", theMessage);
@@ -349,31 +307,25 @@ WriteMessage(int thrdMessageID,
   fclose(stream);
   
   if (theTraceFileName) {
-    /* Attempt to stop all processing to be able to dump a consistent state. */
-    globalScheduler.traceDumpPrepare(nst);
-
-    char *traceFileEnd = theTraceFileName + strlen(theTraceFileName);
-    for (Uint32 i = 0; i < threadCount; i++)
-    {
-      // Open the tracefile...
-      if (i > 0)
-        sprintf(traceFileEnd, "_t%u", i);
-      FILE *jamStream = fopen(theTraceFileName, "w");
-
-      //  ...and "dump the jam" there.
-      bool ok = globalScheduler.traceDumpGetJam(i, jamBlockNumber,
-                                                thrdTheEmulatedJam,
-                                                thrdTheEmulatedJamIndex);
-      if(ok && thrdTheEmulatedJam != 0)
-      {
-        dumpJam(jamStream, thrdTheEmulatedJamIndex,
-                thrdTheEmulatedJam, jamBlockNumber);
-      }
-
-      globalScheduler.dumpSignalMemory(i, jamStream);
-
-      fclose(jamStream);
+    // Open the tracefile...
+    FILE *jamStream = fopen(theTraceFileName, "w");
+  
+    //  ...and "dump the jam" there.
+    //  ErrorReporter::dumpJam(jamStream);
+    if(thrdTheEmulatedJam != 0){
+      dumpJam(jamStream, thrdTheEmulatedJamIndex, thrdTheEmulatedJam);
     }
+  
+    /* Dont print the jobBuffers until a way to copy them, 
+       like the other variables,
+       is implemented. Otherwise when NDB keeps running, 
+       with this function running
+       in the background, the jobBuffers will change during runtime. And when
+       they're printed here, they will not be correct anymore.
+    */
+    globalScheduler.dumpSignalMemory(jamStream);
+  
+    fclose(jamStream);
   }
 
   return 0;
@@ -382,8 +334,7 @@ WriteMessage(int thrdMessageID,
 void 
 dumpJam(FILE *jamStream, 
 	Uint32 thrdTheEmulatedJamIndex, 
-	const Uint32 thrdTheEmulatedJam[],
-        Uint32 aBlockNumber) {
+	Uint8 thrdTheEmulatedJam[]) {
 #ifndef NO_EMULATED_JAM   
   // print header
   const int maxaddr = 8;
@@ -393,14 +344,16 @@ dumpJam(FILE *jamStream,
     fprintf(jamStream, "%-6s ", "ADDR");
   fprintf(jamStream, "\n");
 
-  const int first = thrdTheEmulatedJamIndex;	// oldest
+  // treat as array of Uint32
+  const Uint32 *base = (Uint32 *)thrdTheEmulatedJam;
+  const int first = thrdTheEmulatedJamIndex / sizeof(Uint32);	// oldest
   int cnt, idx;
 
   // look for first block entry
   for (cnt = 0, idx = first; cnt < EMULATED_JAM_SIZE; cnt++, idx++) {
     if (idx >= EMULATED_JAM_SIZE)
       idx = 0;
-    const Uint32 aJamEntry = thrdTheEmulatedJam[idx];
+    const Uint32 aJamEntry = base[idx];
     if (aJamEntry > (1 << 20))
       break;
   }
@@ -414,6 +367,7 @@ dumpJam(FILE *jamStream,
   else if (cnt < EMULATED_JAM_SIZE)
     fprintf(jamStream, "%-7s?", "");
   else {
+    const Uint32 aBlockNumber = theEmulatedJamBlockNumber;
     const char *aBlockName = getBlockName(aBlockNumber);
     if (aBlockName != 0)
       fprintf(jamStream, "%-7s?", aBlockName);
@@ -427,7 +381,7 @@ dumpJam(FILE *jamStream,
     globalData.incrementWatchDogCounter(4);	// watchdog not to kill us ?
     if (idx >= EMULATED_JAM_SIZE)
       idx = 0;
-    const Uint32 aJamEntry = thrdTheEmulatedJam[idx];
+    const Uint32 aJamEntry = base[idx];
     if (aJamEntry > (1 << 20)) {
       const Uint32 aBlockNumber = aJamEntry >> 20;
       const char *aBlockName = getBlockName(aBlockNumber);

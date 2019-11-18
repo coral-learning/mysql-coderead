@@ -28,10 +28,6 @@
 #include "pfs_column_values.h"
 #include "pfs_instr_class.h"
 #include "pfs_instr.h"
-#include "pfs_account.h"
-#include "pfs_host.h"
-#include "pfs_user.h"
-#include "pfs_account.h"
 
 #ifdef MY_ATOMIC_MODE_DUMMY
 /*
@@ -84,8 +80,7 @@ static int pfs_init_func(void *p)
   pfs_hton->show_status= pfs_show_status;
   pfs_hton->flags= HTON_ALTER_NOT_SUPPORTED |
     HTON_TEMPORARY_NOT_SUPPORTED |
-    HTON_NO_PARTITION |
-    HTON_NO_BINLOG_ROW_OPT;
+    HTON_NO_PARTITION;
 
   /*
     As long as the server implementation keeps using legacy_db_type,
@@ -130,8 +125,6 @@ static struct st_mysql_show_var pfs_status_vars[]=
     (char*) &thread_class_lost, SHOW_LONG_NOFLUSH},
   {"Performance_schema_file_classes_lost",
     (char*) &file_class_lost, SHOW_LONG_NOFLUSH},
-  {"Performance_schema_socket_classes_lost",
-    (char*) &socket_class_lost, SHOW_LONG_NOFLUSH},
   {"Performance_schema_mutex_instances_lost",
     (char*) &mutex_lost, SHOW_LONG},
   {"Performance_schema_rwlock_instances_lost",
@@ -144,8 +137,6 @@ static struct st_mysql_show_var pfs_status_vars[]=
     (char*) &file_lost, SHOW_LONG},
   {"Performance_schema_file_handles_lost",
     (char*) &file_handle_lost, SHOW_LONG},
-  {"Performance_schema_socket_instances_lost",
-    (char*) &socket_lost, SHOW_LONG},
   {"Performance_schema_locker_lost",
     (char*) &locker_lost, SHOW_LONG},
   /* table shares, can be flushed */
@@ -154,20 +145,6 @@ static struct st_mysql_show_var pfs_status_vars[]=
   /* table handles, can be flushed */
   {"Performance_schema_table_handles_lost",
     (char*) &table_lost, SHOW_LONG},
-  {"Performance_schema_hosts_lost",
-    (char*) &host_lost, SHOW_LONG},
-  {"Performance_schema_users_lost",
-    (char*) &user_lost, SHOW_LONG},
-  {"Performance_schema_accounts_lost",
-    (char*) &account_lost, SHOW_LONG},
-  {"Performance_schema_stage_classes_lost",
-    (char*) &stage_class_lost, SHOW_LONG},
-  {"Performance_schema_statement_classes_lost",
-    (char*) &statement_class_lost, SHOW_LONG},
-  {"Performance_schema_digest_lost",
-    (char*) &digest_lost, SHOW_LONG},
-  {"Performance_schema_session_connect_attrs_lost",
-    (char*) &session_connect_attrs_lost, SHOW_LONG},
   {NullS, NullS, SHOW_LONG}
 };
 
@@ -222,6 +199,8 @@ int ha_perfschema::open(const char *name, int mode, uint test_if_locked)
   thr_lock_data_init(m_table_share->m_thr_lock_ptr, &m_thr_lock, NULL);
   ref_length= m_table_share->m_ref_length;
 
+  psi_open();
+
   DBUG_RETURN(0);
 }
 
@@ -232,6 +211,8 @@ int ha_perfschema::close(void)
   delete m_table;
   m_table= NULL;
 
+  psi_close();
+
   DBUG_RETURN(0);
 }
 
@@ -240,12 +221,17 @@ int ha_perfschema::write_row(uchar *buf)
   int result;
 
   DBUG_ENTER("ha_perfschema::write_row");
-  if (!pfs_initialized)
-    DBUG_RETURN(HA_ERR_WRONG_COMMAND);
 
-  DBUG_ASSERT(m_table_share);
   ha_statistic_increment(&SSV::ha_write_count);
-  result= m_table_share->write_row(table, buf, table->field);
+  DBUG_ASSERT(m_table_share);
+
+  if (m_table_share->m_write_row)
+    result= m_table_share->m_write_row(table, buf, table->field);
+  else
+  {
+    result= HA_ERR_WRONG_COMMAND;
+  }
+
   DBUG_RETURN(result);
 }
 
@@ -263,27 +249,12 @@ void ha_perfschema::use_hidden_primary_key(void)
 int ha_perfschema::update_row(const uchar *old_data, uchar *new_data)
 {
   DBUG_ENTER("ha_perfschema::update_row");
-  if (!pfs_initialized)
-    DBUG_RETURN(HA_ERR_WRONG_COMMAND);
 
   if (is_executed_by_slave())
     DBUG_RETURN(0);
 
   DBUG_ASSERT(m_table);
-  ha_statistic_increment(&SSV::ha_update_count);
   int result= m_table->update_row(table, old_data, new_data, table->field);
-  DBUG_RETURN(result);
-}
-
-int ha_perfschema::delete_row(const uchar *buf)
-{
-  DBUG_ENTER("ha_perfschema::delete_row");
-  if (!pfs_initialized)
-    DBUG_RETURN(HA_ERR_WRONG_COMMAND);
-
-  DBUG_ASSERT(m_table);
-  ha_statistic_increment(&SSV::ha_delete_count);
-  int result= m_table->delete_row(table, buf, table->field);
   DBUG_RETURN(result);
 }
 
@@ -301,9 +272,6 @@ int ha_perfschema::rnd_init(bool scan)
   else
     m_table->reset_position();
 
-  if (m_table != NULL)
-    m_table->rnd_init(scan);
-
   result= m_table ? 0 : HA_ERR_OUT_OF_MEM;
   DBUG_RETURN(result);
 }
@@ -320,15 +288,8 @@ int ha_perfschema::rnd_end(void)
 int ha_perfschema::rnd_next(uchar *buf)
 {
   DBUG_ENTER("ha_perfschema::rnd_next");
-  if (!pfs_initialized)
-  {
-    table->status= STATUS_NOT_FOUND;
-    DBUG_RETURN(HA_ERR_END_OF_FILE);
-  }
 
   DBUG_ASSERT(m_table);
-  ha_statistic_increment(&SSV::ha_read_rnd_next_count);
-
   int result= m_table->rnd_next();
   if (result == 0)
   {
@@ -336,7 +297,6 @@ int ha_perfschema::rnd_next(uchar *buf)
     if (result == 0)
       stats.records++;
   }
-  table->status= (result ? STATUS_NOT_FOUND : 0);
   DBUG_RETURN(result);
 }
 
@@ -352,18 +312,11 @@ void ha_perfschema::position(const uchar *record)
 int ha_perfschema::rnd_pos(uchar *buf, uchar *pos)
 {
   DBUG_ENTER("ha_perfschema::rnd_pos");
-  if (!pfs_initialized)
-  {
-    table->status= STATUS_NOT_FOUND;
-    DBUG_RETURN(HA_ERR_END_OF_FILE);
-  }
 
   DBUG_ASSERT(m_table);
-  ha_statistic_increment(&SSV::ha_read_rnd_count);
   int result= m_table->rnd_pos(pos);
   if (result == 0)
     result= m_table->read_row(table, buf, table->field);
-  table->status= (result ? STATUS_NOT_FOUND : 0);
   DBUG_RETURN(result);
 }
 
@@ -372,7 +325,7 @@ int ha_perfschema::info(uint flag)
   DBUG_ENTER("ha_perfschema::info");
   DBUG_ASSERT(m_table_share);
   if (flag & HA_STATUS_VARIABLE)
-    stats.records= m_table_share->get_row_count();
+    stats.records= m_table_share->m_records;
   if (flag & HA_STATUS_CONST)
     ref_length= m_table_share->m_ref_length;
   DBUG_RETURN(0);
@@ -383,8 +336,6 @@ int ha_perfschema::delete_all_rows(void)
   int result;
 
   DBUG_ENTER("ha_perfschema::delete_all_rows");
-  if (!pfs_initialized)
-    DBUG_RETURN(0);
 
   if (is_executed_by_slave())
     DBUG_RETURN(0);

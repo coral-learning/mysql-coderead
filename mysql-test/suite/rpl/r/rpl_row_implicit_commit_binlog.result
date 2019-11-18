@@ -1,7 +1,4 @@
 include/master-slave.inc
-Warnings:
-Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
 [connection master]
 #########################################################################
 #                            CONFIGURATION
@@ -16,41 +13,12 @@ INSERT INTO tt_2(ddl_case) VALUES(0);
 #########################################################################
 SET AUTOCOMMIT= 0;
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-INSERT INTO tt_1(ddl_case) VALUES (43);
-CREATE FUNCTION myfunc_int RETURNS INTEGER SONAME "UDF_EXAMPLE_LIB";
--e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
--b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
-Log_name	Pos	Event_type	Server_id	End_log_pos	Info
-master-bin.000001	#	Query	#	#	BEGIN
-master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
-master-bin.000001	#	Write_rows	#	#	table_id: # flags: STMT_END_F
-master-bin.000001	#	Xid	#	#	COMMIT /* XID */
-master-bin.000001	#	Query	#	#	use `test`; CREATE FUNCTION myfunc_int RETURNS INTEGER SONAME "LIB"
--e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
-
--b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-INSERT INTO tt_1(ddl_case) VALUES (42);
-DROP FUNCTION myfunc_int;
--e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
--b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
-Log_name	Pos	Event_type	Server_id	End_log_pos	Info
-master-bin.000001	#	Query	#	#	BEGIN
-master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
-master-bin.000001	#	Write_rows	#	#	table_id: # flags: STMT_END_F
-master-bin.000001	#	Xid	#	#	COMMIT /* XID */
-master-bin.000001	#	Query	#	#	use `test`; DROP FUNCTION myfunc_int
--e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
-
--b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
 INSERT INTO tt_1(ddl_case) VALUES (41);
 LOAD INDEX INTO CACHE nt_1 IGNORE LEAVES;
 Table	Op	Msg_type	Msg_text
 test.nt_1	preload_keys	status	OK
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -66,7 +34,6 @@ test.tt_1	preload_keys	note	The storage engine for the table doesn't support pre
 test.tt_2	preload_keys	note	The storage engine for the table doesn't support preload_keys
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -81,7 +48,6 @@ Table	Op	Msg_type	Msg_text
 test.nt_1	analyze	status	Table is already up to date
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -97,7 +63,6 @@ Table	Op	Msg_type	Msg_text
 test.nt_1	check	status	OK
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -112,7 +77,6 @@ Table	Op	Msg_type	Msg_text
 test.nt_1	optimize	status	Table is already up to date
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -128,7 +92,6 @@ Table	Op	Msg_type	Msg_text
 test.nt_1	repair	status	OK
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -142,7 +105,6 @@ INSERT INTO tt_1(ddl_case) VALUES (35);
 LOCK TABLES tt_1 WRITE;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -155,7 +117,6 @@ INSERT INTO tt_1(ddl_case) VALUES (34);
 UNLOCK TABLES;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -168,7 +129,6 @@ INSERT INTO tt_1(ddl_case) VALUES (33);
 CREATE USER 'user'@'localhost';
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -182,7 +142,6 @@ INSERT INTO tt_1(ddl_case) VALUES (32);
 GRANT ALL ON *.* TO 'user'@'localhost';
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -196,7 +155,6 @@ INSERT INTO tt_1(ddl_case) VALUES (31);
 SET PASSWORD FOR 'user'@'localhost' = PASSWORD('newpass');
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -210,7 +168,6 @@ INSERT INTO tt_1(ddl_case) VALUES (30);
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'user'@'localhost';
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -224,7 +181,6 @@ INSERT INTO tt_1(ddl_case) VALUES (29);
 RENAME USER 'user'@'localhost' TO 'user_new'@'localhost';
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -238,7 +194,6 @@ INSERT INTO tt_1(ddl_case) VALUES (28);
 DROP USER 'user_new'@'localhost';
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -252,7 +207,6 @@ INSERT INTO tt_1(ddl_case) VALUES (27);
 CREATE EVENT evt ON SCHEDULE AT CURRENT_TIMESTAMP + INTERVAL 1 HOUR DO SELECT * FROM tt_1;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -266,7 +220,6 @@ INSERT INTO tt_1(ddl_case) VALUES (26);
 ALTER EVENT evt COMMENT 'evt';
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -280,7 +233,6 @@ INSERT INTO tt_1(ddl_case) VALUES (25);
 DROP EVENT evt;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -294,7 +246,6 @@ INSERT INTO tt_1(ddl_case) VALUES (24);
 CREATE TRIGGER tr AFTER INSERT ON tt_1 FOR EACH ROW UPDATE tt_2 SET ddl_case = ddl_case WHERE ddl_case= NEW.ddl_case;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -308,7 +259,6 @@ INSERT INTO tt_1(ddl_case) VALUES (23);
 DROP TRIGGER tr;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -323,7 +273,6 @@ INSERT INTO tt_1(ddl_case) VALUES (22);
 CREATE FUNCTION fc () RETURNS VARCHAR(64) RETURN "fc";
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -338,7 +287,6 @@ INSERT INTO tt_1(ddl_case) VALUES (21);
 ALTER FUNCTION fc COMMENT 'fc';
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -352,7 +300,6 @@ INSERT INTO tt_1(ddl_case) VALUES (20);
 DROP FUNCTION fc;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -366,7 +313,6 @@ INSERT INTO tt_1(ddl_case) VALUES (19);
 CREATE PROCEDURE pc () UPDATE tt_2 SET ddl_case = ddl_case WHERE ddl_case= NEW.ddl_case;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -381,7 +327,6 @@ INSERT INTO tt_1(ddl_case) VALUES (18);
 ALTER PROCEDURE pc COMMENT 'pc';
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -395,7 +340,6 @@ INSERT INTO tt_1(ddl_case) VALUES (17);
 DROP PROCEDURE pc;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -409,7 +353,6 @@ INSERT INTO tt_1(ddl_case) VALUES (16);
 CREATE VIEW v AS SELECT * FROM tt_1;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -423,7 +366,6 @@ INSERT INTO tt_1(ddl_case) VALUES (15);
 ALTER VIEW v AS SELECT * FROM tt_1;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -437,7 +379,6 @@ INSERT INTO tt_1(ddl_case) VALUES (14);
 DROP VIEW v;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -451,7 +392,6 @@ INSERT INTO tt_1(ddl_case) VALUES (13);
 CREATE INDEX ix ON tt_1(ddl_case);
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -465,7 +405,6 @@ INSERT INTO tt_1(ddl_case) VALUES (12);
 DROP INDEX ix ON tt_1;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -479,7 +418,6 @@ INSERT INTO tt_1(ddl_case) VALUES (11);
 CREATE TEMPORARY TABLE tt_xx (a int);
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -492,7 +430,6 @@ INSERT INTO tt_1(ddl_case) VALUES (10);
 ALTER TABLE tt_xx ADD COLUMN (b int);
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -505,7 +442,6 @@ INSERT INTO tt_1(ddl_case) VALUES (9);
 ALTER TABLE tt_xx RENAME new_tt_xx;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -518,12 +454,11 @@ INSERT INTO tt_1(ddl_case) VALUES (8);
 DROP TEMPORARY TABLE IF EXISTS new_tt_xx;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
 master-bin.000001	#	Write_rows	#	#	table_id: # flags: STMT_END_F
-master-bin.000001	#	Query	#	#	use `test`; DROP TEMPORARY TABLE IF EXISTS `new_tt_xx` /* generated by server */
+master-bin.000001	#	Query	#	#	DROP TEMPORARY TABLE IF EXISTS `test`.`new_tt_xx` /* generated by server */
 master-bin.000001	#	Xid	#	#	COMMIT /* XID */
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 
@@ -532,7 +467,6 @@ INSERT INTO tt_1(ddl_case) VALUES (7);
 CREATE TABLE tt_xx (a int);
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -546,7 +480,6 @@ INSERT INTO tt_1(ddl_case) VALUES (6);
 ALTER TABLE tt_xx ADD COLUMN (b int);
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -560,7 +493,6 @@ INSERT INTO tt_1(ddl_case) VALUES (5);
 RENAME TABLE tt_xx TO new_tt_xx;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -574,7 +506,6 @@ INSERT INTO tt_1(ddl_case) VALUES (4);
 TRUNCATE TABLE new_tt_xx;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -587,10 +518,9 @@ master-bin.000001	#	Query	#	#	use `test`; TRUNCATE TABLE new_tt_xx
 INSERT INTO tt_1(ddl_case) VALUES (3);
 DROP TABLE IF EXISTS tt_xx, new_tt_xx;
 Warnings:
-Note	1051	Unknown table 'test.tt_xx'
+Note	1051	Unknown table 'tt_xx'
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -604,7 +534,6 @@ INSERT INTO tt_1(ddl_case) VALUES (2);
 CREATE DATABASE db;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -618,7 +547,6 @@ INSERT INTO tt_1(ddl_case) VALUES (1);
 DROP DATABASE IF EXISTS db;
 -e-e-e-e-e-e-e-e-e-e-e- >> << -e-e-e-e-e-e-e-e-e-e-e-
 -b-b-b-b-b-b-b-b-b-b-b- >> << -b-b-b-b-b-b-b-b-b-b-b-
-include/show_binlog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	BEGIN
 master-bin.000001	#	Table_map	#	#	table_id: # (test.tt_1)
@@ -630,10 +558,8 @@ master-bin.000001	#	Query	#	#	DROP DATABASE IF EXISTS db
 ###################################################################################
 #                               CHECK CONSISTENCY
 ###################################################################################
-include/sync_slave_sql_with_master.inc
 include/diff_tables.inc [master:tt_1,slave:tt_1]
 ###################################################################################
 #                                        CLEAN
 ###################################################################################
-include/sync_slave_sql_with_master.inc
 include/rpl_end.inc

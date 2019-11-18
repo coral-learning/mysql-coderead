@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef FILELOGHANDLER_H
 #define FILELOGHANDLER_H
@@ -37,8 +36,17 @@ class File_class;
 class FileLogHandler : public LogHandler
 {
 public:
+  /** Max number of log files to archive. */
+  STATIC_CONST( MAX_NO_FILES = 6 );	
+  /** Max file size of the log before archiving.  */
+  STATIC_CONST( MAX_FILE_SIZE = 1024000 );
+  /** Max number of log entries before archiving. */
+  STATIC_CONST( MAX_LOG_ENTRIES = 10000 );
 
-  virtual const char* handler_type() {return "FILE"; };
+  /**
+   * Default constructor.
+   */
+  FileLogHandler();
 
   /**
    * Creates a new file handler with the specified filename, 
@@ -49,10 +57,10 @@ public:
    * @param maxFileSize the maximum log file size before archiving.
    * @param maxLogEntries the maximum number of log entries before checking time to archive.
    */
-  FileLogHandler(const char* aFileName = "logger.log",
-		 int maxNoFiles = 6,
-		 long maxFileSize = 1024000,
-		 unsigned int maxLogEntries = 10000);
+  FileLogHandler(const char* aFileName, 
+		 int maxNoFiles = MAX_NO_FILES, 
+		 long maxFileSize = MAX_FILE_SIZE,
+		 unsigned int maxLogEntries = MAX_LOG_ENTRIES);
 
   /**
    * Destructor.
@@ -62,16 +70,9 @@ public:
   virtual bool open();
   virtual bool close();
 
-  virtual bool is_open();
-
   virtual bool setParam(const BaseString &param, const BaseString &value);
   virtual bool checkParams();
-
-  virtual bool getParams(BaseString &config);
-
-  virtual off_t getCurrentSize();
-  virtual off_t getMaxSize() { return m_maxFileSize; };
-
+  
 protected:	
   virtual void writeHeader(const char* pCategory, Logger::LoggerLevel level);
   virtual void writeMessage(const char* pMsg);

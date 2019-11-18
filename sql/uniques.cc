@@ -1,4 +1,4 @@
-/* Copyright (c) 2001, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2001, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -125,7 +125,7 @@ inline double log2_n_fact(double x)
     the same length, so each of total_buf_size elements will be added to a sort
     heap with (n_buffers-1) elements. This gives the comparison cost:
 
-      total_buf_elems * log2(n_buffers) * ROWID_COMPARE_COST;
+      total_buf_elems* log2(n_buffers) / TIME_FOR_COMPARE_ROWID;
 */
 
 static double get_merge_buffers_cost(uint *buff_elems, uint elem_size,
@@ -140,7 +140,7 @@ static double get_merge_buffers_cost(uint *buff_elems, uint elem_size,
 
   /* Using log2(n)=log(n)/log(2) formula */
   return 2*((double)total_buf_elems*elem_size) / IO_SIZE +
-     total_buf_elems*log((double) n_buffers) * ROWID_COMPARE_COST / M_LN2;
+     total_buf_elems*log((double) n_buffers) / (TIME_FOR_COMPARE_ROWID * M_LN2);
 }
 
 
@@ -270,6 +270,7 @@ double Unique::get_use_cost(uint *buffer, uint nkeys, uint key_size,
   ulong max_elements_in_tree;
   ulong last_tree_elems;
   int   n_full_trees; /* number of trees in unique - 1 */
+  double result;
 
   max_elements_in_tree= ((ulong) max_in_memory_size /
                          ALIGN_SIZE(sizeof(TREE_ELEMENT)+key_size));
@@ -278,10 +279,10 @@ double Unique::get_use_cost(uint *buffer, uint nkeys, uint key_size,
   last_tree_elems= nkeys % max_elements_in_tree;
 
   /* Calculate cost of creating trees */
-  double result= 2 * log2_n_fact(last_tree_elems + 1.0);
+  result= 2*log2_n_fact(last_tree_elems + 1.0);
   if (n_full_trees)
     result+= n_full_trees * log2_n_fact(max_elements_in_tree + 1.0);
-  result*= ROWID_COMPARE_COST;
+  result /= TIME_FOR_COMPARE_ROWID;
 
   DBUG_PRINT("info",("unique trees sizes: %u=%u*%lu + %lu", nkeys,
                      n_full_trees, n_full_trees?max_elements_in_tree:0,
@@ -334,7 +335,7 @@ bool Unique::flush()
 
   if (tree_walk(&tree, (tree_walk_action) unique_write_to_file,
 		(void*) this, left_root_right) ||
-      insert_dynamic(&file_ptrs, &file_ptr))
+      insert_dynamic(&file_ptrs, (uchar*) &file_ptr))
     return 1;
   delete_tree(&tree);
   return 0;
@@ -420,7 +421,7 @@ C_MODE_END
 static bool merge_walk(uchar *merge_buffer, ulong merge_buffer_size,
                        uint key_length, BUFFPEK *begin, BUFFPEK *end,
                        tree_walk_action walk_action, void *walk_action_arg,
-                       qsort_cmp2 compare, const void *compare_arg,
+                       qsort_cmp2 compare, void *compare_arg,
                        IO_CACHE *file)
 {
   BUFFPEK_COMPARE_CONTEXT compare_context = { compare, compare_arg };
@@ -579,6 +580,7 @@ bool Unique::walk(tree_walk_action action, void *walk_action_arg)
 
 bool Unique::get(TABLE *table)
 {
+  SORTPARAM sort_param;
   table->sort.found_records=elements+tree.elements_in_tree;
 
   if (my_b_tell(&file) == 0)
@@ -615,20 +617,20 @@ bool Unique::get(TABLE *table)
     return 1;
   reinit_io_cache(outfile,WRITE_CACHE,0L,0,0);
 
-  Sort_param sort_param;
+  bzero((char*) &sort_param,sizeof(sort_param));
   sort_param.max_rows= elements;
   sort_param.sort_form=table;
-  sort_param.rec_length= sort_param.sort_length= sort_param.ref_length= size;
-  sort_param.max_keys_per_buffer=
-    (uint) (max_in_memory_size / sort_param.sort_length);
+  sort_param.rec_length= sort_param.sort_length= sort_param.ref_length=
+    size;
+  sort_param.keys= (uint) (max_in_memory_size / sort_param.sort_length);
   sort_param.not_killable=1;
 
-  if (!(sort_buffer=(uchar*) my_malloc((sort_param.max_keys_per_buffer + 1) *
-                                       sort_param.sort_length,
-                                       MYF(0))))
+  if (!(sort_buffer=(uchar*) my_malloc((sort_param.keys+1) *
+				       sort_param.sort_length,
+				       MYF(0))))
     return 1;
-  sort_param.unique_buff= sort_buffer+(sort_param.max_keys_per_buffer *
-                                       sort_param.sort_length);
+  sort_param.unique_buff= sort_buffer+(sort_param.keys*
+				       sort_param.sort_length);
 
   sort_param.compare= (qsort2_cmp) buffpek_compare;
   sort_param.cmp_context.key_compare= tree.compare;

@@ -1,5 +1,5 @@
 #ifndef MYSQL_PLUGIN_AUTH_COMMON_INCLUDED
-/* Copyright (c) 2010, 2012, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -29,27 +29,6 @@
   return values of the plugin authenticate_user() method.
 */
 
-/**
-  Authentication failed, plugin internal error.
-  An error occurred in the authentication plugin itself.
-  These errors are reported in table performance_schema.host_cache,
-  column COUNT_AUTH_PLUGIN_ERRORS.
-*/
-#define CR_AUTH_PLUGIN_ERROR 3
-/**
-  Authentication failed, client server handshake.
-  An error occurred during the client server handshake.
-  These errors are reported in table performance_schema.host_cache,
-  column COUNT_HANDSHAKE_ERRORS.
-*/
-#define CR_AUTH_HANDSHAKE 2
-/**
-  Authentication failed, user credentials.
-  For example, wrong passwords.
-  These errors are reported in table performance_schema.host_cache,
-  column COUNT_AUTHENTICATION_ERRORS.
-*/
-#define CR_AUTH_USER_CREDENTIALS 1
 /**
   Authentication failed. Additionally, all other CR_xxx values
   (libmysql error code) can be used too.

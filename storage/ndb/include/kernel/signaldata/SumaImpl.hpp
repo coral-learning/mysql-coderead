@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef SUMA_IMPL_HPP
 #define SUMA_IMPL_HPP
@@ -23,9 +22,15 @@
 
 
 struct SubCreateReq {
-
+  /**
+   * Sender(s)/Reciver(s)
+   */
+  friend struct Grep;
+  friend struct SumaParticipant;
+  
   friend bool printSUB_CREATE_REQ(FILE *, const Uint32 *, Uint32, Uint16);
-  STATIC_CONST( SignalLength = 7 );
+  STATIC_CONST( SignalLength = 6 );
+  STATIC_CONST( SignalLength2 = 7 );
   
   enum SubscriptionType {
     SingleTableScan  = 1,  // 
@@ -34,11 +39,10 @@ struct SubCreateReq {
     SelectiveTableSnapshot  = 4,  // User defines tables
     RemoveFlags  = 0xff,
     GetFlags     = 0xff << 16,
+    AddTableFlag = 0x1 << 16,
     RestartFlag  = 0x2 << 16,
     ReportAll    = 0x4 << 16,
-    ReportSubscribe= 0x8 << 16,
-    NoReportDDL = 0x10 << 16,
-    NR_Sub_Dropped = 0x1 << 24   // sub is dropped but needs to be copied
+    ReportSubscribe= 0x8 << 16
   };
   
   Uint32 senderRef;
@@ -47,29 +51,31 @@ struct SubCreateReq {
   Uint32 subscriptionKey;
   Uint32 subscriptionType;
   Uint32 tableId;
-  Uint32 schemaTransId;
+  Uint32 state;
 };
 
 struct SubCreateRef {
+  /**
+   * Sender(s)/Reciver(s)
+   */
+  friend struct Grep;
+  friend struct SumaParticipant;
+  
   friend bool printSUB_CREATE_REF(FILE *, const Uint32 *, Uint32, Uint16);
   STATIC_CONST( SignalLength = 3 );
 
   Uint32 senderRef;
   Uint32 senderData;
   Uint32 errorCode;
-
-  enum ErrorCode
-  {
-    SubscriptionAlreadyExist = 1415
-    ,OutOfSubscriptionRecords = 1422
-    ,OutOfTableRecords = 1423
-    ,TableDropped = 1417
-    ,NF_FakeErrorREF = 11
-    ,NotStarted = 1428
-  };
 };
 
 struct SubCreateConf {
+  /**
+   * Sender(s)/Reciver(s)
+   */
+  friend struct Grep;
+  friend struct SumaParticipant;
+  
   friend bool printSUB_CREATE_CONF(FILE *, const Uint32 *, Uint32, Uint16);
   STATIC_CONST( SignalLength = 2 );
   
@@ -88,10 +94,11 @@ struct SubStartReq {
   /**
    * Sender(s)/Reciver(s)
    */
-  friend class Suma;
+  friend struct Suma;
   
   friend bool printSUB_START_REQ(FILE *, const Uint32 *, Uint32, Uint16);
-  STATIC_CONST( SignalLength = 7 );
+  STATIC_CONST( SignalLength = 6 );
+  STATIC_CONST( SignalLength2 = SignalLength+1 );
 
   Uint32 senderRef;
   Uint32 senderData;
@@ -106,29 +113,19 @@ struct SubStartRef {
   /**
    * Sender(s)/Reciver(s)
    */
-  friend class Suma;
+  friend struct Suma;
   
   friend bool printSUB_START_REF(FILE *, const Uint32 *, Uint32, Uint16);
   enum ErrorCode {
     Undefined = 1,
     NF_FakeErrorREF = 11,
     Busy = 701,
-    PartiallyConnected = 1421,
-    NoSuchSubscription = 1407,
-    Locked = 1411,
-    Dropped = 1418,
-    Defining = 1418,
-    OutOfSubscriberRecords = 1412,
-    OutOfSubOpRecords = 1424,
-    NotMaster = 702, // For API/DICT communication
-    BusyWithNR = 1405,
-    NodeDied = 1427
-    ,NotStarted = 1428
+    NotMaster = 702,
+    PartiallyConnected = 1421
   };
 
   STATIC_CONST( SignalLength = 7 );
   STATIC_CONST( SignalLength2 = SignalLength+1 );
-  STATIC_CONST( SL_MasterNode = 9 );
   
   Uint32 senderRef;
   Uint32 senderData;
@@ -149,9 +146,11 @@ struct SubStartConf {
   /**
    * Sender(s)/Reciver(s)
    */
-
+  friend struct Grep;
+  
   friend bool printSUB_START_CONF(FILE *, const Uint32 *, Uint32, Uint16);
-  STATIC_CONST( SignalLength = 9 );
+  STATIC_CONST( SignalLength = 7 );
+  STATIC_CONST( SignalLength2 = SignalLength+1 );
 
   Uint32 senderRef;
   Uint32 senderData;
@@ -160,23 +159,18 @@ struct SubStartConf {
   Uint32 firstGCI;
   Uint32 part;  // SubscriptionData::Part
   Uint32 subscriberData;
-  Uint32 bucketCount;
-  Uint32 nodegroup;
+  // with SignalLength2
+  Uint32 subscriberRef;
 };
 
 struct SubStopReq {
   /**
    * Sender(s)/Reciver(s)
    */
-  friend class Suma;
+  friend struct Suma;
   
-  enum RequestInfo
-  {
-    RI_ABORT_START = 0x1
-  };
-
   friend bool printSUB_STOP_REQ(FILE *, const Uint32 *, Uint32, Uint16);
-  STATIC_CONST( SignalLength = 8 );
+  STATIC_CONST( SignalLength = 7 );
   Uint32 senderRef;
   Uint32 senderData;
   Uint32 subscriptionId;
@@ -184,32 +178,24 @@ struct SubStopReq {
   Uint32 part;  // SubscriptionData::Part
   Uint32 subscriberData;
   Uint32 subscriberRef;
-  Uint32 requestInfo;
 };
 
 struct SubStopRef {
   /**
    * Sender(s)/Reciver(s)
    */
-  friend class Suma;
+  friend struct Suma;
   
   friend bool printSUB_STOP_REF(FILE *, const Uint32 *, Uint32, Uint16);
   enum ErrorCode {
     Undefined = 1,
     NF_FakeErrorREF = 11,
     Busy = 701,
-    NoSuchSubscription = 1407,
-    Locked = 1411,
-    Defining = 1425,
-    OutOfSubOpRecords = 1424,
-    NoSuchSubscriber = 1426,
-    NotMaster = 702,
-    BusyWithNR = 1405
-    ,NotStarted = 1428
+    NotMaster = 702
   };
 
   STATIC_CONST( SignalLength = 8 );
-  STATIC_CONST( SL_MasterNode = 9 );
+  STATIC_CONST( SignalLength2 = SignalLength+1 );
   
   Uint32 senderRef;
   Uint32 senderData;
@@ -219,6 +205,7 @@ struct SubStopRef {
   Uint32 subscriberData;
   Uint32 subscriberRef;
   Uint32 errorCode;
+  // with SignalLength2
   Uint32 m_masterNodeId;
 };
 
@@ -226,10 +213,10 @@ struct SubStopConf {
   /**
    * Sender(s)/Reciver(s)
    */
-
+  friend struct Grep;
+  
   friend bool printSUB_STOP_CONF(FILE *, const Uint32 *, Uint32, Uint16);
-  STATIC_CONST( SignalLengthWithGci = 9 );
-  STATIC_CONST( SignalLength = 9 );
+  STATIC_CONST( SignalLength = 7 );
 
   Uint32 senderRef;
   Uint32 senderData;
@@ -238,50 +225,35 @@ struct SubStopConf {
   Uint32 part;  // SubscriptionData::Part
   Uint32 subscriberData;
   Uint32 subscriberRef;
-  //
-  Uint32 gci_hi;
-  Uint32 gci_lo;
 };
 
 struct SubSyncReq {
   /**
    * Sender(s)/Reciver(s)
    */
-  friend class Suma;
-
+  friend struct Suma;
+  friend struct Grep;
+  
   friend bool printSUB_SYNC_REQ(FILE *, const Uint32 *, Uint32, Uint16);
-  STATIC_CONST( SignalLength = 8 );
+  STATIC_CONST( SignalLength = 5 );
   
   Uint32 senderRef;
   Uint32 senderData;
   Uint32 subscriptionId;
   Uint32 subscriptionKey;
   Uint32 part; // SubscriptionData::Part
-  Uint32 requestInfo;
-  Uint32 fragCount;
-  Uint32 fragId; // ZNIL if not used
-
-  enum {
-    LM_Exclusive = 0x1
-    ,Reorg = 0x2
-    ,NoDisk = 0x4
-    ,TupOrder = 0x8
-    ,LM_CommittedRead = 0x10
-    ,RangeScan = 0x20
-    ,StatScan = 0x40
-  };
 
   SECTION( ATTRIBUTE_LIST = 0); // Used when doing SingelTableScan  
   SECTION( TABLE_LIST = 1 );
-  SECTION( TUX_BOUND_INFO = 1); // If range scan
 };
 
 struct SubSyncRef {
   /**
    * Sender(s)/Reciver(s)
    */
-  friend class Suma;
-
+  friend struct Suma;
+  friend struct Grep;
+  
   friend bool printSUB_SYNC_REF(FILE *, const Uint32 *, Uint32, Uint16);
   enum ErrorCode {
     Undefined = 1
@@ -291,7 +263,6 @@ struct SubSyncRef {
   Uint32 senderRef;
   Uint32 senderData;
   Uint32 errorCode;
-  Uint32 masterNodeId;
 };
 
 struct SubSyncConf {
@@ -299,8 +270,9 @@ struct SubSyncConf {
   /**
    * Sender(s)/Reciver(s)
    */
-  friend class Suma;
-
+  friend struct Suma;
+  friend struct Grep;
+  
   friend bool printSUB_SYNC_CONF(FILE *, const Uint32 *, Uint32, Uint16);
   STATIC_CONST( SignalLength = 2 );
   
@@ -309,34 +281,35 @@ struct SubSyncConf {
 };
 
 struct SubTableData {
+  /**
+   * Sender(s)/Reciver(s)
+   */
+  friend struct SumaParticipant;
+  friend struct Grep;
+  
   friend bool printSUB_TABLE_DATA(FILE *, const Uint32 *, Uint32, Uint16);
-  STATIC_CONST( SignalLength = 8 );
-  STATIC_CONST( SignalLengthWithTransId = 10 );
+  STATIC_CONST( SignalLength = 7 );
   SECTION( DICT_TAB_INFO = 0 );
   SECTION( ATTR_INFO = 0 );
   SECTION( AFTER_VALUES = 1 );
   SECTION( BEFORE_VALUES = 2 );
   
-  enum Flags {
+  enum LogType {
     SCAN = 1, 
     LOG  = 2,
     REMOVE_FLAGS = 0xff
   };
   
   Uint32 senderData;
-  Uint32 gci_hi;
+  Uint32 gci;
   Uint32 tableId;
   Uint32 requestInfo;
-  Uint32 flags;
+  Uint32 logType;
   union {
     Uint32 changeMask;
     Uint32 anyValue;
-    Uint32 takeOver;
   };
   Uint32 totalLen;
-  Uint32 gci_lo;
-  Uint32 transId1;
-  Uint32 transId2;
 
   static void setOperation(Uint32& ri, Uint32 val) { 
     ri = (ri & 0xFFFFFF00) | val;
@@ -365,42 +338,45 @@ struct SubSyncContinueReq {
   /**
    * Sender(s)/Reciver(s)
    */
-  friend class Trix;
+  friend struct SumaParticipant;
+  friend struct Grep;
+  friend struct Trix;
   
   friend bool printSUB_SYNC_CONTINUE_REQ(FILE *, const Uint32 *, Uint32, Uint16);
-  STATIC_CONST( SignalLength = 3 );
+  STATIC_CONST( SignalLength = 2 );
 
   Uint32 subscriberData;
   Uint32 noOfRowsSent;
-  Uint32 senderData;
 };
 
 struct SubSyncContinueRef {
   /**
    * Sender(s)/Reciver(s)
    */
-  friend class Trix;
+  friend struct SumaParticipant;
+  friend struct Grep;
+  friend struct Trix;
   
   friend bool printSUB_SYNC_CONTINUE_REF(FILE *, const Uint32 *, Uint32, Uint16);
-  STATIC_CONST( SignalLength = 3 );
+  STATIC_CONST( SignalLength = 2 );
 
   Uint32 subscriptionId;
   Uint32 subscriptionKey;
-  Uint32 senderData;
 };
 
 struct SubSyncContinueConf {
   /**
    * Sender(s)/Reciver(s)
    */
-  friend class Trix;
+  friend struct SumaParticipant;
+  friend struct Grep;
+  friend struct Trix;
   
   friend bool printSUB_SYNC_CONTINUE_CONF(FILE *, const Uint32 *, Uint32, Uint16);
-  STATIC_CONST( SignalLength = 3 );
+  STATIC_CONST( SignalLength = 2 );
 
   Uint32 subscriptionId;
   Uint32 subscriptionKey;
-  Uint32 senderData;
 };
 
 struct SubGcpCompleteRep {
@@ -408,22 +384,17 @@ struct SubGcpCompleteRep {
   /**
    * Sender(s)/Reciver(s)
    */
-  friend class Dbdih;
-  friend class Trix;
+  friend struct Dbdih;
+  friend struct SumaParticipant;
+  friend struct Grep;
+  friend struct Trix;
   
   friend bool printSUB_GCP_COMPLETE_REP(FILE *, const Uint32 *, Uint32, Uint16);
-  STATIC_CONST( SignalLength = 5 );
-  STATIC_CONST( ON_DISK = 1 );
-  STATIC_CONST( IN_MEMORY = 2 );
-  STATIC_CONST( MISSING_DATA = 4 );
-  STATIC_CONST( ADD_CNT = 8 );  // Uses hi 16-bit for delta
-  STATIC_CONST( SUB_CNT = 16);  // Uses hi 16-bit for delta
-
-  Uint32 gci_hi;
+  STATIC_CONST( SignalLength = 3 );
+  
+  Uint32 gci;
   Uint32 senderRef;
   Uint32 gcp_complete_rep_count;
-  Uint32 gci_lo;
-  Uint32 flags;
 };
 
 struct SubGcpCompleteAck {
@@ -436,6 +407,12 @@ struct SubGcpCompleteAck {
 };
 
 struct SubRemoveReq {
+  /**
+   * Sender(s)/Reciver(s)
+   */
+  friend struct Grep;
+  friend struct SumaParticipant;
+  
   friend bool printSUB_REMOVE_REQ(FILE *, const Uint32 *, Uint32, Uint16);
   STATIC_CONST( SignalLength = 4 );
   
@@ -446,17 +423,18 @@ struct SubRemoveReq {
 };
 
 struct SubRemoveRef {
+  /**
+   * Sender(s)/Reciver(s)
+   */
+  friend struct Grep;
+  friend struct SumaParticipant;
+  
   friend bool printSUB_REMOVE_REF(FILE *, const Uint32 *, Uint32, Uint16);
   STATIC_CONST( SignalLength = 5 );
   enum ErrorCode {
     Undefined = 1,
     NF_FakeErrorREF = 11,
-    Busy = 701,
-    NoSuchSubscription = 1407,
-    Locked = 1411,
-    Defining = 1418,
-    AlreadyDropped = 1419
-    ,NotStarted = 1428
+    Busy = 701
   };
 
   Uint32 senderRef;
@@ -467,6 +445,12 @@ struct SubRemoveRef {
 };
 
 struct SubRemoveConf {
+  /**
+   * Sender(s)/Reciver(s)
+   */
+  friend struct Grep;
+  friend struct SumaParticipant;
+  
   friend bool printSUB_REMOVE_CONF(FILE *, const Uint32 *, Uint32, Uint16);
   STATIC_CONST( SignalLength = 5 );
   
@@ -479,6 +463,9 @@ struct SubRemoveConf {
 
 
 struct CreateSubscriptionIdReq {
+  friend struct Grep;
+  friend struct SumaParticipant;
+  
   friend bool printCREATE_SUBSCRIPTION_ID_REQ(FILE *, const Uint32 *, 
 					       Uint32, Uint16);
   STATIC_CONST( SignalLength = 2 );
@@ -489,6 +476,9 @@ struct CreateSubscriptionIdReq {
 
 
 struct CreateSubscriptionIdConf {
+  friend struct Grep;
+  friend struct SumaParticipant;
+  
   friend bool printCREATE_SUBSCRIPTION_ID_CONF(FILE *, const Uint32 *, 
 					       Uint32, Uint16);
   STATIC_CONST( SignalLength = 4 );
@@ -501,6 +491,9 @@ struct CreateSubscriptionIdConf {
 
 
 struct CreateSubscriptionIdRef {
+  friend struct Grep;
+  friend struct SumaParticipant;
+  
   friend bool printCREATE_SUBSCRIPTION_ID_REF(FILE *, const Uint32 *, 
 					       Uint32, Uint16);
   STATIC_CONST( SignalLength = 3 );
@@ -520,7 +513,6 @@ struct SumaStartMeRef {
   Uint32 errorCode;
   enum {
     Busy = 0x1
-    ,NotStarted = 0x2
   };
 };
 
@@ -529,28 +521,18 @@ struct SumaStartMeConf {
   Uint32 unused;
 };
 
-struct SumaHandoverReq
-{
-  STATIC_CONST( SignalLength = 4 );
+struct SumaHandoverReq {
+  STATIC_CONST( SignalLength = 3 );
   Uint32 gci;
   Uint32 nodeId;
   Uint32 theBucketMask[1];
-  Uint32 requestType;
-
-  enum RequestType
-  {
-    RT_START_NODE = 0,
-    RT_STOP_NODE = 1
-  };
 };
 
-struct SumaHandoverConf
-{
-  STATIC_CONST( SignalLength = 4 );
+struct SumaHandoverConf {
+  STATIC_CONST( SignalLength = 3 );
   Uint32 gci;
   Uint32 nodeId;
   Uint32 theBucketMask[1];
-  Uint32 requestType;
 };
 
 struct SumaContinueB
@@ -560,11 +542,6 @@ struct SumaContinueB
     RESEND_BUCKET = 1
     ,RELEASE_GCI = 2
     ,OUT_OF_BUFFER_RELEASE = 3
-    ,API_FAIL_GCI_LIST = 4
-    ,API_FAIL_SUBSCRIBER_LIST = 5
-    ,API_FAIL_SUBSCRIPTION = 6
-    ,SUB_STOP_REQ = 7
-    ,RETRY_DICT_LOCK = 8
   };
 };
 

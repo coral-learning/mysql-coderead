@@ -1,4 +1,4 @@
+-- require r/have_partition.require
 disable_query_log;
---require r/true.require
-SELECT (plugin_status = 'ACTIVE') AS `TRUE` FROM information_schema.plugins WHERE plugin_name LIKE 'partition%';
+show variables like 'have_partitioning';
 enable_query_log;

@@ -1,4 +1,5 @@
-# Copyright (c) 2006, 2012, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2006 MySQL AB, 2009, 2010 Sun Microsystems, Inc.
+# Use is subject to license terms.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -37,33 +38,18 @@ russian
 czech
 french
 serbian
-bulgarian
 )
 
 SET(files 
  errmsg-utf8.txt
- dictionary.txt
 )
 
 FOREACH (dir ${dirs})
-  INSTALL(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${dir} 
-          DESTINATION ${INSTALL_MYSQLSHAREDIR}
-          COMPONENT Server
-  )
+ INSTALL(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${dir} 
+  DESTINATION  ${INSTALL_MYSQLSHAREDIR} COMPONENT Server)
 ENDFOREACH()
-
-INSTALL(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/charsets
-        DESTINATION ${INSTALL_MYSQLSHAREDIR}
-        COMPONENT Server
-        PATTERN "languages.html" EXCLUDE
+INSTALL(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/charsets DESTINATION ${INSTALL_MYSQLSHAREDIR} COMPONENT Server
+  PATTERN "languages.html" EXCLUDE
 )
 
-# Don't copy if we're building in-source.
-IF (NOT ${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
-  CONFIGURE_FILE(dictionary.txt ${CMAKE_BINARY_DIR}/sql/share/dictionary.txt)
-ENDIF()
-
-INSTALL(FILES ${files}
-        DESTINATION ${INSTALL_MYSQLSHAREDIR}
-        COMPONENT Server
-)
+INSTALL(FILES ${files} DESTINATION ${INSTALL_MYSQLSHAREDIR} COMPONENT Server)

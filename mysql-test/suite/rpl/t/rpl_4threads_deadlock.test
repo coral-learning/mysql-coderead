@@ -22,8 +22,8 @@
 # Fix: Introuced a new lock (Lock_thread_remove) which will guard the thread
 # deletion (exit process) and the same lock is used in show processlist
 # execution instead of LOCK_thread_count. i.e., After the patch, Server allows
-# new threads to join the system but it will not allow any threads to execute
-# its 'cleanup' process.  Now the new lock order is: LOCK_thread_remove ->
+# new threads to join the system but it will not any threads to execute its
+# 'cleanup' process.  Now the new lock order is: LOCK_thread_remove ->
 # LOCK_thd_data -> LOCK_log -> LOCK_index -> LOCK_thread_count Both the above
 # scenarios are tested with the below test code and it proves that there is no
 # deadlock after the fix.
@@ -56,7 +56,7 @@ while ($iter)
 
   # Thread 2
   --connection master1
-  SET DEBUG_SYNC='show_binlogs_after_lock_log_before_lock_index SIGNAL parked1 WAIT_FOR go_parked1';
+  SET DEBUG_SYNC='show_binlogs_after_lock_log_before_lock_index SIGNAL parked1 WAIT_FOR go';
   --send SHOW BINARY LOGS
 
   --connection master
@@ -65,7 +65,7 @@ while ($iter)
 
   # Thread 3
   --connection master2
-  SET DEBUG_SYNC='purge_logs_after_lock_index_before_thread_count SIGNAL parked2 WAIT_FOR go_parked2';
+  SET DEBUG_SYNC='purge_logs_after_lock_index_before_thread_count SIGNAL parked2 WAIT_FOR go';
   --send PURGE BINARY LOGS BEFORE '9999-12-31'
 
   --connection master
@@ -74,7 +74,7 @@ while ($iter)
 
   # Thread 4
   --connection master3
-  SET DEBUG_SYNC='processlist_after_LOCK_thd_count_before_LOCK_thd_data SIGNAL parked3 WAIT_FOR go_parked3';
+  SET DEBUG_SYNC='processlist_after_LOCK_thd_count_before_LOCK_thd_data SIGNAL parked3 WAIT_FOR go';
   if ($iter == 1)
   {
     --let $query=SHOW PROCESSLIST
@@ -89,11 +89,8 @@ while ($iter)
   echo "Wait_for parked3";
   SET DEBUG_SYNC='now WAIT_FOR parked3';
 
-  echo "now signal go to all 4 waiting threads";
-  SET DEBUG_SYNC='now SIGNAL go_dump_thread';
-  SET DEBUG_SYNC='now SIGNAL go_parked1';
-  SET DEBUG_SYNC='now SIGNAL go_parked2';
-  SET DEBUG_SYNC='now SIGNAL go_parked3';
+  --connection master
+  SET DEBUG_SYNC='now SIGNAL go';
 
   # Output of each command vary depends on other tests ran in suite(output vary
   # in Pb2 runs), so lets ignore output. Anyways, we are interested in seeing

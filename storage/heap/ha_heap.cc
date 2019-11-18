@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -14,6 +14,10 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
+
+#ifdef USE_PRAGMA_IMPLEMENTATION
+#pragma implementation				// gcc: Class implementation
+#endif
 
 #define MYSQL_SERVER 1
 #include "sql_priv.h"
@@ -97,7 +101,7 @@ const char **ha_heap::bas_ext() const
 
 int ha_heap::open(const char *name, int mode, uint test_if_locked)
 {
-  internal_table= MY_TEST(test_if_locked & HA_OPEN_INTERNAL_TABLE);
+  internal_table= test(test_if_locked & HA_OPEN_INTERNAL_TABLE);
   if (internal_table || (!(file= heap_open(name, mode)) && my_errno == ENOENT))
   {
     HP_CREATE_INFO create_info;
@@ -113,7 +117,7 @@ int ha_heap::open(const char *name, int mode, uint test_if_locked)
     if (rc)
       goto end;
 
-    implicit_emptied= MY_TEST(created_new_share);
+    implicit_emptied= test(created_new_share);
     if (internal_table)
       file= heap_open_from_share(internal_share, mode);
     else
@@ -205,14 +209,14 @@ void ha_heap::update_key_stats()
     if (key->algorithm != HA_KEY_ALG_BTREE)
     {
       if (key->flags & HA_NOSAME)
-        key->rec_per_key[key->user_defined_key_parts - 1]= 1;
+        key->rec_per_key[key->key_parts-1]= 1;
       else
       {
         ha_rows hash_buckets= file->s->keydef[i].hash_buckets;
         uint no_records= hash_buckets ? (uint) (file->s->records/hash_buckets) : 2;
         if (no_records < 2)
           no_records= 2;
-        key->rec_per_key[key->user_defined_key_parts - 1]= no_records;
+        key->rec_per_key[key->key_parts-1]= no_records;
       }
     }
   }
@@ -226,6 +230,8 @@ int ha_heap::write_row(uchar * buf)
 {
   int res;
   ha_statistic_increment(&SSV::ha_write_count);
+  if (table->timestamp_field_type & TIMESTAMP_AUTO_SET_ON_INSERT)
+    table->timestamp_field->set_time();
   if (table->next_number_field && buf == table->record[0])
   {
     if ((res= update_auto_increment()))
@@ -248,6 +254,8 @@ int ha_heap::update_row(const uchar * old_data, uchar * new_data)
 {
   int res;
   ha_statistic_increment(&SSV::ha_update_count);
+  if (table->timestamp_field_type & TIMESTAMP_AUTO_SET_ON_UPDATE)
+    table->timestamp_field->set_time();
   res= heap_update(file,old_data,new_data);
   if (!res && ++records_changed*HEAP_STATS_UPDATE_THRESHOLD > 
               file->s->records)
@@ -630,7 +638,7 @@ ha_rows ha_heap::records_in_range(uint inx, key_range *min_key,
 
   /* Assert that info() did run. We need current statistics here. */
   DBUG_ASSERT(key_stat_version == file->s->key_stat_version);
-  return key->rec_per_key[key->user_defined_key_parts - 1];
+  return key->rec_per_key[key->key_parts-1];
 }
 
 
@@ -646,10 +654,10 @@ heap_prepare_hp_create_info(TABLE *table_arg, bool internal_table,
   TABLE_SHARE *share= table_arg->s;
   bool found_real_auto_increment= 0;
 
-  memset(hp_create_info, 0, sizeof(*hp_create_info));
+  bzero(hp_create_info, sizeof(*hp_create_info));
 
   for (key= parts= 0; key < keys; key++)
-    parts+= table_arg->key_info[key].user_defined_key_parts;
+    parts+= table_arg->key_info[key].key_parts;
 
   if (!(keydef= (HP_KEYDEF*) my_malloc(keys * sizeof(HP_KEYDEF) +
 				       parts * sizeof(HA_KEYSEG),
@@ -660,9 +668,9 @@ heap_prepare_hp_create_info(TABLE *table_arg, bool internal_table,
   {
     KEY *pos= table_arg->key_info+key;
     KEY_PART_INFO *key_part=     pos->key_part;
-    KEY_PART_INFO *key_part_end= key_part + pos->user_defined_key_parts;
+    KEY_PART_INFO *key_part_end= key_part + pos->key_parts;
 
-    keydef[key].keysegs=   (uint) pos->user_defined_key_parts;
+    keydef[key].keysegs=   (uint) pos->key_parts;
     keydef[key].flag=      (pos->flags & (HA_NOSAME | HA_NULL_ARE_EQUAL));
     keydef[key].seg=       seg;
 
@@ -703,10 +711,10 @@ heap_prepare_hp_create_info(TABLE *table_arg, bool internal_table,
         seg->charset= &my_charset_bin;
       else
         seg->charset= field->charset_for_protocol();
-      if (field->real_maybe_null())
+      if (field->null_ptr)
       {
 	seg->null_bit= field->null_bit;
-	seg->null_pos= field->null_offset();
+	seg->null_pos= (uint) (field->null_ptr - (uchar*) table_arg->record[0]);
       }
       else
       {

@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003-2008 MySQL AB, 2008-2010 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef MGMAPI_SERVICE_HPP
 #define MGMAPI_SERVICE_HPP
@@ -51,9 +49,6 @@ private:
 
   int m_errorInsert;
 
-  BaseString m_name;
-  const char* name() { return m_name.c_str(); }
-
   const char *get_error_text(int err_no)
   { return m_mgmsrv.getErrorText(err_no, m_err_str, sizeof(m_err_str)); }
 
@@ -62,12 +57,7 @@ public:
   virtual ~MgmApiSession();
   void runSession();
 
-  static const unsigned SOCKET_TIMEOUT = 30000;
-
   void getConfig(Parser_t::Context &ctx, const class Properties &args);
-  void setConfig(Parser_t::Context &ctx, const class Properties &args);
-  void showConfig(Parser_t::Context &ctx, const class Properties &args);
-  void reloadConfig(Parser_t::Context &ctx, const class Properties &args);
 
   void get_nodeid(Parser_t::Context &ctx, const class Properties &args);
   void getVersion(Parser_t::Context &ctx, const class Properties &args);
@@ -123,37 +113,24 @@ public:
 
   void getSessionId(Parser_t::Context &ctx, Properties const &args);
   void getSession(Parser_t::Context &ctx, Properties const &args);
-
-  void create_nodegroup(Parser_t::Context &ctx, Properties const &args);
-  void drop_nodegroup(Parser_t::Context &ctx, Properties const &args);
-
-  void show_variables(Parser_t::Context &ctx, Properties const &args);
-
-  void dump_events(Parser_t::Context &ctx, Properties const &args);
 };
 
 class MgmApiService : public SocketServer::Service {
-  MgmtSrvr& m_mgmsrv;
+  class MgmtSrvr * m_mgmsrv;
   Uint64 m_next_session_id; // Protected by m_sessions mutex it SocketServer
 public:
-  MgmApiService(MgmtSrvr& mgm):
-    m_mgmsrv(mgm),
-    m_next_session_id(1) {}
-
+  MgmApiService(){
+    m_mgmsrv = 0;
+    m_next_session_id= 1;
+  }
+  
+  void setMgm(class MgmtSrvr * mgmsrv){
+    m_mgmsrv = mgmsrv;
+  }
+  
   SocketServer::Session * newSession(NDB_SOCKET_TYPE socket){
-    return new MgmApiSession(m_mgmsrv, socket, m_next_session_id++);
+    return new MgmApiSession(* m_mgmsrv, socket, m_next_session_id++);
   }
 };
-
-static const char* str_null(const char* str)
-{
-  return (str ? str : "(null)");
-}
-
-static const char* yes_no(bool value)
-{
-  return (value ? "yes" : "no");
-}
-
 
 #endif

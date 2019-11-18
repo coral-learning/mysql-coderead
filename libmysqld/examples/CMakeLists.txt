@@ -1,4 +1,4 @@
-# Copyright (c) 2006, 2013, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2006, 2011, Oracle and/or its affiliates. All rights reserved.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,7 +17,7 @@ INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include
                     ${CMAKE_SOURCE_DIR}/libmysqld/include
                     ${CMAKE_SOURCE_DIR}/regex 
                     ${CMAKE_SOURCE_DIR}/tests
-                    ${EDITLINE_INCLUDE_DIR}                 
+                    ${READLINE_INCLUDE_DIR}                 
                     )
 
 
@@ -28,22 +28,17 @@ MYSQL_ADD_EXECUTABLE(mysql_embedded ../../client/completion_hash.cc
                ../../client/mysql.cc ../../client/readline.cc)
 TARGET_LINK_LIBRARIES(mysql_embedded mysqlserver)
 IF(UNIX)
-  TARGET_LINK_LIBRARIES(mysql_embedded ${EDITLINE_LIBRARY})
-  SET_TARGET_PROPERTIES(mysql_embedded PROPERTIES ENABLE_EXPORTS TRUE)
+  ADD_DEFINITIONS(${READLINE_DEFINES})
+  TARGET_LINK_LIBRARIES(mysql_embedded ${READLINE_LIBRARY})
 ENDIF(UNIX)
 
-IF(VERSION MATCHES "-ndb-" AND INSTALL_LAYOUT MATCHES "SVR4")
-  # The mysqltest_embedded and mysql_client_test_embedded are big, and at
-  # present may cause the Solaris SVR4 packages for MySQL Cluster to be
-  # too big (>2GB) for the packaging tools to handle.
-  # Since these binaries are only used for testing the embedded server 
-  # they can safely be excluded from the build.
-  RETURN()
-ENDIF()
-
-
-
 MYSQL_ADD_EXECUTABLE(mysqltest_embedded ../../client/mysqltest.cc)
+# mysqltest has unused result errors, so we skip Werror
+CHECK_C_COMPILER_FLAG("-Werror" HAVE_WERROR_FLAG)
+IF(HAVE_WERROR_FLAG)
+  INCLUDE(${MYSQL_CMAKE_SCRIPT_DIR}/compile_flags.cmake)
+  ADD_COMPILE_FLAGS(../../client/mysqltest.cc COMPILE_FLAGS "-Wno-error")
+ENDIF()
 TARGET_LINK_LIBRARIES(mysqltest_embedded mysqlserver)
 
 
@@ -60,22 +55,13 @@ IF(CMAKE_GENERATOR MATCHES "Xcode")
     ${CMAKE_CURRENT_BINARY_DIR}/mysql_client_test_embedded_dummy.cc
     ../../tests/mysql_client_test.c)
 ELSE()
-#
-# SVR4 packaging has a hard limit of 2Gb at least on Solaris 10, so
-# remove the big mysql_client_test_embedded which is of little use
-#
-  IF(NOT INSTALL_LAYOUT MATCHES "SVR4")
-    MYSQL_ADD_EXECUTABLE(mysql_client_test_embedded ../../tests/mysql_client_test.c)
-    SET_TARGET_PROPERTIES(mysql_client_test_embedded  PROPERTIES HAS_CXX TRUE)
-  ENDIF()
+  MYSQL_ADD_EXECUTABLE(mysql_client_test_embedded ../../tests/mysql_client_test.c)
+  SET_TARGET_PROPERTIES(mysql_client_test_embedded  PROPERTIES HAS_CXX TRUE)
 ENDIF()
-IF(NOT INSTALL_LAYOUT MATCHES "SVR4")
-  TARGET_LINK_LIBRARIES(mysql_client_test_embedded mysqlserver)
-ENDIF()
+TARGET_LINK_LIBRARIES(mysql_client_test_embedded mysqlserver)
 
 IF(UNIX)
+SET_TARGET_PROPERTIES(mysql_embedded PROPERTIES ENABLE_EXPORTS TRUE)
 SET_TARGET_PROPERTIES(mysqltest_embedded PROPERTIES ENABLE_EXPORTS TRUE)
-IF(NOT INSTALL_LAYOUT MATCHES "SVR4")
-  SET_TARGET_PROPERTIES(mysql_client_test_embedded PROPERTIES ENABLE_EXPORTS TRUE)
-  ENDIF()
+SET_TARGET_PROPERTIES(mysql_client_test_embedded PROPERTIES ENABLE_EXPORTS TRUE)
 ENDIF()

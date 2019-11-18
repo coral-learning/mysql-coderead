@@ -1,4 +1,4 @@
--- Copyright (c) 2008, 2016, Oracle and/or its affiliates. All rights reserved.
+-- Copyright (c) 2008, 2017, Oracle and/or its affiliates. All rights reserved.
 --
 -- This program is free software; you can redistribute it and/or modify
 -- it under the terms of the GNU General Public License as published by
@@ -88,7 +88,7 @@ SET @@collation_connection = @collation_connection_saved||
 INSERT INTO global_suppressions VALUES
  (".SELECT UNIX_TIMESTAMP... failed on master"),
  ("Aborted connection"),
- ("Client requested master to start replication from position"),
+ ("Client requested master to start replication from impossible position"),
  ("Could not find first log file name in binary log"),
  ("Enabling keys got errno"),
  ("Error reading master configuration"),
@@ -168,25 +168,18 @@ INSERT INTO global_suppressions VALUES
   */
  ("setrlimit could not change the size of core files to 'infinity'"),
 
- ("The slave I.O thread stops because a fatal error is encountered when it tries to get the value of SERVER_UUID variable from master.*"),
- ("The initialization command '.*' failed with the following error.*"),
-
- /*It will print a warning if a new UUID of server is generated.*/
- ("No existing UUID has been found, so we assume that this is the first time that this server has been started.*"),
- /*It will print a warning if server is run without --explicit_defaults_for_timestamp.*/
- ("TIMESTAMP with implicit DEFAULT value is deprecated. Please use --explicit_defaults_for_timestamp server option (see documentation for more details)*"),
+ ("The slave I.O thread stops because a fatal error is encountered when it try to get the value of SERVER_ID variable from master."),
 
  /* Added 2009-08-XX after fixing Bug #42408 */
 
- ("Although a path was specified for the --general-log-file option, log tables are used"),
- ("Although a path was specified for the --slow-query-log-file option, log tables are used"),
+ ("Although a path was specified for the .* option, log tables are used"),
  ("Backup: Operation aborted"),
  ("Restore: Operation aborted"),
  ("Restore: The grant .* was skipped because the user does not exist"),
  ("The path specified for the variable .* is not a directory or cannot be written:"),
  ("Master server does not support or not configured semi-sync replication, fallback to asynchronous"),
  (": The MySQL server is running with the --secure-backup-file-priv option so it cannot execute this statement"),
- ("Slave: Unknown table 'test.t1' Error_code: 1051"),
+ ("Slave: Unknown table 't1' Error_code: 1051"),
 
  /* Messages from valgrind */
  ("==[0-9]*== Memcheck,"),
@@ -204,18 +197,6 @@ INSERT INTO global_suppressions VALUES
  ("==[0-9]*== Warning: invalid file descriptor -1 in syscall read()"),
 
  /*
-   Transient network failures that cause warnings on reconnect.
-   BUG#47743 and BUG#47983.
- */
- ("Slave I/O: Get master SERVER_UUID failed with error:.*"),
- ("Slave I/O: Get master SERVER_ID failed with error:.*"),
- ("Slave I/O: Get master clock failed with error:.*"),
- ("Slave I/O: Get master COLLATION_SERVER failed with error:.*"),
- ("Slave I/O: Get master TIME_ZONE failed with error:.*"),
- ("Slave I/O: The slave I/O thread stops because a fatal error is encountered when it tried to SET @master_binlog_checksum on master.*"),
- ("Slave I/O: Get master BINLOG_CHECKSUM failed with error.*"),
- ("Slave I/O: Notifying master by SET @master_binlog_checksum= @@global.binlog_checksum failed with error.*"),
- /*
    BUG#42147 - Concurrent DML and LOCK TABLE ... READ for InnoDB 
    table cause warnings in errlog
    Note: This is a temporary suppression until Bug#42147 can be 
@@ -224,32 +205,15 @@ INSERT INTO global_suppressions VALUES
  ("Found lock of type 6 that is write and read locked"),
 
  /*
-   Warning message is printed out whenever a slave is started with
-   a configuration that is not crash-safe.
- */
- (".*If a crash happens this configuration does not guarantee.*"),
-
- /*
-   Warning messages introduced in the context of the WL#4143.
- */
- ("Storing MySQL user name or password information in the master.info repository is not secure.*"),
- ("Sending passwords in plain text without SSL/TLS is extremely insecure."),
-
- /*
-  In MTS if the user issues a stop slave sql while it is scheduling a group
-  of events, this warning is emitted.
-  */
- ("Slave SQL: Coordinator thread of multi-threaded slave is being stopped in the middle of assigning a group of events.*"),
- 
- ("Changed limits: max_open_files: *"),
- ("Changed limits: max_connections: *"),
- ("Changed limits: table_open_cache: *"),
- ("Could not increase number of max_open_files to more than *"),
-
- /*
   Warnings related to --secure-file-priv
  */
  ("Insecure configuration for --secure-file-priv:*"),
+
+ /*
+  Bug#26585560, warning related to --pid-file
+ */
+ ("Insecure configuration for --pid-file:*"),
+ ("Few location(s) are inaccessible while checking PID filepath"),
 
  ("THE_LAST_SUPPRESSION")||
 

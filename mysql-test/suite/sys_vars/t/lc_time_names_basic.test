@@ -622,10 +622,8 @@ SET @@lc_time_names = 108;
 SELECT @@lc_time_names;
 SET @@lc_time_names = 109;
 SELECT @@lc_time_names;
-SET @@lc_time_names = 110;
-SELECT @@lc_time_names;
 --Error ER_UNKNOWN_LOCALE
-SET @@lc_time_names = 111;
+SET @@lc_time_names = 110;
 
 --echo '#--------------------FN_DYNVARS_060_10-------------------------#'
 #############################################################################

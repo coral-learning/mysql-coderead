@@ -1,4 +1,4 @@
-# Copyright (c) 2010, 2012, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2010, 2014, Oracle and/or its affiliates. All rights reserved.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,8 +14,3 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA 
 
 # This file includes OSX specific options and quirks, related to system checks
-
-# This is used for the version_compile_machine variable.
-IF(CMAKE_SIZEOF_VOID_P MATCHES 8)
-  SET(MYSQL_MACHINE_TYPE "x86_64")
-ENDIF()

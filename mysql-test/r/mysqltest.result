@@ -186,14 +186,6 @@ xyz
  is empty
  is empty
 "Yes it's empty"
-ER_FORBID_SCHEMA_CHANGE
-1105
-mysqltest: At line 1: Invalid error in input
-<Unknown>
-<Unknown>
-
-0
-0
 hello
 hello
 ;;;;;;;;
@@ -244,12 +236,6 @@ mysqltest: At line 1: Unknown SQL error name 'E9999'
 mysqltest: At line 1: Invalid argument to error: '999e9' - the errno may only consist of digits[0-9]
 mysqltest: At line 1: Invalid argument to error: '9b' - the errno may only consist of digits[0-9]
 mysqltest: At line 1: Too many errorcodes specified
-CREATE TABLE t1 (a INT);
-CREATE TABLE t1 (a INT);
-ERROR 42S01: Table 't1' already exists
-CREATE TABLE t1 (a INT);
-ERROR 42S01: Table 't1' already exists
-DROP TABLE t1;
 MySQL
 "MySQL"
 MySQL: The world''s most popular open source database
@@ -469,8 +455,9 @@ mysqltest: At line 1: Cannot perform inc/dec on a non-numeric value
 mysqltest: At line 1: End of line junk detected: "1000"
 mysqltest: At line 1: Cannot perform inc/dec on a non-numeric value
 mysqltest: At line 1: Cannot perform inc/dec on a non-numeric value
-mysqltest: At line 1: 'system' command  is deprecated, use exec or
-  see the manual for portable commands to use
+mysqltest: At line 1: Missing arguments to system, nothing to do!
+mysqltest: At line 1: Missing arguments to system, nothing to do!
+system command 'NonExistsinfComamdn 2> /dev/null' failed
 test
 test2
 test3
@@ -941,12 +928,6 @@ mysqltest: At line 1: change user failed: Access denied for user 'root'@'localho
 REPLACED_FILE1.txt
 file1.txt
 file2.txt
-prefix1.txt
-prefix2.txt
-prefix3.txt
-SELECT "bla bla file" as x;
-x
-bla bla file
 file11.txt
 dir-list.txt
 SELECT 'c:\\a.txt' AS col;

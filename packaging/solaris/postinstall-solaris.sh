@@ -63,6 +63,7 @@ chown -R $myuser:$mygroup $mydatadir
 [ -d "$mysecurefiledir"  ] || mkdir -p -m 770 "$mysecurefiledir"      || exit 1
 chown -R $myuser:$mygroup $mysecurefiledir
 
+
 # Solaris patch 119255 (somewhere around revision 42) changes the behaviour
 # of pkgadd to set TMPDIR internally to a root-owned install directory.  This
 # has the unfortunate side effect of breaking running mysql_install_db with
@@ -86,7 +87,6 @@ if [ -n "$INSTALL" ] ; then
     cd "$mybasedir"
     scripts/mysql_install_db \
 	  --rpm \
-	  --random-passwords \
 	  --user=mysql \
 	  --basedir="$mybasedir" \
 	  --datadir=$mydatadir

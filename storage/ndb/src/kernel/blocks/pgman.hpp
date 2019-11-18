@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003, 2005-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef PGMAN_H
 #define PGMAN_H
@@ -53,7 +52,7 @@
  * Updating a resident cache page makes it "dirty".  A background
  * clean-up process makes dirty pages "clean" via "pageout" to disk.
  * Write ahead logging (WAL) of the page is done first i.e. UNDO log is
- * flushed up to the page log sequence number (LSN) by calling a LGMAN
+ * flushed up to the page log sequence number (LSN) by calling a TSMAN
  * method.  The reason for this is obvious but not relevant to PGMAN.
  *
  * A local check point (LCP) periodically performs a complete pageout of
@@ -237,13 +236,12 @@
 class Pgman : public SimulatedBlock
 {
 public:
-  Pgman(Block_context& ctx, Uint32 instanceNumber = 0);
+  Pgman(Block_context& ctx);
   virtual ~Pgman();
   BLOCK_DEFINES(Pgman);
 
 private:
   friend class Page_cache_client;
-  friend class PgmanProxy;
 
   struct Page_entry; // CC
   friend struct Page_entry;
@@ -263,7 +261,7 @@ private:
 #endif
     };
     
-    Uint16 m_block; // includes instance
+    Uint16 m_block;
     Uint16 m_flags;
     SimulatedBlock::Callback m_callback;
 
@@ -370,22 +368,15 @@ private:
   typedef DLCFifoList<Page_entry, Page_entry_sublist_ptr> Page_sublist;
 
   class Dbtup *c_tup;
-  class Lgman *c_lgman;
-  class Tsman *c_tsman;
+  Logfile_client m_lgman;
 
   // loop status
   bool m_stats_loop_on;
   bool m_busy_loop_on;
   bool m_cleanup_loop_on;
+  bool m_lcp_loop_on;
 
   // LCP variables
-  enum LCP_STATE
-  {
-    LS_LCP_OFF = 0
-    ,LS_LCP_ON = 1
-    ,LS_LCP_MAX_LCP_OUTSTANDING = 2
-    ,LS_LCP_LOCKED = 3
-  } m_lcp_state;
   Uint32 m_last_lcp;
   Uint32 m_last_lcp_complete;
   Uint32 m_lcp_curr_bucket;
@@ -423,41 +414,12 @@ private:
 
   // runtime sizes and statistics
   struct Stats {
-    Stats() :
-      m_num_pages(0),
-      m_num_hot_pages(0),
-      m_current_io_waits(0),
-      m_page_hits(0),
-      m_page_faults(0),
-      m_pages_written(0),
-      m_pages_written_lcp(0),
-      m_pages_read(0),
-      m_log_waits(0),
-      m_page_requests_direct_return(0),
-      m_page_requests_wait_q(0),
-      m_page_requests_wait_io(0)
-    {}
+    Stats();
     Uint32 m_num_pages;         // current number of cache pages
-    Uint32 m_num_hot_pages;
+    Uint32 m_page_hits;
+    Uint32 m_page_faults;
     Uint32 m_current_io_waits;
-    Uint64 m_page_hits;
-    Uint64 m_page_faults;
-    Uint64 m_pages_written;
-    Uint64 m_pages_written_lcp;
-    Uint64 m_pages_read;
-    Uint64 m_log_waits; // wait for undo WAL to flush the log recs
-    Uint64 m_page_requests_direct_return;
-    Uint64 m_page_requests_wait_q;
-    Uint64 m_page_requests_wait_io;
   } m_stats;
-
-  enum CallbackIndex {
-    // lgman
-    LOGSYNC_CALLBACK = 1,
-    COUNT_CALLBACKS = 2
-  };
-  CallbackEntry m_callbackEntry[COUNT_CALLBACKS];
-  CallbackTable m_callbackTable;
 
 protected:
   void execSTTOR(Signal* signal);
@@ -467,7 +429,6 @@ protected:
 
   void execLCP_FRAG_ORD(Signal*);
   void execEND_LCP_REQ(Signal*);
-  void execRELEASE_PAGES_REQ(Signal*);
   
   void execFSREADCONF(Signal*);
   void execFSREADREF(Signal*);
@@ -475,10 +436,6 @@ protected:
   void execFSWRITEREF(Signal*);
 
   void execDUMP_STATE_ORD(Signal* signal);
-
-  void execDATA_FILE_ORD(Signal*);
-
-  void execDBINFO_SCANREQ(Signal*);
 
 private:
   static Uint32 get_sublist_no(Page_state state);
@@ -499,7 +456,7 @@ private:
   void do_stats_loop(Signal*);
   void do_busy_loop(Signal*, bool direct = false);
   void do_cleanup_loop(Signal*);
-  void do_lcp_loop(Signal*);
+  void do_lcp_loop(Signal*, bool direct = false);
 
   bool process_bind(Signal*);
   bool process_bind(Signal*, Ptr<Page_entry> ptr);
@@ -511,7 +468,7 @@ private:
   bool process_cleanup(Signal*);
   void move_cleanup_ptr(Ptr<Page_entry> ptr);
 
-  LCP_STATE process_lcp(Signal*);
+  bool process_lcp(Signal*);
   void process_lcp_locked(Signal* signal, Ptr<Page_entry> ptr);
   void process_lcp_locked_fswriteconf(Signal* signal, Ptr<Page_entry> ptr);
 
@@ -523,7 +480,6 @@ private:
   void fswritereq(Signal*, Ptr<Page_entry>);
   void fswriteconf(Signal*, Ptr<Page_entry>);
 
-  int get_page_no_lirs(Signal*, Ptr<Page_entry>, Page_request page_req);
   int get_page(Signal*, Ptr<Page_entry>, Page_request page_req);
   void update_lsn(Ptr<Page_entry>, Uint32 block, Uint64 lsn);
   Uint32 create_data_file();
@@ -533,12 +489,13 @@ private:
   int drop_page(Ptr<Page_entry>);
   
 #ifdef VM_TRACE
-  bool debugFlag;        // not yet in use in 7.0
-  bool debugSummaryFlag; // loop summary to signal log even if ! debugFlag
+  NdbOut debugOut;
+  bool debugFlag;
   void verify_page_entry(Ptr<Page_entry> ptr);
   void verify_page_lists();
   void verify_all();
   bool dump_page_lists(Uint32 ptrI = RNIL);
+  void open_debug_file(Uint32 flag);
 #endif
   static const char* get_sublist_name(Uint32 list_no);
   friend class NdbOut& operator<<(NdbOut&, Ptr<Page_request>);
@@ -550,14 +507,11 @@ class NdbOut& operator<<(NdbOut&, Ptr<Pgman::Page_entry>);
 
 class Page_cache_client
 {
-  friend class PgmanProxy;
-  Uint32 m_block; // includes instance
-  class PgmanProxy* m_pgman_proxy; // set if we go via proxy
+  Uint32 m_block;
   Pgman* m_pgman;
-  DEBUG_OUT_DEFINES(PGMAN);
 
 public:
-  Page_cache_client(SimulatedBlock* block, SimulatedBlock* pgman);
+  Page_cache_client(SimulatedBlock* block, Pgman*);
 
   struct Request {
     Local_key m_page;
@@ -607,22 +561,122 @@ public:
   /**
    * Create file record
    */
-  Uint32 create_data_file(Signal*);
+  Uint32 create_data_file();
 
   /**
    * Alloc datafile record
    */
-  Uint32 alloc_data_file(Signal*, Uint32 file_no);
+  Uint32 alloc_data_file(Uint32 file_no);
 
   /**
    * Map file_no to m_fd
    */
-  void map_file_no(Signal*, Uint32 m_file_no, Uint32 m_fd);
+  void map_file_no(Uint32 m_file_no, Uint32 m_fd);
 
   /**
    * Free file
    */
-  void free_data_file(Signal*, Uint32 file_no, Uint32 fd = RNIL);
+  void free_data_file(Uint32 file_no, Uint32 fd = RNIL);
 };
+
+inline int
+Page_cache_client::get_page(Signal* signal, Request& req, Uint32 flags)
+{
+  Ptr<Pgman::Page_entry> entry_ptr;
+  Uint32 file_no = req.m_page.m_file_no;
+  Uint32 page_no = req.m_page.m_page_no;
+
+#ifdef VM_TRACE
+  m_pgman->debugOut
+    << "PGCLI: get_page " << file_no << "," << page_no
+    << " flags=" << hex << flags << endl;
+#endif
+
+  // find or seize
+  bool ok = m_pgman->get_page_entry(entry_ptr, file_no, page_no);
+  if (! ok)
+  {
+    return -1;
+  }
+
+  Pgman::Page_request page_req;
+  page_req.m_block = m_block;
+  page_req.m_flags = flags;
+  page_req.m_callback = req.m_callback;
+#ifdef ERROR_INSERT
+  page_req.m_delay_until_time = req.m_delay_until_time;
+#endif
+  
+  int i = m_pgman->get_page(signal, entry_ptr, page_req);
+  if (i > 0)
+  {
+    // TODO remove
+    m_pgman->m_global_page_pool.getPtr(m_ptr, (Uint32)i);
+  }
+  return i;
+}
+
+inline void
+Page_cache_client::update_lsn(Local_key key, Uint64 lsn)
+{
+  Ptr<Pgman::Page_entry> entry_ptr;
+  Uint32 file_no = key.m_file_no;
+  Uint32 page_no = key.m_page_no;
+
+#ifdef VM_TRACE
+  m_pgman->debugOut
+    << "PGCLI: update_lsn " << file_no << "," << page_no
+    << " lsn=" << lsn << endl;
+#endif
+
+  bool found = m_pgman->find_page_entry(entry_ptr, file_no, page_no);
+  assert(found);
+
+  m_pgman->update_lsn(entry_ptr, m_block, lsn);
+}
+
+inline 
+int
+Page_cache_client::drop_page(Local_key key, Uint32 page_id)
+{
+  Ptr<Pgman::Page_entry> entry_ptr;
+  Uint32 file_no = key.m_file_no;
+  Uint32 page_no = key.m_page_no;
+
+#ifdef VM_TRACE
+  m_pgman->debugOut
+    << "PGCLI: drop_page " << file_no << "," << page_no << endl;
+#endif
+
+  bool found = m_pgman->find_page_entry(entry_ptr, file_no, page_no);
+  assert(found);
+  assert(entry_ptr.p->m_real_page_i == page_id);
+
+  return m_pgman->drop_page(entry_ptr);
+}
+
+inline Uint32
+Page_cache_client::create_data_file()
+{
+  return m_pgman->create_data_file();
+}
+
+inline Uint32
+Page_cache_client::alloc_data_file(Uint32 file_no)
+{
+  return m_pgman->alloc_data_file(file_no);
+}
+
+inline void
+Page_cache_client::map_file_no(Uint32 file_no, Uint32 fd)
+{
+  m_pgman->map_file_no(file_no, fd);
+}
+
+inline void
+Page_cache_client::free_data_file(Uint32 file_no, Uint32 fd)
+{
+  m_pgman->free_data_file(file_no, fd);
+}
 
 #endif

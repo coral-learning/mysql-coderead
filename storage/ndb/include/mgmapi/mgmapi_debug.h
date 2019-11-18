@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003-2006 MySQL AB, 2008 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef MGMAPI_DEBUG_H
 #define MGMAPI_DEBUG_H
@@ -90,6 +88,22 @@ extern "C" {
 			   int nodeId, 
 			   int errorCode,
 			   struct ndb_mgm_reply* reply);
+
+  /**
+   * Dump state
+   *
+   * @param handle the NDB management handle.
+   * @param nodeId the node id.
+   * @param args integer array
+   * @param number of args in int array
+   * @param reply the reply message.
+   * @return 0 if successful or an error code.
+   */
+  int ndb_mgm_dump_state(NdbMgmHandle handle,
+			 int nodeId,
+			 const int * args,
+			 int num_args,
+			 struct ndb_mgm_reply* reply);
     
 
   /**

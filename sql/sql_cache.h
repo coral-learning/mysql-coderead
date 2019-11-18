@@ -1,4 +1,4 @@
-/* Copyright (c) 2001, 2012, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2001, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -10,8 +10,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef _SQL_CACHE_H
 #define _SQL_CACHE_H
@@ -25,7 +25,6 @@ class Time_zone;
 struct LEX;
 struct TABLE;
 typedef struct st_changed_table_list CHANGED_TABLE_LIST;
-typedef ulonglong sql_mode_t;
 
 /* Query cache */
 
@@ -370,7 +369,7 @@ protected:
   my_bool register_all_tables(Query_cache_block *block,
 			      TABLE_LIST *tables_used,
 			      TABLE_COUNTER_TYPE tables);
-  my_bool insert_table(uint key_len, const char *key,
+  my_bool insert_table(uint key_len, char *key,
 		       Query_cache_block_table *node,
 		       uint32 db_length, uint8 cache_type,
 		       qc_engine_callback callback,
@@ -533,7 +532,7 @@ struct Query_cache_query_flags
   uint collation_connection_num;
   ha_rows limit;
   Time_zone *time_zone;
-  sql_mode_t sql_mode;
+  ulong sql_mode;
   ulong max_sort_length;
   ulong group_concat_max_len;
   ulong default_week_format;
@@ -560,8 +559,7 @@ struct Query_cache_query_flags
 #define query_cache_maybe_disabled(T)                                 \
   (T->variables.query_cache_type == 0 || query_cache.query_cache_size == 0)
 #define query_cache_is_cacheable_query(L) \
-  (((L)->sql_command == SQLCOM_SELECT) && (L)->safe_to_cache_query && \
-   !(L)->describe)
+  (((L)->sql_command == SQLCOM_SELECT) && (L)->safe_to_cache_query)
 #else
 #define QUERY_CACHE_FLAGS_SIZE 0
 #define query_cache_store_query(A, B)

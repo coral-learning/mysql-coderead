@@ -1,4 +1,4 @@
-# Copyright (c) 2006, 2016, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2006, 2018, Oracle and/or its affiliates. All rights reserved.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,207 +14,80 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 
 INCLUDE_DIRECTORIES(
-  ${CMAKE_SOURCE_DIR}/include 
-  ${CMAKE_SOURCE_DIR}/sql 
-  ${CMAKE_SOURCE_DIR}/regex 
-  ${ZLIB_INCLUDE_DIR}
-  ${SSL_INCLUDE_DIRS}
-  ${CMAKE_BINARY_DIR}/sql
+${CMAKE_SOURCE_DIR}/include 
+${CMAKE_SOURCE_DIR}/sql 
+${CMAKE_SOURCE_DIR}/regex 
+${SSL_INCLUDE_DIRS}
+${CMAKE_BINARY_DIR}/sql
 )
 
-SET(GEN_SOURCES
-  ${CMAKE_CURRENT_BINARY_DIR}/sql_yacc.h 
-  ${CMAKE_CURRENT_BINARY_DIR}/sql_yacc.cc
+SET(CONF_SOURCES
   ${CMAKE_CURRENT_BINARY_DIR}/sql_builtin.cc
-  ${CMAKE_CURRENT_BINARY_DIR}/lex_hash.h 
 )
-SET(GEN_DIGEST_SOURCES
-  ${CMAKE_CURRENT_BINARY_DIR}/lex_token.h 
+SET(GEN_SOURCES
+${CMAKE_CURRENT_BINARY_DIR}/sql_yacc.h 
+${CMAKE_CURRENT_BINARY_DIR}/sql_yacc.cc
+${CMAKE_CURRENT_BINARY_DIR}/lex_hash.h 
 )
 
-SET_SOURCE_FILES_PROPERTIES(${GEN_SOURCES}
-                            ${GEN_DIGEST_SOURCES}
-                            PROPERTIES GENERATED 1)
-
-# Gen_lex_token
-# Make sure sql_yacc.h is generated before compiling gen_lex_token
-ADD_EXECUTABLE(gen_lex_token gen_lex_token.cc)
-ADD_DEPENDENCIES(gen_lex_token GenServerSource)
-
-ADD_CUSTOM_COMMAND(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/lex_token.h
-  COMMAND gen_lex_token > lex_token.h
-  DEPENDS gen_lex_token
-)
+SET_SOURCE_FILES_PROPERTIES(${GEN_SOURCES} ${CONF_SOURCES} PROPERTIES GENERATED 1)
 
 ADD_DEFINITIONS(-DMYSQL_SERVER -DHAVE_EVENT_SCHEDULER) 
 IF(SSL_DEFINES)
  ADD_DEFINITIONS(${SSL_DEFINES})
 ENDIF()
 
-SET(SQL_SHARED_SOURCES
-  abstract_query_plan.cc
-  datadict.cc
-  debug_sync.cc
-  derror.cc
-  des_key_file.cc
-  discover.cc
-  field.cc
-  field_conv.cc 
-  filesort.cc
-  filesort_utils.cc
-  gcalc_slicescan.cc
-  gcalc_tools.cc
-  gstream.cc
-  handler.cc
-  hostname.cc
-  init.cc
-  item.cc
-  item_buff.cc
-  item_cmpfunc.cc 
-  item_create.cc
-  item_func.cc
-  item_geofunc.cc
-  item_row.cc 
-  item_strfunc.cc
-  item_subselect.cc
-  item_sum.cc
-  item_timefunc.cc 
-  item_xmlfunc.cc 
-  item_inetfunc.cc
-  key.cc
-  keycaches.cc
-  lock.cc
-  log.cc
-  mdl.cc
-  mf_iocache.cc
-  my_decimal.cc
-  net_serv.cc
-  opt_explain.cc
-  opt_explain_traditional.cc
-  opt_explain_json.cc
-  opt_range.cc
-  opt_sum.cc 
-  opt_trace.cc
-  opt_trace2server.cc
-  parse_file.cc
-  partition_info.cc
-  password.c
-  procedure.cc 
-  protocol.cc
-  records.cc
-  rpl_handler.cc
-  scheduler.cc 
-  set_var.cc 
-  signal_handler.cc
-  sp.cc
-  sp_cache.cc
-  sp_head.cc
-  sp_instr.cc
-  sp_pcontext.cc 
-  sp_rcontext.cc
-  spatial.cc
-  string_service.cc
-  sql_acl.cc
-  sql_admin.cc
-  sql_alloc_error_handler.cc
-  sql_alter.cc
-  sql_analyse.cc
-  sql_audit.cc
-  sql_base.cc 
-  sql_bootstrap.cc
-  sql_cache.cc
-  sql_class.cc
-  sql_connect.cc
-  sql_crypt.cc
-  sql_cursor.cc
-  sql_data_change.cc
-  sql_db.cc
-  sql_delete.cc
-  sql_derived.cc
-  sql_digest.cc
-  sql_do.cc 
-  sql_error.cc
-  sql_executor.cc
-  sql_get_diagnostics.cc
-  sql_handler.cc
-  sql_help.cc
-  sql_insert.cc
-  sql_join_buffer.cc
-  sql_lex.cc 
-  sql_list.cc
-  sql_load.cc
-  sql_locale.cc
-  sql_manager.cc
-  sql_optimizer.cc
-  sql_parse.cc
-  sql_partition.cc
-  sql_partition_admin.cc
-  sql_planner.cc
-  sql_plugin.cc
-  sql_prepare.cc
-  sql_profile.cc
-  sql_reload.cc
-  sql_rename.cc
-  sql_resolver.cc
-  sql_rewrite.cc
-  sql_select.cc
-  sql_servers.cc
-  sql_show.cc
-  sql_signal.cc
-  sql_state.c
-  sql_string.cc 
-  sql_table.cc
-  sql_tablespace.cc
-  sql_test.cc
-  sql_time.cc
-  sql_tmp_table.cc
-  sql_trigger.cc
-  sql_truncate.cc
-  sql_udf.cc
-  sql_union.cc
-  sql_update.cc
-  sql_view.cc
-  strfunc.cc
-  sys_vars.cc
-  table.cc
-  table_cache.cc
-  thr_malloc.cc 
-  transaction.cc
-  tztime.cc
-  uniques.cc
-  unireg.cc
-)
 
-SET(SQL_EXPORTED_SOURCES ${SQL_SHARED_SOURCES} PARENT_SCOPE)
+SET (SQL_SOURCE
+              ../sql-common/client.c derror.cc des_key_file.cc
+               discover.cc ../libmysql/errmsg.c field.cc  field_conv.cc 
+               filesort.cc gstream.cc sha2.cc
+               signal_handler.cc
+               handler.cc hash_filo.h sql_plugin_services.h
+               hostname.cc init.cc item.cc item_buff.cc item_cmpfunc.cc 
+               item_create.cc item_func.cc item_geofunc.cc item_row.cc 
+               item_strfunc.cc item_subselect.cc item_sum.cc item_timefunc.cc 
+               key.cc log.cc lock.cc
+               log_event.cc rpl_record.cc rpl_reporting.cc
+               log_event_old.cc rpl_record_old.cc
+               message.h mf_iocache.cc my_decimal.cc ../sql-common/my_time.c
+               mysqld.cc net_serv.cc  keycaches.cc
+               ../sql-common/client_plugin.c
+               opt_range.cc opt_range.h opt_sum.cc 
+               ../sql-common/pack.c parse_file.cc password.c procedure.cc 
+               protocol.cc records.cc repl_failsafe.cc rpl_filter.cc set_var.cc 
+               slave.cc sp.cc sp_cache.cc sp_head.cc sp_pcontext.cc 
+               sp_rcontext.cc spatial.cc sql_acl.cc sql_analyse.cc sql_base.cc 
+               sql_cache.cc sql_class.cc sql_client.cc sql_crypt.cc sql_crypt.h 
+               sql_cursor.cc sql_db.cc sql_delete.cc sql_derived.cc sql_do.cc 
+               sql_error.cc sql_handler.cc sql_help.cc sql_insert.cc sql_lex.cc 
+               sql_list.cc sql_load.cc sql_manager.cc sql_parse.cc
+               sql_partition.cc sql_plugin.cc sql_prepare.cc sql_rename.cc 
+               debug_sync.cc debug_sync.h
+               sql_repl.cc sql_select.cc sql_show.cc sql_state.c sql_string.cc 
+               sql_table.cc sql_test.cc sql_trigger.cc sql_udf.cc sql_union.cc
+               sql_update.cc sql_view.cc strfunc.cc table.cc thr_malloc.cc 
+               sql_time.cc tztime.cc uniques.cc unireg.cc item_xmlfunc.cc 
+               rpl_tblmap.cc sql_binlog.cc event_scheduler.cc event_data_objects.cc
+               event_queue.cc event_db_repository.cc 
+               sql_tablespace.cc events.cc ../sql-common/my_user.c 
+               partition_info.cc rpl_utility.cc rpl_injector.cc sql_locale.cc
+               rpl_rli.cc rpl_mi.cc sql_servers.cc sql_audit.cc
+               sql_connect.cc scheduler.cc sql_partition_admin.cc
+               sql_profile.cc event_parse_data.cc sql_alter.cc
+               sql_signal.cc rpl_handler.cc mdl.cc sql_admin.cc
+               transaction.cc sys_vars.cc sql_truncate.cc datadict.cc
+               sql_reload.cc ../sql-common/my_path_permissions.cc
+               ${GEN_SOURCES}
+               ${CONF_SOURCES}
+               ${MYSYS_LIBWRAP_SOURCE})
 
-SET(SQL_SOURCE
-  ${GEN_SOURCES}
-  ${GEN_DIGEST_SOURCES}
-  ${MYSYS_LIBWRAP_SOURCE}
-  ${SQL_SHARED_SOURCES}
-  ../libmysql/errmsg.c
-  ../sql-common/client.c
-  ../sql-common/client_plugin.c
-  ../sql-common/my_time.c
-  ../sql-common/my_user.c 
-  ../sql-common/pack.c
-  ../sql-common/client_authentication.cc
-  event_data_objects.cc
-  event_db_repository.cc 
-  event_parse_data.cc
-  event_queue.cc
-  event_scheduler.cc
-  events.cc
-  mysqld.cc
-  sql_client.cc
-  )
-
-IF (WIN32 AND OPENSSL_APPLINK_C)
-  SET_SOURCE_FILES_PROPERTIES(
-    ../sql-common/client_authentication.cc
-    PROPERTIES COMPILE_FLAGS "-DHAVE_OPENSSL_APPLINK_C"
-  )
+# These files have unused result errors, so we skip Werror
+CHECK_C_COMPILER_FLAG("-Werror" HAVE_WERROR_FLAG)
+IF(HAVE_WERROR_FLAG)
+  INCLUDE(${MYSQL_CMAKE_SCRIPT_DIR}/compile_flags.cmake)
+  ADD_COMPILE_FLAGS(filesort.cc  COMPILE_FLAGS "-Wno-error")
+  ADD_COMPILE_FLAGS(opt_range.cc COMPILE_FLAGS "-Wno-error")
 ENDIF()
 
 MYSQL_ADD_PLUGIN(partition ha_partition.cc STORAGE_ENGINE DEFAULT STATIC_ONLY
@@ -222,10 +95,9 @@ RECOMPILE_FOR_EMBEDDED)
 
 ADD_LIBRARY(sql STATIC ${SQL_SOURCE})
 ADD_DEPENDENCIES(sql GenServerSource)
-ADD_DEPENDENCIES(sql GenDigestServerSource)
 DTRACE_INSTRUMENT(sql)
 TARGET_LINK_LIBRARIES(sql ${MYSQLD_STATIC_PLUGIN_LIBS} 
-  mysys mysys_ssl dbug strings vio regex   
+  mysys dbug strings vio regex   
   ${LIBWRAP} ${LIBCRYPT} ${LIBDL}
   ${SSL_LIBRARIES})
 
@@ -236,35 +108,7 @@ TARGET_LINK_LIBRARIES(sql ${MYSQLD_STATIC_PLUGIN_LIBS}
 IF(WIN32)
   ADD_DEFINITIONS(-DAUTHENTICATION_WIN)
   TARGET_LINK_LIBRARIES(sql auth_win_client)
-ENDIF()
-
-SET (BINLOG_SOURCE uuid.cc rpl_gtid_misc.cc
-                   rpl_gtid_sid_map.cc rpl_gtid_set.cc rpl_gtid_specification.cc
-                   rpl_gtid_state.cc rpl_gtid_owned.cc rpl_gtid_cache.cc
-                   rpl_gtid_execution.cc rpl_gtid_mutex_cond_array.cc
-                   log_event.cc log_event_old.cc binlog.cc sql_binlog.cc
-		   rpl_filter.cc rpl_record.cc rpl_record_old.cc rpl_utility.cc
-		   rpl_injector.cc)
-ADD_LIBRARY(binlog ${BINLOG_SOURCE})
-SET (RPL_SOURCE rpl_handler.cc rpl_tblmap.cc)
-ADD_DEPENDENCIES(binlog GenError)
-ADD_LIBRARY(rpl ${RPL_SOURCE})
-SET (MASTER_SOURCE rpl_master.cc)
-ADD_DEPENDENCIES(rpl GenError)
-ADD_LIBRARY(master ${MASTER_SOURCE})
-ADD_DEPENDENCIES(master GenError)
-SET (SLAVE_SOURCE rpl_slave.cc rpl_reporting.cc rpl_mi.cc rpl_rli.cc
-		  rpl_info_handler.cc rpl_info_file.cc rpl_info_table.cc
-		  rpl_info_values.cc rpl_info.cc rpl_info_factory.cc
-		  rpl_info_table_access.cc dynamic_ids.cc rpl_rli_pdb.cc
-		  rpl_info_dummy.cc)
-ADD_LIBRARY(slave ${SLAVE_SOURCE})
-ADD_DEPENDENCIES(slave GenError)
-ADD_LIBRARY(sqlgunitlib
-  filesort_utils.cc mdl.cc sql_list.cc sql_string.cc thr_malloc.cc
-  )
-ADD_DEPENDENCIES(sqlgunitlib GenError)
-
+ENDIF() 
 
 IF(WIN32)
   SET(MYSQLD_SOURCE main.cc nt_servc.cc nt_servc.h message.rc)
@@ -273,13 +117,6 @@ ELSE()
 ENDIF()
 
 MYSQL_ADD_EXECUTABLE(mysqld ${MYSQLD_SOURCE} DESTINATION ${INSTALL_SBINDIR} COMPONENT Server)
-
-OPTION(DEBUG_EXTNAME "Build server as mysqld-debug (debug builds only)" OFF)
-MARK_AS_ADVANCED(DEBUG_EXTNAME)
-
-IF(DEBUG_EXTNAME)
-  SET_TARGET_PROPERTIES(mysqld PROPERTIES DEBUG_OUTPUT_NAME "mysqld-debug")
-ENDIF()
 
 IF(APPLE) 
   # Add CoreServices framework since some dloadable plugins may need it 
@@ -303,7 +140,7 @@ IF(NOT WITHOUT_DYNAMIC_PLUGINS)
     # incremental appears to crash from time to time,if used with /DEF option
     SET_TARGET_PROPERTIES(mysqld PROPERTIES LINK_FLAGS "${mysqld_link_flags} /DEF:mysqld.def /INCREMENTAL:NO")
 
-    FOREACH (CORELIB sql mysys mysys_ssl dbug strings)
+    FOREACH (CORELIB sql mysys dbug strings)
       GET_TARGET_PROPERTY(LOC ${CORELIB} LOCATION)
       FILE(TO_NATIVE_PATH ${LOC} LOC)
       SET (LIB_LOCATIONS ${LIB_LOCATIONS} ${LOC}) 
@@ -321,7 +158,7 @@ IF(NOT WITHOUT_DYNAMIC_PLUGINS)
 ENDIF()
 
 SET_TARGET_PROPERTIES(mysqld PROPERTIES ENABLE_EXPORTS TRUE) 
-TARGET_LINK_LIBRARIES(mysqld sql binlog rpl master slave sql mysys mysys_ssl)
+TARGET_LINK_LIBRARIES(mysqld sql mysys)
 
 # Provide plugins with minimal set of libraries
 SET(INTERFACE_LIBS ${LIBRT})
@@ -333,7 +170,7 @@ ENDIF()
 # On Solaris, some extra effort is required in order to get dtrace probes
 # from static libraries
 DTRACE_INSTRUMENT_STATIC_LIBS(mysqld 
- "sql;mysys;mysys_ssl;${MYSQLD_STATIC_PLUGIN_LIBS}")
+ "sql;mysys;${MYSQLD_STATIC_PLUGIN_LIBS}")
  
 
 SET(WITH_MYSQLD_LDFLAGS "" CACHE STRING "Additional linker flags for mysqld")
@@ -346,18 +183,10 @@ IF(WITH_MYSQLD_LDFLAGS)
   SET_TARGET_PROPERTIES(mysqld PROPERTIES LINK_FLAGS 
      "${MYSQLD_LINK_FLAGS} ${WITH_MYSQLD_LDFLAGS}")
 ENDIF()
-
-IF(DEBUG_EXTNAME)
-  INSTALL_DEBUG_TARGET(mysqld 
-    DESTINATION ${INSTALL_SBINDIR} 
-    PDB_DESTINATION ${INSTALL_SBINDIR}
-    SUFFIX "-debug")
-ELSE()
-  INSTALL_DEBUG_TARGET(mysqld 
-    DESTINATION ${INSTALL_SBINDIR} 
-    PDB_DESTINATION ${INSTALL_SBINDIR}/debug
-    RENAME mysqld-debug)
-ENDIF()
+INSTALL_DEBUG_TARGET(mysqld 
+  DESTINATION ${INSTALL_SBINDIR} 
+  PDB_DESTINATION ${INSTALL_SBINDIR}/debug
+  RENAME mysqld-debug)
 
 # Handle out-of-source build from source package with possibly broken 
 # bison. Copy bison output to from source to build directory, if not already 
@@ -392,23 +221,18 @@ ADD_CUSTOM_COMMAND(
 
 MYSQL_ADD_EXECUTABLE(mysql_tzinfo_to_sql tztime.cc)
 SET_TARGET_PROPERTIES(mysql_tzinfo_to_sql PROPERTIES COMPILE_FLAGS "-DTZINFO2SQL")
-TARGET_LINK_LIBRARIES(mysql_tzinfo_to_sql mysys mysys_ssl)
+TARGET_LINK_LIBRARIES(mysql_tzinfo_to_sql mysys)
 
 ADD_CUSTOM_TARGET( 
         GenServerSource
         DEPENDS ${GEN_SOURCES}
 )
 
-ADD_CUSTOM_TARGET( 
-        GenDigestServerSource
-        DEPENDS ${GEN_DIGEST_SOURCES}
-)
-
 #Need this only for embedded
 SET_TARGET_PROPERTIES(GenServerSource PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 IF(WIN32 OR HAVE_DLOPEN AND NOT DISABLE_SHARED)
-  ADD_LIBRARY(udf_example MODULE udf_example.cc)
+  ADD_LIBRARY(udf_example MODULE udf_example.c)
   SET_TARGET_PROPERTIES(udf_example PROPERTIES PREFIX "")
   # udf_example depends on strings 
   IF(WIN32)
@@ -419,8 +243,6 @@ IF(WIN32 OR HAVE_DLOPEN AND NOT DISABLE_SHARED)
   ELSE()
     # udf_example is using safemutex exported by mysqld
     TARGET_LINK_LIBRARIES(udf_example mysqld)
-    SET_TARGET_PROPERTIES(udf_example
-      PROPERTIES LINK_FLAGS "${CMAKE_SHARED_LIBRARY_C_FLAGS}")
   ENDIF()
 ENDIF()
 
@@ -455,11 +277,7 @@ INSTALL(FILES ${DBOPT_FILE} DESTINATION data/test COMPONENT DataFiles)
 
 # Install initial database on windows
 IF(NOT CMAKE_CROSSCOMPILING)
-  IF(DEBUG_EXTNAME)
-    GET_TARGET_PROPERTY(MYSQLD_EXECUTABLE mysqld LOCATION_DEBUG)
-  ELSE()
-    GET_TARGET_PROPERTY(MYSQLD_EXECUTABLE mysqld LOCATION)
-  ENDIF()
+  GET_TARGET_PROPERTY(MYSQLD_EXECUTABLE mysqld LOCATION)
 ENDIF()
 IF(WIN32 AND MYSQLD_EXECUTABLE)
   CONFIGURE_FILE(

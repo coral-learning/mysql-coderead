@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,14 +12,13 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef LocalConfig_H
 #define LocalConfig_H
 
 #include <ndb_global.h>
-#include <BaseString.hpp>
+#include <NdbOut.hpp>
 
 //****************************************************************************
 // Description: The class LocalConfig corresponds to the information possible
@@ -35,8 +34,6 @@ struct MgmtSrvrId {
   MgmtSrvrId_Type type;
   BaseString name;
   unsigned int port;
-  BaseString bind_address;
-  unsigned int bind_address_port;
 };
 
 struct LocalConfig {
@@ -46,9 +43,6 @@ struct LocalConfig {
   
   int error_line;
   char error_msg[256];
-
-  BaseString bind_address;
-  unsigned int bind_address_port;
 
   LocalConfig();
   ~LocalConfig();
@@ -65,7 +59,6 @@ struct LocalConfig {
   
   bool parseNodeId(const char *buf);
   bool parseHostName(const char *buf);
-  bool parseBindAddress(const char *buf);
   bool parseFileName(const char *buf);
   bool parseString(const char *buf, BaseString &err);
   char * makeConnectString(char *buf, int sz);

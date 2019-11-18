@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2005-2008 MySQL AB, 2008, 2009 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2005-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef LGMAN_H
 #define LGMAN_H
@@ -32,7 +30,6 @@
 
 #include <WOPool.hpp>
 #include <SLFifoList.hpp>
-#include <SafeMutex.hpp>
 
 class Lgman : public SimulatedBlock
 {
@@ -47,14 +44,12 @@ protected:
   void sendSTTORRY(Signal*);
   void execREAD_CONFIG_REQ(Signal* signal);
   void execDUMP_STATE_ORD(Signal* signal);
-  void execDBINFO_SCANREQ(Signal* signal);
   void execCONTINUEB(Signal* signal);
-  void execNODE_FAILREP(Signal* signal);
   
-  void execCREATE_FILE_IMPL_REQ(Signal* signal);
-  void execCREATE_FILEGROUP_IMPL_REQ(Signal* signal);
-  void execDROP_FILE_IMPL_REQ(Signal* signal);
-  void execDROP_FILEGROUP_IMPL_REQ(Signal* signal);
+  void execCREATE_FILE_REQ(Signal* signal);
+  void execCREATE_FILEGROUP_REQ(Signal* signal);
+  void execDROP_FILE_REQ(Signal* signal);
+  void execDROP_FILEGROUP_REQ(Signal* signal);
   
   void execFSWRITEREQ(Signal*);
   void execFSWRITEREF(Signal*);
@@ -82,17 +77,15 @@ protected:
 			  GetTabInfoReq * req,
 			  GetTabInfoRef::ErrorCode errorCode);
 
-  void exec_lcp_frag_ord(Signal*, SimulatedBlock* client_block);
-
 public:
   struct Log_waiter
   {
-    CallbackPtr m_callback;
+    Callback m_callback;
     union {
       Uint32 m_size;
       Uint64 m_sync_lsn;
     };
-    Uint32 m_block; // includes instance
+    Uint32 m_block;
     Uint32 nextList;
     Uint32 m_magic;
   };
@@ -216,10 +209,7 @@ public:
     Undofile_list::Head m_files;     // Files in log
     Undofile_list::Head m_meta_files;// Files being created or dropped
     
-    Uint32 m_total_buffer_words;    // Total buffer page words
-    Uint32 m_free_buffer_words;     // Free buffer page words
-    Uint32 m_callback_buffer_words; // buffer words that has been
-                                    // returned to user, but not yet consumed
+    Uint32 m_free_buffer_words;    // Free buffer page words
     Log_waiter_list::Head m_log_buffer_waiters;
     Page_map::Head m_buffer_pages; // Pairs of { ptr.i, count }
     struct Position {
@@ -246,18 +236,6 @@ public:
   typedef DLFifoListImpl<Logfile_group_pool, Logfile_group> Logfile_group_list;
   typedef LocalDLFifoListImpl<Logfile_group_pool, Logfile_group> Local_logfile_group_list;
   typedef KeyTableImpl<Logfile_group_pool, Logfile_group> Logfile_group_hash;
-  typedef KeyTableImpl<Logfile_group_pool, Logfile_group>::Iterator Logfile_group_hash_iterator;
-  enum CallbackIndex {
-    // lgman
-    ENDLCP_CALLBACK = 1,
-    COUNT_CALLBACKS = 2
-  };
-  CallbackEntry m_callbackEntry[COUNT_CALLBACKS];
-  CallbackTable m_callbackTable;
-  
-private:
-  friend class Logfile_client;
-  SimulatedBlock* m_tup;
 
   /**
    * Alloc/free space in log
@@ -267,6 +245,9 @@ private:
    */
   int alloc_log_space(Uint32 logfile_ref, Uint32 words);
   int free_log_space(Uint32 logfile_ref, Uint32 words);
+  
+private:
+  friend class Logfile_client;
   
   Undofile_pool m_file_pool;
   Logfile_group_pool m_logfile_group_pool;
@@ -278,11 +259,6 @@ private:
   Uint32 m_latest_lcp;
   Logfile_group_list m_logfile_group_list;
   Logfile_group_hash m_logfile_group_hash;
-  Uint32 m_end_lcp_senderdata;
-
-  SafeMutex m_client_mutex;
-  void client_lock(BlockNumber block, int line);
-  void client_unlock(BlockNumber block, int line);
 
   bool alloc_logbuffer_memory(Ptr<Logfile_group>, Uint32 pages);
   void init_logbuffer_pointers(Ptr<Logfile_group>);
@@ -297,7 +273,7 @@ private:
   
   void cut_log_tail(Signal*, Ptr<Logfile_group> ptr);
   void endlcp_callback(Signal*, Uint32, Uint32);
-  void open_file(Signal*, Ptr<Undofile>, Uint32, SectionHandle*);
+  void open_file(Signal*, Ptr<Undofile>, Uint32 requestInfo);
 
   void flush_log(Signal*, Ptr<Logfile_group>, Uint32 force);
   Uint32 write_log_pages(Signal*, Ptr<Logfile_group>, 
@@ -331,21 +307,17 @@ private:
 };
 
 class Logfile_client {
-  SimulatedBlock *m_client_block;
-  Uint32 m_block; // includes instance
+  Uint32 m_block;
   Lgman * m_lgman;
-  bool m_lock;
-  DEBUG_OUT_DEFINES(LGMAN);
 public:
   Uint32 m_logfile_group_id;
 
-  Logfile_client(SimulatedBlock* block, Lgman*, Uint32 logfile_group_id,
-                 bool lock = true);
-  ~Logfile_client();
+  Logfile_client() {}
+  Logfile_client(SimulatedBlock* block, Lgman*, Uint32 logfile_group_id);
 
   struct Request
   {
-    SimulatedBlock::CallbackPtr m_callback;
+    SimulatedBlock::Callback m_callback;
   };
   
   /**
@@ -385,19 +357,7 @@ public:
    *           0 on time slice
    *          -1 on error
    */
-  int get_log_buffer(Signal*, Uint32 sz, SimulatedBlock::CallbackPtr*);
-
-  int alloc_log_space(Uint32 words) {
-    return m_lgman->alloc_log_space(m_logfile_group_id, words);
-  }
-
-  int free_log_space(Uint32 words) {
-    return m_lgman->free_log_space(m_logfile_group_id, words);
-  }
-
-  void exec_lcp_frag_ord(Signal* signal) {
-    m_lgman->exec_lcp_frag_ord(signal, m_client_block);
-  }
+  int get_log_buffer(Signal*, Uint32 sz, SimulatedBlock::Callback* m_callback);
   
 private:
   Uint32* get_log_buffer(Uint32 sz);

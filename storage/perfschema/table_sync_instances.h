@@ -45,7 +45,7 @@ struct row_mutex_instances
   /** True if column LOCKED_BY_THREAD_ID is not null. */
   bool m_locked;
   /** Column LOCKED_BY_THREAD_ID. */
-  ulonglong m_locked_by_thread_id;
+  ulong m_locked_by_thread_id;
 };
 
 /** Table PERFORMANCE_SCHEMA.MUTEX_INSTANCES. */
@@ -82,7 +82,7 @@ private:
 
   /** Current row. */
   row_mutex_instances m_row;
-  /** True if the current row exists. */
+  /** True is the current row exists. */
   bool m_row_exists;
   /** Current position. */
   PFS_simple_index m_pos;
@@ -102,7 +102,7 @@ struct row_rwlock_instances
   /** True if column WRITE_LOCKED_BY_THREAD_ID is not null. */
   bool m_write_locked;
   /** Column WRITE_LOCKED_BY_THREAD_ID. */
-  ulonglong m_write_locked_by_thread_id;
+  ulong m_write_locked_by_thread_id;
   /** Column READ_LOCKED_BY_COUNT. */
   ulong m_readers;
 };
@@ -141,7 +141,7 @@ private:
 
   /** Current row. */
   row_rwlock_instances m_row;
-  /** True if the current row exists. */
+  /** True is the current row exists. */
   bool m_row_exists;
   /** Current position. */
   PFS_simple_index m_pos;
@@ -194,7 +194,7 @@ private:
 
   /** Current row. */
   row_cond_instances m_row;
-  /** True if the current row exists. */
+  /** True is the current row exists. */
   bool m_row_exists;
   /** Current position. */
   PFS_simple_index m_pos;

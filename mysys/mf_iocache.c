@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -180,7 +180,7 @@ int init_io_cache(IO_CACHE *info, File file, size_t cachesize,
       DBUG_ASSERT(seek_offset == 0);
     }
     else
-      info->seek_not_done= MY_TEST(seek_offset != pos);
+      info->seek_not_done= test(seek_offset != pos);
   }
 
   info->disk_writes= 0;
@@ -259,7 +259,7 @@ int init_io_cache(IO_CACHE *info, File file, size_t cachesize,
   else
   {
     /* Clear mutex so that safe_mutex will notice that it's not initialized */
-    memset(&info->append_buffer_lock, 0, sizeof(info->append_buffer_lock));
+    bzero((char*) &info->append_buffer_lock, sizeof(info));
   }
 #endif
 
@@ -323,7 +323,7 @@ static void my_aiowait(my_aio_result *result)
 
 my_bool reinit_io_cache(IO_CACHE *info, enum cache_type type,
 			my_off_t seek_offset,
-			pbool use_async_io MY_ATTRIBUTE((unused)),
+			pbool use_async_io __attribute__((unused)),
 			pbool clear_cache)
 {
   DBUG_ENTER("reinit_io_cache");
@@ -1128,8 +1128,8 @@ static void copy_to_read_buffer(IO_CACHE *write_cache,
   */
   while (write_length)
   {
-    size_t copy_length= MY_MIN(write_length, write_cache->buffer_length);
-    int  MY_ATTRIBUTE((unused)) rc;
+    size_t copy_length= min(write_length, write_cache->buffer_length);
+    int  __attribute__((unused)) rc;
 
     rc= lock_io_cache(write_cache, write_cache->pos_in_file);
     /* The writing thread does always have the lock when it awakes. */
@@ -1286,7 +1286,7 @@ read_append_buffer:
       TODO: figure out if the assert below is needed or correct.
     */
     DBUG_ASSERT(pos_in_file == info->end_of_file);
-    copy_len= MY_MIN(Count, len_in_buff);
+    copy_len=min(Count, len_in_buff);
     memcpy(Buffer, info->append_read_pos, copy_len);
     info->append_read_pos += copy_len;
     Count -= copy_len;
@@ -1345,13 +1345,9 @@ int _my_b_async_read(register IO_CACHE *info, uchar *Buffer, size_t Count)
     if (info->aio_result.result.aio_errno)
     {
       if (info->myflags & MY_WME)
-      {
-        char errbuf[MYSYS_STRERROR_SIZE];
-        my_error(EE_READ, MYF(ME_BELL+ME_WAITTANG),
-                 my_filename(info->file),
-                 info->aio_result.result.aio_errno,
-                 my_strerror(errbuf, sizeof(errbuf),
-                             info->aio_result.result.aio_errno));
+	my_error(EE_READ, MYF(ME_BELL+ME_WAITTANG),
+		 my_filename(info->file),
+		 info->aio_result.result.aio_errno);
       my_errno=info->aio_result.result.aio_errno;
       info->error= -1;
       return(1);
@@ -1399,7 +1395,7 @@ int _my_b_async_read(register IO_CACHE *info, uchar *Buffer, size_t Count)
     }
 #endif
 	/* Copy found bytes to buffer */
-    length= MY_MIN(Count, read_length);
+    length=min(Count,read_length);
     memcpy(Buffer,info->read_pos,(size_t) length);
     Buffer+=length;
     Count-=length;
@@ -1433,7 +1429,7 @@ int _my_b_async_read(register IO_CACHE *info, uchar *Buffer, size_t Count)
       if ((read_length=mysql_file_read(info->file,info->request_pos,
 			               read_length, info->myflags)) == (size_t) -1)
         return info->error= -1;
-      use_length= MY_MIN(Count, read_length);
+      use_length=min(Count,read_length);
       memcpy(Buffer,info->request_pos,(size_t) use_length);
       info->read_pos=info->request_pos+Count;
       info->read_end=info->request_pos+read_length;
@@ -1442,14 +1438,11 @@ int _my_b_async_read(register IO_CACHE *info, uchar *Buffer, size_t Count)
 
       if (Count != use_length)
       {					/* Didn't find hole block */
-        if (info->myflags & (MY_WME | MY_FAE | MY_FNABP) && Count != org_Count)
-        {
-          char errbuf[MYSYS_STRERROR_SIZE];
-          my_error(EE_EOFERR, MYF(ME_BELL+ME_WAITTANG), my_filename(info->file),
-                   my_errno, my_strerror(errbuf, sizeof(errbuf), my_errno));
-        }
-        info->error=(int) (read_length+left_length);
-        return 1;
+	if (info->myflags & (MY_WME | MY_FAE | MY_FNABP) && Count != org_Count)
+	  my_error(EE_EOFERR, MYF(ME_BELL+ME_WAITTANG),
+		   my_filename(info->file),my_errno);
+	info->error=(int) (read_length+left_length);
+	return 1;
       }
     }
     else
@@ -1732,7 +1725,7 @@ int my_block_write(register IO_CACHE *info, const uchar *Buffer, size_t Count,
   unlock_append_buffer(info);
 
 int my_b_flush_io_cache(IO_CACHE *info,
-                        int need_append_buffer_lock MY_ATTRIBUTE((unused)))
+                        int need_append_buffer_lock __attribute__((unused)))
 {
   size_t length;
   my_off_t pos_in_file;
@@ -1740,10 +1733,6 @@ int my_b_flush_io_cache(IO_CACHE *info,
   DBUG_ENTER("my_b_flush_io_cache");
   DBUG_PRINT("enter", ("cache: 0x%lx", (long) info));
 
-  DBUG_EXECUTE_IF("simulate_error_during_flush_cache_to_file",
-                  {
-                    DBUG_RETURN(TRUE);
-                  });
   if (!append_cache)
     need_append_buffer_lock= 0;
 

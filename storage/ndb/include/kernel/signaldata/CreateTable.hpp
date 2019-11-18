@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,47 +12,73 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef CREATE_TABLE_HPP
 #define CREATE_TABLE_HPP
 
 #include "SignalData.hpp"
 
-struct CreateTableReq {
-  STATIC_CONST( SignalLength = 5 );
+/**
+ * CreateTable
+ *
+ * This signal is sent by API to DICT/TRIX
+ * as a request to create a secondary index
+ * and then from TRIX to TRIX(n) and TRIX to TC.
+ */
+class CreateTableReq {
+  /**
+   * Sender(s)
+   */
+  // API
   
-  union { Uint32 clientRef, senderRef; };
-  union { Uint32 clientData, senderData; };
-  Uint32 requestInfo;
-  Uint32 transId;
-  Uint32 transKey;
+  /**
+   * Sender(s) / Reciver(s)
+   */
+  friend class NdbDictInterface;
+  friend class Dbdict;
+  friend class Ndbcntr;
+
+  /**
+   * For printing
+   */
+  friend bool printCREATE_TABLE_REQ(FILE*, const Uint32*, Uint32, Uint16);
+  
+public:
+  STATIC_CONST( SignalLength = 2 );
+  
+private:
+  Uint32 senderData;
+  Uint32 senderRef;
 
   SECTION( DICT_TAB_INFO = 0 );
 };
 
-struct CreateTableConf {
-  STATIC_CONST( SignalLength = 5 );
-
-  Uint32 senderRef;
-  union { Uint32 clientData, senderData; };
-  Uint32 transId;
-  Uint32 tableId;
-  Uint32 tableVersion;
-};
-
-struct CreateTableRef {
-  STATIC_CONST( SignalLength = 9 );
+class CreateTableRef {
+  /**
+   * Sender(s)
+   */
+  friend class Dbdict;
+  
+  /**
+   * Sender(s) / Reciver(s)
+   */
+  friend class Ndbcntr;
+  friend class NdbDictInterface;
+  
+  /**
+   * For printing
+   */
+  friend bool printCREATE_TABLE_REF(FILE *, const Uint32 *, Uint32, Uint16);
+  
+public:
+  STATIC_CONST( SignalLength = 7 );
 
   enum ErrorCode {
     NoError = 0,
     Busy = 701,
     BusyWithNR = 711,
     NotMaster = 702,
-    TooManySchemaOps = 783,     //wl3600_todo move the 3 to DictSignal.hpp
-    InvalidTransKey = 781,
-    InvalidTransId = 782,
     InvalidFormat = 703,
     AttributeNameTooLong = 704,
     TableNameTooLong = 705,
@@ -73,29 +99,52 @@ struct CreateTableRef {
     NotATablespace = 758,
     InvalidTablespaceVersion = 759,
     OutOfStringBuffer = 773,
-    NoLoggingTemporaryTable = 778,
-    InvalidHashMap = 790,
-    TableDefinitionTooBig = 793,
-    FeatureRequiresUpgrade = 794
+    NoLoggingTemporaryTable = 778
   };
 
+private:
+  Uint32 senderData;
   Uint32 senderRef;
-  union { Uint32 clientData, senderData; };
-  Uint32 transId;
+  Uint32 masterNodeId;
   Uint32 errorCode;
   Uint32 errorLine; 
-  Uint32 errorNodeId;
-  Uint32 masterNodeId;
-  Uint32 errorStatus;
   Uint32 errorKey;
+  Uint32 status;
 
-  //wl3600_todo out
+public:
   Uint32 getErrorCode() const {
     return errorCode;
   }
   Uint32 getErrorLine() const {
     return errorLine;
   }
+};
+
+class CreateTableConf {
+  /**
+   * Sender(s)
+   */
+  friend class Dbdict;
+  
+  /**
+   * Sender(s) / Reciver(s)
+   */
+  friend class Ndbcntr;
+  friend class NdbDictInterface;
+  
+  /**
+   * For printing
+   */
+  friend bool printCREATE_TABLE_REF(FILE *, const Uint32 *, Uint32, Uint16);
+  
+public:
+  STATIC_CONST( SignalLength = 4 );
+
+private:
+  Uint32 senderData;
+  Uint32 senderRef;
+  Uint32 tableId;
+  Uint32 tableVersion;
 };
 
 #endif

@@ -1,4 +1,4 @@
-/* Copyright (c) 2005, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -10,16 +10,17 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
+#ifdef USE_PRAGMA_IMPLEMENTATION
+#pragma implementation                         /* gcc class implementation */
+#endif
 
 #include "sql_priv.h"
 #include "unireg.h"
 #include "sql_cursor.h"
 #include "probes_mysql.h"
 #include "sql_parse.h"                        // mysql_execute_command
-#include "sql_tmp_table.h"                   // tmp tables
-#include "debug_sync.h"
 
 /****************************************************************************
   Declarations.
@@ -47,7 +48,7 @@ public:
 
   int send_result_set_metadata(THD *thd, List<Item> &send_result_set_metadata);
   virtual bool is_open() const { return table != 0; }
-  virtual int open(JOIN *join MY_ATTRIBUTE((unused)));
+  virtual int open(JOIN *join __attribute__((unused)));
   virtual void fetch(ulong num_rows);
   virtual void close();
   virtual ~Materialized_cursor();
@@ -84,25 +85,24 @@ public:
                             for the rows fetched from the cursor
   @param[out] pcursor       a pointer to store a pointer to cursor in
 
-  @return Error status
-
-  @retval false -- the query has been successfully executed; in this case
-  pcursor may or may not contain a pointer to an open cursor.
-
-  @retval true -- an error, 'pcursor' has been left intact.
+  @retval
+    0                 the query has been successfully executed; in this
+    case pcursor may or may not contain
+    a pointer to an open cursor.
+  @retval
+    non-zero          an error, 'pcursor' has been left intact.
 */
 
-bool mysql_open_cursor(THD *thd, select_result *result,
-                       Server_side_cursor **pcursor)
+int mysql_open_cursor(THD *thd, select_result *result,
+                      Server_side_cursor **pcursor)
 {
-  sql_digest_state *parent_digest;
-  PSI_statement_locker *parent_locker;
   select_result *save_result;
   Select_materialize *result_materialize;
   LEX *lex= thd->lex;
+  int rc;
 
   if (! (result_materialize= new (thd->mem_root) Select_materialize(result)))
-    return true;
+    return 1;
 
   save_result= lex->result;
 
@@ -114,14 +114,7 @@ bool mysql_open_cursor(THD *thd, select_result *result,
                          &thd->security_ctx->priv_user[0],
                          (char *) thd->security_ctx->host_or_ip,
                          2);
-  parent_digest= thd->m_digest;
-  parent_locker= thd->m_statement_psi;
-  thd->m_digest= NULL;
-  thd->m_statement_psi= NULL;
-  bool rc= mysql_execute_command(thd);
-  thd->m_digest= parent_digest;
-  DEBUG_SYNC(thd, "after_table_close");
-  thd->m_statement_psi= parent_locker;
+  rc= mysql_execute_command(thd);
   MYSQL_QUERY_EXEC_DONE(rc);
 
   lex->result= save_result;
@@ -277,7 +270,7 @@ end:
 }
 
 
-int Materialized_cursor::open(JOIN *join MY_ATTRIBUTE((unused)))
+int Materialized_cursor::open(JOIN *join __attribute__((unused)))
 {
   THD *thd= fake_unit.thd;
   int rc;
@@ -329,7 +322,7 @@ void Materialized_cursor::fetch(ulong num_rows)
   result->begin_dataset();
   for (fetch_limit+= num_rows; fetch_count < fetch_limit; fetch_count++)
   {
-    if ((res= table->file->ha_rnd_next(table->record[0])))
+    if ((res= table->file->rnd_next(table->record[0])))
       break;
     /* Send data only if the read was successful. */
     /*
@@ -390,16 +383,8 @@ Materialized_cursor::~Materialized_cursor()
 bool Select_materialize::send_result_set_metadata(List<Item> &list, uint flags)
 {
   DBUG_ASSERT(table == 0);
-  /*
-    PROCEDURE ANALYSE installs a result filter that has a different set
-    of input and output column Items:
-  */
-  List<Item> *column_types= (unit->first_select()->parent_lex->proc_analyse ?
-                             &list : unit->get_field_list());
-  if (create_result_table(unit->thd, column_types,
-                          FALSE,
-                          thd->variables.option_bits | TMP_TABLE_ALL_COLUMNS,
-                          "", FALSE, TRUE))
+  if (create_result_table(unit->thd, unit->get_unit_column_types(),
+                          FALSE, thd->variables.option_bits | TMP_TABLE_ALL_COLUMNS, ""))
     return TRUE;
 
   materialized_cursor= new (&table->mem_root)
@@ -419,14 +404,6 @@ bool Select_materialize::send_result_set_metadata(List<Item> &list, uint flags)
     materialized_cursor= 0;
     return TRUE;
   }
-
-  /*
-    close_thread_tables() will be called in mysql_execute_command() which
-    will close all tables except the cursor temporary table. Hence set the
-    orig_table in the field definition to NULL.
-  */
-  for (Field **fld= this->table->field; *fld; fld++)
-     (*fld)->orig_table= NULL;
 
   return FALSE;
 }

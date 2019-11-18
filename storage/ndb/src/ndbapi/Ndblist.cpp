@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,10 +12,18 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
+#include <NdbOut.hpp>
+#include <Ndb.hpp>
+#include <NdbOperation.hpp>
+#include <NdbIndexOperation.hpp>
+#include <NdbIndexScanOperation.hpp>
+#include "NdbApiSignal.hpp"
+#include <NdbRecAttr.hpp>
+#include "NdbUtil.hpp"
 #include "API.hpp"
+#include "NdbBlob.hpp"
 
 void
 Ndb::checkFailedNode()
@@ -255,18 +263,6 @@ Ndb::getNdbBlob()
   return tBlob;
 }
 
-NdbLockHandle*
-Ndb::getLockHandle()
-{
-  NdbLockHandle* lh = theImpl->theLockHandleList.seize(this);
-  if (lh)
-  {
-    lh->init();
-  }
-
-  return lh;
-} 
-
 /***************************************************************************
 void releaseNdbBranch(NdbBranch* aNdbBranch);
 
@@ -376,7 +372,7 @@ Ndb::releaseScanOperation(NdbIndexScanOperation* aScanOperation)
   { NdbIndexScanOperation* tOp = theScanOpIdleList;
     while (tOp != NULL) {
       assert(tOp != aScanOperation);
-      tOp = (NdbIndexScanOperation*)tOp->theNext;
+    tOp = (NdbIndexScanOperation*)tOp->theNext;
     }
   }
 #endif
@@ -427,15 +423,6 @@ Ndb::releaseSignal(NdbApiSignal* aSignal)
 }
 
 void
-Ndb::releaseSignals(Uint32 cnt, NdbApiSignal* head, NdbApiSignal* tail)
-{
-#ifdef POORMANSPURIFY
-  creleaseSignals += cnt;
-#endif
-  theImpl->theSignalIdleList.release(cnt, head, tail);
-}
-
-void
 Ndb::releaseSignalsInList(NdbApiSignal** pList){
   NdbApiSignal* tmp;
   while (*pList != NULL){
@@ -451,13 +438,6 @@ Ndb::releaseNdbBlob(NdbBlob* aBlob)
   aBlob->release();
   theImpl->theNdbBlobIdleList.release(aBlob);
 }
-
-void
-Ndb::releaseLockHandle(NdbLockHandle* lh)
-{
-  lh->release(this);
-  theImpl->theLockHandleList.release(lh);
-};
 
 /****************************************************************************
 int releaseConnectToNdb(NdbTransaction* aConnectConnection);
@@ -481,7 +461,7 @@ Ndb::releaseConnectToNdb(NdbTransaction* a_con)
 
   Uint32 node_id = a_con->getConnectedNodeId();
   Uint32 conn_seq = a_con->theNodeSequence;
-  tSignal.setSignal(GSN_TCRELEASEREQ, refToBlock(a_con->m_tcRef));
+  tSignal.setSignal(GSN_TCRELEASEREQ);
   tSignal.setData((tConPtr = a_con->getTC_ConnectPtr()), 1);
   tSignal.setData(theMyRef, 2);
   tSignal.setData(a_con->ptr2int(), 3); 
@@ -583,10 +563,6 @@ Ndb::get_free_list_usage(Ndb::Free_list_usage* curr)
   }
   else if(!strcmp(curr->m_name, "NdbReceiver"))
   {
-    update(curr, theImpl->theLockHandleList, "NdbLockHandle");
-  }
-  else if(!strcmp(curr->m_name, "NdbLockHandle"))
-  {
     return 0;
   }
   else
@@ -614,4 +590,3 @@ TI(NdbReceiver);
 TI(NdbConnection);
 TI(NdbIndexOperation);
 TI(NdbIndexScanOperation);
-TI(NdbLockHandle);

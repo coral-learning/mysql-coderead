@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,18 +13,7 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
-/*
-  open a isam-database
-
-  Internal temporary tables
-  -------------------------
-  Since only single instance of internal temporary table is required by
-  optimizer, such tables are not registered on myisam_open_list. In effect
-  it means (a) THR_LOCK_myisam is not held while such table is being created,
-  opened or closed; (b) no iteration through myisam_open_list while opening a
-  table. This optimization gives nice scalability benefit in concurrent
-  environment. MEMORY internal temporary tables are optimized similarly.
-*/
+/* open a isam-database */
 
 #include "fulltext.h"
 #include "sp_defs.h"
@@ -81,15 +70,15 @@ MI_INFO *mi_open(const char *name, int mode, uint open_flags)
   int lock_error,kfile,open_mode,save_errno,have_rtree=0, realpath_err;
   uint i,j,len,errpos,head_length,base_pos,offset,info_length,keys,
     key_parts,unique_key_parts,fulltext_keys,uniques;
-  uint internal_table= open_flags & HA_OPEN_INTERNAL_TABLE;
   char name_buff[FN_REFLEN], org_name[FN_REFLEN], index_name[FN_REFLEN],
        data_name[FN_REFLEN];
   uchar *disk_cache, *disk_pos, *end_pos;
-  MI_INFO info, *m_info, *old_info= NULL;
+  MI_INFO info,*m_info,*old_info;
   MYISAM_SHARE share_buff,*share;
   ulong rec_per_key_part[HA_MAX_POSSIBLE_KEY*MI_MAX_KEY_SEG];
   my_off_t key_root[HA_MAX_POSSIBLE_KEY],key_del[MI_MAX_KEY_BLOCK_SIZE];
   ulonglong max_key_file_length, max_data_file_length;
+  ST_FILE_ID file_id= {0, 0};
   DBUG_ENTER("mi_open");
 
   LINT_INIT(m_info);
@@ -97,27 +86,26 @@ MI_INFO *mi_open(const char *name, int mode, uint open_flags)
   lock_error=1;
   errpos=0;
   head_length=sizeof(share_buff.state.header);
-  memset(&info, 0, sizeof(info));
+  bzero((uchar*) &info,sizeof(info));
 
   realpath_err= my_realpath(name_buff,
                   fn_format(org_name,name,"",MI_NAME_IEXT,4),MYF(0));
-  if (my_is_symlink(org_name) &&
-      (realpath_err || (*myisam_test_invalid_symlink)(name_buff)))
+  if (my_is_symlink(name_buff, &file_id))
   {
-    my_errno= HA_WRONG_CREATE_OPTION;
-    DBUG_RETURN (NULL);
+    if (realpath_err ||
+        (*myisam_test_invalid_symlink)(name_buff) ||
+        my_is_symlink(name_buff, &file_id))
+    {
+      my_errno= HA_WRONG_CREATE_OPTION;
+      DBUG_RETURN (NULL);
+    }
   }
 
-  if (!internal_table)
-  {
-    mysql_mutex_lock(&THR_LOCK_myisam);
-    old_info= test_if_reopen(name_buff);
-  }
-
-  if (!old_info)
+  mysql_mutex_lock(&THR_LOCK_myisam);
+  if (!(old_info=test_if_reopen(name_buff)))
   {
     share= &share_buff;
-    memset(&share_buff, 0, sizeof(share_buff));
+    bzero((uchar*) &share_buff,sizeof(share_buff));
     share_buff.state.rec_per_key_part=rec_per_key_part;
     share_buff.state.key_root=key_root;
     share_buff.state.key_del=key_del;
@@ -130,17 +118,28 @@ MI_INFO *mi_open(const char *name, int mode, uint open_flags)
                       my_errno= HA_ERR_CRASHED;
                       goto err;
                     });
+    DEBUG_SYNC_C("before_opening_indexfile");
     if ((kfile= mysql_file_open(mi_key_file_kfile,
                                 name_buff,
-                                (open_mode= O_RDWR) | O_SHARE, MYF(0))) < 0)
+                                (open_mode= O_RDWR) | O_SHARE | O_NOFOLLOW,
+                                MYF(0))) < 0)
     {
       if ((errno != EROFS && errno != EACCES) ||
 	  mode != O_RDONLY ||
           (kfile= mysql_file_open(mi_key_file_kfile,
                                   name_buff,
-                                  (open_mode= O_RDONLY) | O_SHARE, MYF(0))) < 0)
+                                  (open_mode= O_RDONLY) | O_SHARE | O_NOFOLLOW,
+                                  MYF(0))) < 0)
 	goto err;
     }
+
+    if (!my_is_same_file(kfile, &file_id))
+    {
+      mysql_file_close(kfile, MYF(0));
+      my_errno= HA_WRONG_CREATE_OPTION;
+      goto err;
+    }
+
     share->mode=open_mode;
     errpos=1;
     if (mysql_file_read(kfile, share->state.header.file_version, head_length,
@@ -322,7 +321,7 @@ MI_INFO *mi_open(const char *name, int mode, uint open_flags)
     strmov(share->index_file_name,  index_name);
     strmov(share->data_file_name,   data_name);
 
-    share->blocksize= MY_MIN(IO_SIZE, myisam_block_size);
+    share->blocksize=min(IO_SIZE,myisam_block_size);
     {
       HA_KEYSEG *pos=share->keyparts;
       uint32 ftkey_nr= 1;
@@ -501,7 +500,7 @@ MI_INFO *mi_open(const char *name, int mode, uint open_flags)
     share->base.margin_key_file_length=(share->base.max_key_file_length -
 					(keys ? MI_INDEX_BLOCK_MARGIN *
 					 share->blocksize * keys : 0));
-    share->blocksize= MY_MIN(IO_SIZE, myisam_block_size);
+    share->blocksize=min(IO_SIZE,myisam_block_size);
     share->data_file_type=STATIC_RECORD;
     if (share->options & HA_OPTION_COMPRESS_RECORD)
     {
@@ -510,9 +509,9 @@ MI_INFO *mi_open(const char *name, int mode, uint open_flags)
       info.s=share;
       if (_mi_read_pack_info(&info,
 			     (pbool)
-			     MY_TEST(!(share->options &
-                                       (HA_OPTION_PACK_RECORD |
-                                        HA_OPTION_TEMP_COMPRESS_RECORD)))))
+			     test(!(share->options &
+				    (HA_OPTION_PACK_RECORD |
+				     HA_OPTION_TEMP_COMPRESS_RECORD)))))
 	goto err;
     }
     else if (share->options & HA_OPTION_PACK_RECORD)
@@ -579,7 +578,6 @@ MI_INFO *mi_open(const char *name, int mode, uint open_flags)
 		       &info.buff,(share->base.max_key_block_length*2+
 				   share->base.max_key_length),
 		       &info.lastkey,share->base.max_key_length*3+1,
-                       &info.rnext_same_key, share->base.max_key_length,
 		       &info.first_mbr_key, share->base.max_key_length,
 		       &info.filename,strlen(name)+1,
 		       &info.rtree_recursion_state,have_rtree ? 1024 : 0,
@@ -594,11 +592,6 @@ MI_INFO *mi_open(const char *name, int mode, uint open_flags)
   memcpy(info.blobs,share->blobs,sizeof(MI_BLOB)*share->base.blobs);
   info.lastkey2=info.lastkey+share->base.max_key_length;
 
-  /*
-    If only mi_rkey is called earlier, rnext_same_key should be set in
-    mi_rnext_same.
-  */
-  info.set_rnext_same_key= FALSE;
   info.s=share;
   info.lastpos= HA_OFFSET_ERROR;
   info.update= (short) (HA_STATE_NEXT_FOUND+HA_STATE_PREV_FOUND);
@@ -645,22 +638,19 @@ MI_INFO *mi_open(const char *name, int mode, uint open_flags)
 
   /* Allocate buffer for one record */
 
-  /* prerequisites: memset(&info, 0) && info->s=share; are met. */
+  /* prerequisites: bzero(info) && info->s=share; are met. */
   if (!mi_alloc_rec_buff(&info, -1, &info.rec_buff))
     goto err;
-  memset(info.rec_buff, 0, mi_get_rec_buff_len(&info, info.rec_buff));
+  bzero(info.rec_buff, mi_get_rec_buff_len(&info, info.rec_buff));
 
   *m_info=info;
   thr_lock_data_init(&share->lock,&m_info->lock,(void*) m_info);
+  m_info->open_list.data=(void*) m_info;
+  myisam_open_list=list_add(myisam_open_list,&m_info->open_list);
 
-  if (!internal_table)
-  {
-    m_info->open_list.data= (void*) m_info;
-    myisam_open_list= list_add(myisam_open_list, &m_info->open_list);
-    mysql_mutex_unlock(&THR_LOCK_myisam);
-  }
+  mysql_mutex_unlock(&THR_LOCK_myisam);
 
-  memset(info.buff, 0, share->base.max_key_block_length * 2);
+  bzero(info.buff, share->base.max_key_block_length * 2);
 
   if (myisam_log_file >= 0)
   {
@@ -701,8 +691,7 @@ err:
   default:
     break;
   }
-  if (!internal_table)
-    mysql_mutex_unlock(&THR_LOCK_myisam);
+  mysql_mutex_unlock(&THR_LOCK_myisam);
   my_errno=save_errno;
   DBUG_RETURN (NULL);
 } /* mi_open */
@@ -722,10 +711,10 @@ uchar *mi_alloc_rec_buff(MI_INFO *info, ulong length, uchar **buf)
     if (length == (ulong) -1)
     {
       if (info->s->options & HA_OPTION_COMPRESS_RECORD)
-        length= MY_MAX(info->s->base.pack_reclength, info->s->max_pack_length);
+        length= max(info->s->base.pack_reclength, info->s->max_pack_length);
       else
         length= info->s->base.pack_reclength;
-      length= MY_MAX(length, info->s->base.max_key_length);
+      length= max(length, info->s->base.max_key_length);
       /* Avoid unnecessary realloc */
       if (newptr && length == old_length)
 	return newptr;
@@ -1045,7 +1034,7 @@ uint mi_base_info_write(File file, MI_BASE_INFO *base)
   mi_int2store(ptr,base->max_key_length);		ptr +=2;
   mi_int2store(ptr,base->extra_alloc_bytes);		ptr +=2;
   *ptr++= base->extra_alloc_procent;
-  memset(ptr, 0, 13);					ptr +=13; /* extra */
+  bzero(ptr,13);					ptr +=13; /* extra */
   return mysql_file_write(file, buff, (size_t) (ptr-buff), MYF(MY_NABP)) != 0;
 }
 
@@ -1229,18 +1218,20 @@ exist a dup()-like call that would give us two different file descriptors.
 *************************************************************************/
 
 int mi_open_datafile(MI_INFO *info, MYISAM_SHARE *share, const char *org_name,
-                     File file_to_dup MY_ATTRIBUTE((unused)))
+                     File file_to_dup __attribute__((unused)))
 {
   char *data_name= share->data_file_name;
   char real_data_name[FN_REFLEN];
+  ST_FILE_ID file_id= {0, 0};
 
   if (org_name)
   {
     fn_format(real_data_name,org_name,"",MI_NAME_DEXT,4);
-    if (my_is_symlink(real_data_name))
+    if (my_is_symlink(real_data_name, &file_id))
     {
       if (my_realpath(real_data_name, real_data_name, MYF(0)) ||
-          (*myisam_test_invalid_symlink)(real_data_name))
+          (*myisam_test_invalid_symlink)(real_data_name) ||
+          my_is_symlink(real_data_name, &file_id))
       {
         my_errno= HA_WRONG_CREATE_OPTION;
         return 1;
@@ -1248,9 +1239,19 @@ int mi_open_datafile(MI_INFO *info, MYISAM_SHARE *share, const char *org_name,
       data_name= real_data_name;
     }
   }
+  DEBUG_SYNC_C("before_opening_datafile");
   info->dfile= mysql_file_open(mi_key_file_dfile,
-                               data_name, share->mode | O_SHARE, MYF(MY_WME));
-  return info->dfile >= 0 ? 0 : 1;
+                               data_name, share->mode | O_SHARE | O_NOFOLLOW,
+                               MYF(MY_WME));
+  if (info->dfile < 0)
+    return 1;
+  if (org_name && !my_is_same_file(info->dfile, &file_id))
+  {
+    mysql_file_close(info->dfile, MYF(0));
+    my_errno= HA_WRONG_CREATE_OPTION;
+    return 1;
+  }
+  return 0;
 }
 
 

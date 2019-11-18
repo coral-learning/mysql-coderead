@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -74,19 +74,18 @@ void (*error_handler_hook)(uint error, const char *str, myf MyFlags)=
 void (*fatal_error_handler_hook)(uint error, const char *str, myf MyFlags)=
   my_message_stderr;
 
-static void proc_info_dummy(void *a MY_ATTRIBUTE((unused)),
-                            const PSI_stage_info *b MY_ATTRIBUTE((unused)),
-                            PSI_stage_info *c MY_ATTRIBUTE((unused)),
-                            const char *d MY_ATTRIBUTE((unused)),
-                            const char *e MY_ATTRIBUTE((unused)),
-                            const unsigned int f MY_ATTRIBUTE((unused)))
+static const char *proc_info_dummy(void *a __attribute__((unused)),
+                                   const char *b __attribute__((unused)),
+                                   const char *c __attribute__((unused)),
+                                   const char *d __attribute__((unused)),
+                                   const unsigned int e __attribute__((unused)))
 {
-  return;
+  return 0;
 }
 
 /* this is to be able to call set_thd_proc_info from the C code */
-void (*proc_info_hook)(void *, const PSI_stage_info *, PSI_stage_info *,
-                       const char *, const char *, const unsigned int)= proc_info_dummy;
+const char *(*proc_info_hook)(void *, const char *, const char *, const char *,
+                              const unsigned int)= proc_info_dummy;
 
 #if defined(ENABLED_DEBUG_SYNC)
 /**
@@ -106,4 +105,31 @@ my_bool my_disable_locking=0;
 my_bool my_disable_async_io=0;
 my_bool my_disable_flush_key_blocks=0;
 my_bool my_disable_symlinks=0;
+
+/*
+  Note that PSI_hook and PSI_server are unconditionally
+  (no ifdef HAVE_PSI_INTERFACE) defined.
+  This is to ensure binary compatibility between the server and plugins,
+  in the case when:
+  - the server is not compiled with HAVE_PSI_INTERFACE
+  - a plugin is compiled with HAVE_PSI_INTERFACE
+  See the doxygen documentation for the performance schema.
+*/
+
+/**
+  Hook for the instrumentation interface.
+  Code implementing the instrumentation interface should register here.
+*/
+struct PSI_bootstrap *PSI_hook= NULL;
+
+/**
+  Instance of the instrumentation interface for the MySQL server.
+  @todo This is currently a global variable, which is handy when
+  compiling instrumented code that is bundled with the server.
+  When dynamic plugin are truly supported, this variable will need
+  to be replaced by a macro, so that each XYZ plugin can have it's own
+  xyz_psi_server variable, obtained from PSI_bootstrap::get_interface()
+  with the version used at compile time for plugin XYZ.
+*/
+PSI *PSI_server= NULL;
 

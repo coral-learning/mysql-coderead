@@ -1,7 +1,6 @@
-#!/usr/bin/perl
+#!@PERL_PATH@
 
-# Copyright (c) 2001, 2014, Oracle and/or its affiliates. All rights reserved.
-# Use is subject to license terms.
+# Copyright (c) 2001, 2017, Oracle and/or its affiliates. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Library General Public
@@ -26,7 +25,6 @@
 # makes .frm lowercase and .MYI/MYD/ISM/ISD uppercase
 # useful when datafiles are copied from windows
 
-print STDERR "Warning: $0 is deprecated and will be removed in a future version.\n";
 die "Usage: $0 datadir\n" unless -d $ARGV[0];
 
 for $a (<$ARGV[0]/*/*.*>) { $_=$a;

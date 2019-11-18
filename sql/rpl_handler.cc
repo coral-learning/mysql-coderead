@@ -1,4 +1,4 @@
-/* Copyright (c) 2008, 2014, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2008, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -10,13 +10,14 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #include "sql_priv.h"
 #include "unireg.h"
 
 #include "rpl_mi.h"
+#include "sql_repl.h"
 #include "log_event.h"
 #include "rpl_filter.h"
 #include <my_dir.h>
@@ -36,6 +37,8 @@ typedef struct Trans_binlog_info {
   my_off_t log_pos;
   char log_file[FN_REFLEN];
 } Trans_binlog_info;
+
+static pthread_key(Trans_binlog_info*, RPL_TRANS_BINLOG_INFO);
 
 int get_user_var_int(const char *name,
                      long long int *value, int *null_value)
@@ -140,6 +143,13 @@ int delegates_init()
   }
 #endif
 
+  if (pthread_key_create(&RPL_TRANS_BINLOG_INFO, NULL))
+  {
+    sql_print_error("Error while creating pthread specific data key for replication. "
+                    "Please report a bug.");
+    return 1;
+  }
+
   return 0;
 }
 
@@ -193,7 +203,7 @@ void delegates_destroy()
       r= 0;                                                             \
       break;                                                            \
     }                                                                   \
-    insert_dynamic(plugins, &plugin);                                   \
+    insert_dynamic(plugins, (uchar *)&plugin);                          \
     if (((Observer *)info->observer)->f                                 \
         && ((Observer *)info->observer)->f args)                        \
     {                                                                   \
@@ -218,61 +228,100 @@ void delegates_destroy()
 
 int Trans_delegate::after_commit(THD *thd, bool all)
 {
-  DBUG_ENTER("Trans_delegate::after_commit");
-  Trans_param param = { 0, 0, 0, 0 };
+  Trans_param param;
   bool is_real_trans= (all || thd->transaction.all.ha_list == 0);
 
-  if (is_real_trans)
-    param.flags = true;
+  param.flags = is_real_trans ? TRANS_IS_REAL_TRANS : 0;
 
-  thd->get_trans_fixed_pos(&param.log_file, &param.log_pos);
+  Trans_binlog_info *log_info=
+    my_pthread_getspecific_ptr(Trans_binlog_info*, RPL_TRANS_BINLOG_INFO);
 
-  DBUG_PRINT("enter", ("log_file: %s, log_pos: %llu", param.log_file, param.log_pos));
+  param.log_file= log_info ? log_info->log_file : 0;
+  param.log_pos= log_info ? log_info->log_pos : 0;
 
   int ret= 0;
   FOREACH_OBSERVER(ret, after_commit, thd, (&param));
-  DBUG_RETURN(ret);
+
+  /*
+    This is the end of a real transaction or autocommit statement, we
+    can free the memory allocated for binlog file and position.
+  */
+  if (is_real_trans && log_info)
+  {
+    my_pthread_setspecific_ptr(RPL_TRANS_BINLOG_INFO, NULL);
+    my_free(log_info);
+  }
+  return ret;
 }
 
 int Trans_delegate::after_rollback(THD *thd, bool all)
 {
-  Trans_param param = { 0, 0, 0, 0 };
+  Trans_param param;
   bool is_real_trans= (all || thd->transaction.all.ha_list == 0);
 
-  if (is_real_trans)
-    param.flags|= TRANS_IS_REAL_TRANS;
-  thd->get_trans_fixed_pos(&param.log_file, &param.log_pos);
+  param.flags = is_real_trans ? TRANS_IS_REAL_TRANS : 0;
+
+  Trans_binlog_info *log_info=
+    my_pthread_getspecific_ptr(Trans_binlog_info*, RPL_TRANS_BINLOG_INFO);
+    
+  param.log_file= log_info ? log_info->log_file : 0;
+  param.log_pos= log_info ? log_info->log_pos : 0;
+
   int ret= 0;
   FOREACH_OBSERVER(ret, after_rollback, thd, (&param));
+
+  /*
+    This is the end of a real transaction or autocommit statement, we
+    can free the memory allocated for binlog file and position.
+  */
+  if (is_real_trans && log_info)
+  {
+    my_pthread_setspecific_ptr(RPL_TRANS_BINLOG_INFO, NULL);
+    my_free(log_info);
+  }
   return ret;
 }
 
 int Binlog_storage_delegate::after_flush(THD *thd,
                                          const char *log_file,
-                                         my_off_t log_pos)
+                                         my_off_t log_pos,
+                                         bool synced)
 {
-  DBUG_ENTER("Binlog_storage_delegate::after_flush");
-  DBUG_PRINT("enter", ("log_file: %s, log_pos: %llu",
-                       log_file, (ulonglong) log_pos));
   Binlog_storage_param param;
+  uint32 flags=0;
+  if (synced)
+    flags |= BINLOG_STORAGE_IS_SYNCED;
 
+  Trans_binlog_info *log_info=
+    my_pthread_getspecific_ptr(Trans_binlog_info*, RPL_TRANS_BINLOG_INFO);
+    
+  if (!log_info)
+  {
+    if(!(log_info=
+         (Trans_binlog_info *)my_malloc(sizeof(Trans_binlog_info), MYF(0))))
+      return 1;
+    my_pthread_setspecific_ptr(RPL_TRANS_BINLOG_INFO, log_info);
+  }
+    
+  strcpy(log_info->log_file, log_file+dirname_length(log_file));
+  log_info->log_pos = log_pos;
+  
   int ret= 0;
-  FOREACH_OBSERVER(ret, after_flush, thd, (&param, log_file, log_pos));
-  DBUG_RETURN(ret);
+  FOREACH_OBSERVER(ret, after_flush, thd,
+                   (&param, log_info->log_file, log_info->log_pos, flags));
+  return ret;
 }
 
 #ifdef HAVE_REPLICATION
 int Binlog_transmit_delegate::transmit_start(THD *thd, ushort flags,
                                              const char *log_file,
-                                             my_off_t log_pos,
-                                             bool *observe_transmission)
+                                             my_off_t log_pos)
 {
   Binlog_transmit_param param;
   param.flags= flags;
 
   int ret= 0;
   FOREACH_OBSERVER(ret, transmit_start, thd, (&param, log_file, log_pos));
-  *observe_transmission= param.should_observe();
   return ret;
 }
 
@@ -280,8 +329,6 @@ int Binlog_transmit_delegate::transmit_stop(THD *thd, ushort flags)
 {
   Binlog_transmit_param param;
   param.flags= flags;
-
-  DBUG_EXECUTE_IF("crash_binlog_transmit_hook", DBUG_SUICIDE(););
 
   int ret= 0;
   FOREACH_OBSERVER(ret, transmit_stop, thd, (&param));
@@ -302,8 +349,6 @@ int Binlog_transmit_delegate::reserve_header(THD *thd, ushort flags,
   Binlog_transmit_param param;
   param.flags= flags;
   param.server_id= thd->server_id;
-
-  DBUG_EXECUTE_IF("crash_binlog_transmit_hook", DBUG_SUICIDE(););
 
   int ret= 0;
   read_lock();
@@ -350,8 +395,6 @@ int Binlog_transmit_delegate::before_send_event(THD *thd, ushort flags,
   Binlog_transmit_param param;
   param.flags= flags;
 
-  DBUG_EXECUTE_IF("crash_binlog_transmit_hook", DBUG_SUICIDE(););
-
   int ret= 0;
   FOREACH_OBSERVER(ret, before_send_event, thd,
                    (&param, (uchar *)packet->c_ptr(),
@@ -361,20 +404,14 @@ int Binlog_transmit_delegate::before_send_event(THD *thd, ushort flags,
 }
 
 int Binlog_transmit_delegate::after_send_event(THD *thd, ushort flags,
-                                               String *packet,
-                                               const char *skipped_log_file,
-                                               my_off_t skipped_log_pos)
+                                               String *packet)
 {
   Binlog_transmit_param param;
   param.flags= flags;
 
-  DBUG_EXECUTE_IF("crash_binlog_transmit_hook", DBUG_SUICIDE(););
-
   int ret= 0;
   FOREACH_OBSERVER(ret, after_send_event, thd,
-                   (&param, packet->c_ptr(), packet->length(),
-                   skipped_log_file+dirname_length(skipped_log_file),
-                    skipped_log_pos));
+                   (&param, packet->c_ptr(), packet->length()));
   return ret;
 }
 
@@ -393,11 +430,11 @@ void Binlog_relay_IO_delegate::init_param(Binlog_relay_IO_param *param,
                                           Master_info *mi)
 {
   param->mysql= mi->mysql;
-  param->user= const_cast<char *>(mi->get_user());
+  param->user= mi->user;
   param->host= mi->host;
   param->port= mi->port;
-  param->master_log_name= const_cast<char *>(mi->get_master_log_name());
-  param->master_log_pos= mi->get_master_log_pos();
+  param->master_log_name= mi->master_log_name;
+  param->master_log_pos= mi->master_log_pos;
 }
 
 int Binlog_relay_IO_delegate::thread_start(THD *thd, Master_info *mi)
@@ -490,9 +527,7 @@ int unregister_trans_observer(Trans_observer *observer, void *p)
 
 int register_binlog_storage_observer(Binlog_storage_observer *observer, void *p)
 {
-  DBUG_ENTER("register_binlog_storage_observer");
-  int result= binlog_storage_delegate->add_observer(observer, (st_plugin_int *)p);
-  DBUG_RETURN(result);
+  return binlog_storage_delegate->add_observer(observer, (st_plugin_int *)p);
 }
 
 int unregister_binlog_storage_observer(Binlog_storage_observer *observer, void *p)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, 2013, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -26,100 +26,109 @@ int reassign_keycache_tables(THD* thd, KEY_CACHE *src_cache,
                              KEY_CACHE *dst_cache);
 
 /**
-  Sql_cmd_analyze_table represents the ANALYZE TABLE statement.
+  Analyze_statement represents the ANALYZE TABLE statement.
 */
-class Sql_cmd_analyze_table : public Sql_cmd
+class Analyze_table_statement : public Sql_statement
 {
 public:
   /**
     Constructor, used to represent a ANALYZE TABLE statement.
+    @param lex the LEX structure for this statement.
   */
-  Sql_cmd_analyze_table()
+  Analyze_table_statement(LEX *lex)
+    : Sql_statement(lex)
   {}
 
-  ~Sql_cmd_analyze_table()
+  ~Analyze_table_statement()
   {}
 
+  /**
+    Execute a ANALYZE TABLE statement at runtime.
+    @param thd the current thread.
+    @return false on success.
+  */
   bool execute(THD *thd);
-
-  virtual enum_sql_command sql_command_code() const
-  {
-    return SQLCOM_ANALYZE;
-  }
 };
 
 
 
 /**
-  Sql_cmd_check_table represents the CHECK TABLE statement.
+  Check_table_statement represents the CHECK TABLE statement.
 */
-class Sql_cmd_check_table : public Sql_cmd
+class Check_table_statement : public Sql_statement
 {
 public:
   /**
     Constructor, used to represent a CHECK TABLE statement.
+    @param lex the LEX structure for this statement.
   */
-  Sql_cmd_check_table()
+  Check_table_statement(LEX *lex)
+    : Sql_statement(lex)
   {}
 
-  ~Sql_cmd_check_table()
+  ~Check_table_statement()
   {}
 
+  /**
+    Execute a CHECK TABLE statement at runtime.
+    @param thd the current thread.
+    @return false on success.
+  */
   bool execute(THD *thd);
-
-  virtual enum_sql_command sql_command_code() const
-  {
-    return SQLCOM_CHECK;
-  }
 };
 
 
+
 /**
-  Sql_cmd_optimize_table represents the OPTIMIZE TABLE statement.
+  Optimize_table_statement represents the OPTIMIZE TABLE statement.
 */
-class Sql_cmd_optimize_table : public Sql_cmd
+class Optimize_table_statement : public Sql_statement
 {
 public:
   /**
     Constructor, used to represent a OPTIMIZE TABLE statement.
+    @param lex the LEX structure for this statement.
   */
-  Sql_cmd_optimize_table()
+  Optimize_table_statement(LEX *lex)
+    : Sql_statement(lex)
   {}
 
-  ~Sql_cmd_optimize_table()
+  ~Optimize_table_statement()
   {}
 
+  /**
+    Execute a OPTIMIZE TABLE statement at runtime.
+    @param thd the current thread.
+    @return false on success.
+  */
   bool execute(THD *thd);
-
-  virtual enum_sql_command sql_command_code() const
-  {
-    return SQLCOM_OPTIMIZE;
-  }
 };
 
 
 
 /**
-  Sql_cmd_repair_table represents the REPAIR TABLE statement.
+  Repair_table_statement represents the REPAIR TABLE statement.
 */
-class Sql_cmd_repair_table : public Sql_cmd
+class Repair_table_statement : public Sql_statement
 {
 public:
   /**
     Constructor, used to represent a REPAIR TABLE statement.
+    @param lex the LEX structure for this statement.
   */
-  Sql_cmd_repair_table()
+  Repair_table_statement(LEX *lex)
+    : Sql_statement(lex)
   {}
 
-  ~Sql_cmd_repair_table()
+  ~Repair_table_statement()
   {}
 
+  /**
+    Execute a REPAIR TABLE statement at runtime.
+    @param thd the current thread.
+    @return false on success.
+  */
   bool execute(THD *thd);
-
-  virtual enum_sql_command sql_command_code() const
-  {
-    return SQLCOM_REPAIR;
-  }
 };
 
 #endif

@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003, 2005-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include "restore.hpp"
 #include <signaldata/FsRef.hpp>
@@ -28,14 +27,14 @@
 #include <signaldata/LqhKey.hpp>
 #include <AttributeHeader.hpp>
 #include <md5_hash.hpp>
-#include <dblqh/Dblqh.hpp>
+#include <Dblqh.hpp>
 #include <dbtup/Dbtup.hpp>
 #include <KeyDescriptor.hpp>
 
 #define PAGES LCP_RESTORE_BUFFER
 
-Restore::Restore(Block_context& ctx, Uint32 instanceNumber) :
-  SimulatedBlock(RESTORE, ctx, instanceNumber),
+Restore::Restore(Block_context& ctx) :
+  SimulatedBlock(RESTORE, ctx),
   m_file_list(m_file_pool),
   m_file_hash(m_file_pool)
 {
@@ -73,9 +72,8 @@ Restore::execSTTOR(Signal* signal)
 {
   jamEntry();                            
 
-  c_lqh = (Dblqh*)globalData.getBlock(DBLQH, instance());
-  c_tup = (Dbtup*)globalData.getBlock(DBTUP, instance());
-  ndbrequire(c_lqh != 0 && c_tup != 0);
+  c_lqh = (Dblqh*)globalData.getBlock(DBLQH);
+  c_tup = (Dbtup*)globalData.getBlock(DBTUP);
   sendSTTORRY(signal);
   
   return;
@@ -193,8 +191,7 @@ Restore::sendSTTORRY(Signal* signal){
   signal->theData[3] = 1;
   signal->theData[4] = 3;
   signal->theData[5] = 255; // No more start phases from missra
-  BlockReference cntrRef = !isNdbMtLqh() ? NDBCNTR_REF : RESTORE_REF;
-  sendSignal(cntrRef, GSN_STTORRY, signal, 6, JBB);
+  sendSignal(NDBCNTR_REF, GSN_STTORRY, signal, 6, JBB);
 }
 
 void
@@ -361,14 +358,9 @@ Restore::release_file(FilePtr file_ptr)
 void
 Restore::open_file(Signal* signal, FilePtr file_ptr)
 {
-  signal->theData[0] = NDB_LE_StartReadLCP;
-  signal->theData[1] = file_ptr.p->m_table_id;
-  signal->theData[2] = file_ptr.p->m_fragment_id;
-  sendSignal(CMVMI_REF, GSN_EVENT_REP, signal, 3, JBB);
-
   FsOpenReq * req = (FsOpenReq *)signal->getDataPtrSend();
   req->userReference = reference();
-  req->fileFlags = FsOpenReq::OM_READONLY | FsOpenReq::OM_GZ;
+  req->fileFlags = FsOpenReq::OM_READONLY ;
   req->userPointer = file_ptr.i;
   
   FsOpenReq::setVersion(req->fileNumber, 5);
@@ -493,7 +485,7 @@ Restore::restore_next(Signal* signal, FilePtr file_ptr)
       
       if (unlikely((status & File:: FILE_THREAD_RUNNING) == 0))
       {
-        crash_during_restore(file_ptr, __LINE__, 0);
+	ndbrequire(false);
       }
       len= 0;
       break;
@@ -521,8 +513,7 @@ Restore::restore_next(Signal* signal, FilePtr file_ptr)
 	(file_ptr.p->m_current_page_index + 1) % page_count;
       
       Uint32 first = (GLOBAL_PAGE_SIZE_WORDS - pos);
-      // wl4391_todo removing valgrind overlap warning for now
-      memmove(page_ptr.p, page_ptr.p->data+pos, 4 * first);
+      memcpy(page_ptr.p, page_ptr.p->data+pos, 4 * first);
       memcpy(page_ptr.p->data+first, next_page_ptr.p, 4 * (len - first));
       data= page_ptr.p->data;
     } 
@@ -722,9 +713,12 @@ Restore::execFSCLOSECONF(Signal * signal)
 
   if(file_ptr.p->m_outstanding_operations == 0)
   {
-    jam();
-    restore_lcp_conf(signal, file_ptr);
-    return;
+    RestoreLcpConf* rep= (RestoreLcpConf*)signal->getDataPtrSend();
+    rep->senderData= file_ptr.p->m_sender_data;
+    sendSignal(file_ptr.p->m_sender_ref, 
+	       GSN_RESTORE_LCP_CONF, signal, 
+	       RestoreLcpConf::SignalLength, JBB);
+    release_file(file_ptr);
   }
 }
 
@@ -741,8 +735,7 @@ Restore::parse_file_header(Signal* signal,
     return;
   }
   
-  file_ptr.p->m_lcp_version = ntohl(fh->BackupVersion);
-  if (check_file_version(signal, ntohl(fh->BackupVersion)))
+  if (check_file_version(signal, ntohl(fh->NdbVersion)))
   {
     parse_error(signal, file_ptr, __LINE__, ntohl(fh->NdbVersion));
     return;
@@ -949,117 +942,100 @@ Restore::parse_record(Signal* signal, FilePtr file_ptr,
   data += 1;
   const Uint32* const dataStart = data;
 
+  Uint32 *keyData = key_start;
+  Uint32 *attrData = attr_start;
+  union {
+    Column c;
+    Uint32 _align[sizeof(Column)/sizeof(Uint32)];
+  };
   bool disk = false;
   bool rowid = false;
   bool gci = false;
-  Uint32 keyLen;
-  Uint32 attrLen;
-  Local_key rowid_val;
-  Uint64 gci_val;
   Uint32 tableId = file_ptr.p->m_table_id;
-  const KeyDescriptor* desc = g_key_descriptor_pool.getPtr(tableId);
 
-  if (likely(file_ptr.p->m_lcp_version >= NDBD_RAW_LCP))
+  Uint64 gci_val;
+  Local_key rowid_val;
+  columns.first(it);
+  while(!it.isNull())
   {
-    rowid = true;
-    rowid_val.m_page_no = data[0];
-    rowid_val.m_page_idx = data[1];
-    keyLen = c_tup->read_lcp_keys(tableId, data+2, len - 3, key_start);
-
-    AttributeHeader::init(attr_start, AttributeHeader::READ_LCP, 4*(len - 3));
-    memcpy(attr_start + 1, data + 2, 4 * (len - 3));
-    attrLen = 1 + len - 3;
-  }
-  else
-  {
-    Uint32 *keyData = key_start;
-    Uint32 *attrData = attr_start;
-    union {
-      Column c;
-      Uint32 _align[sizeof(Column)/sizeof(Uint32)];
-    };
+    _align[0] = *it.data; ndbrequire(columns.next(it));
+    _align[1] = *it.data; columns.next(it);
     
-    columns.first(it);
-    while(!it.isNull())
+    if (c.m_id == AttributeHeader::ROWID)
     {
-      _align[0] = *it.data; ndbrequire(columns.next(it));
-      _align[1] = *it.data; columns.next(it);
-
-      if (c.m_id == AttributeHeader::ROWID)
-      {
-        rowid_val.m_page_no = data[0];
-        rowid_val.m_page_idx = data[1];
-        data += 2;
-        rowid = true;
-        continue;
-      }
-
-      if (c.m_id == AttributeHeader::ROW_GCI)
-      {
-        memcpy(&gci_val, data, 8);
-        data += 2;
-        gci = true;
-        continue;
-      }
-
-      if (! (c.m_flags & (Column::COL_VAR | Column::COL_NULL)))
-      {
-        ndbrequire(data < dataStart + len);
-
-        if(c.m_flags & Column::COL_KEY)
-        {
-          memcpy(keyData, data, 4*c.m_size);
-          keyData += c.m_size;
-        }
-
-        AttributeHeader::init(attrData++, c.m_id, c.m_size << 2);
-        memcpy(attrData, data, 4*c.m_size);
-        attrData += c.m_size;
-        data += c.m_size;
-      }
-
-      if(c.m_flags & Column::COL_DISK)
-        disk= true;
+      rowid_val.m_page_no = data[0];
+      rowid_val.m_page_idx = data[1];
+      data += 2;
+      rowid = true;
+      continue;
     }
 
-    // second part is data driven
-    while (data + 2 < dataStart + len) {
-      Uint32 sz= ntohl(*data); data++;
-      Uint32 id= ntohl(*data); data++; // column_no
-
-      ndbrequire(columns.position(it, 2 * id));
-
-      _align[0] = *it.data; ndbrequire(columns.next(it));
-      _align[1] = *it.data;
-
-      Uint32 sz32 = (sz + 3) >> 2;
-      ndbassert(c.m_flags & (Column::COL_VAR | Column::COL_NULL));
-      if (c.m_flags & Column::COL_KEY)
-      {
-        memcpy(keyData, data, 4 * sz32);
-        keyData += sz32;
-      }
-
-      AttributeHeader::init(attrData++, c.m_id, sz);
-      memcpy(attrData, data, sz);
-
-      attrData += sz32;
-      data += sz32;
-    }
-
-    ndbrequire(data == dataStart + len - 1);
-
-    ndbrequire(disk == false); // Not supported...
-    ndbrequire(rowid == true);
-    keyLen = Uint32(keyData - key_start);
-    attrLen = Uint32(attrData - attr_start);
-    if (desc->noOfKeyAttr != desc->noOfVarKeys)
+    if (c.m_id == AttributeHeader::ROW_GCI)
     {
-      reorder_key(desc, key_start, keyLen);
+      memcpy(&gci_val, data, 8);
+      data += 2;
+      gci = true;
+      continue;
     }
+    
+    if (! (c.m_flags & (Column::COL_VAR | Column::COL_NULL)))
+    {
+      ndbrequire(data < dataStart + len);
+
+      if(c.m_flags & Column::COL_KEY)
+      {
+        memcpy(keyData, data, 4*c.m_size);
+        keyData += c.m_size;
+      } 
+
+      AttributeHeader::init(attrData++, c.m_id, c.m_size << 2);
+      memcpy(attrData, data, 4*c.m_size);
+      attrData += c.m_size;
+      data += c.m_size;
+    }
+
+    if(c.m_flags & Column::COL_DISK)
+      disk= true;
   }
-  
+
+  // second part is data driven
+  while (data + 2 < dataStart + len) {
+    Uint32 sz= ntohl(*data); data++;
+    Uint32 id= ntohl(*data); data++; // column_no
+
+    ndbrequire(columns.position(it, 2 * id));
+
+    _align[0] = *it.data; ndbrequire(columns.next(it));
+    _align[1] = *it.data;
+
+    Uint32 sz32 = (sz + 3) >> 2;
+    ndbassert(c.m_flags & (Column::COL_VAR | Column::COL_NULL));
+    if (c.m_flags & Column::COL_KEY)
+    {
+      memcpy(keyData, data, 4 * sz32);
+      keyData += sz32;
+    }
+
+    AttributeHeader::init(attrData++, c.m_id, sz);
+    memcpy(attrData, data, sz);
+
+    attrData += sz32;
+    data += sz32;
+  }
+
+  ndbrequire(data == dataStart + len - 1);
+
+  ndbrequire(disk == false); // Not supported...
+  ndbrequire(rowid == true);
+  Uint32 keyLen = keyData - key_start;
+  Uint32 attrLen = attrData - attr_start;
   LqhKeyReq * req = (LqhKeyReq *)signal->getDataPtrSend();
+  
+  const KeyDescriptor* desc = g_key_descriptor_pool.getPtr(tableId);
+  if (desc->noOfKeyAttr != desc->noOfVarKeys)
+  {
+    reorder_key(desc, key_start, keyLen);
+  }
   
   Uint32 hashValue;
   if (g_key_descriptor_pool.getPtr(tableId)->hasCharAttr)
@@ -1146,12 +1122,12 @@ Restore::reorder_key(const KeyDescriptor* desc,
       src += sz;
       break;
     case NDB_ARRAYTYPE_SHORT_VAR:
-      sz = (1 + ((Uint8*)var)[0] + 3) >> 2;
+      sz = (1 + ((char*)var)[0] + 3) >> 2;
       memcpy(dst, var, 4 * sz);
       var += sz;
       break;
     case NDB_ARRAYTYPE_MEDIUM_VAR:
-      sz = (2 + ((Uint8*)var)[0] +  256*((Uint8*)var)[1] + 3) >> 2;
+      sz = (2 + ((char*)var)[0] +  256*((char*)var)[1] + 3) >> 2;
       memcpy(dst, var, 4 * sz);
       var += sz;
       break;
@@ -1185,32 +1161,18 @@ Restore::execLQHKEYREF(Signal* signal)
   LqhKeyRef* ref = (LqhKeyRef*)signal->getDataPtr();
   m_file_pool.getPtr(file_ptr, ref->connectPtr);
   
-  crash_during_restore(file_ptr, __LINE__, ref->errorCode);
-  ndbrequire(false);
-}
-
-void
-Restore::crash_during_restore(FilePtr file_ptr, Uint32 line, Uint32 errCode)
-{
   char buf[255], name[100];
   BaseString::snprintf(name, sizeof(name), "%u/T%dF%d",
 		       file_ptr.p->m_lcp_no,
 		       file_ptr.p->m_table_id,
 		       file_ptr.p->m_fragment_id);
   
-  if (errCode)
-  {
-    BaseString::snprintf(buf, sizeof(buf),
-                         "Error %d (line: %u) during restore of  %s",
-                         errCode, line, name);
-  }
-  else
-  {
-    BaseString::snprintf(buf, sizeof(buf),
-                         "Error (line %u) during restore of  %s",
-                         line, name);
-  }
+  BaseString::snprintf(buf, sizeof(buf),
+		       "Error %d during restore of  %s",
+		       ref->errorCode, name);
+  
   progError(__LINE__, NDBD_EXIT_INVALID_LCP_FILE, buf);  
+  ndbrequire(false);
 }
 
 void
@@ -1218,52 +1180,20 @@ Restore::execLQHKEYCONF(Signal* signal)
 {
   FilePtr file_ptr;
   LqhKeyConf * conf = (LqhKeyConf *)signal->getDataPtr();
-  m_file_pool.getPtr(file_ptr, conf->opPtr);
+  m_file_pool.getPtr(file_ptr, conf->connectPtr);
   
   ndbassert(file_ptr.p->m_outstanding_operations);
   file_ptr.p->m_outstanding_operations--;
   file_ptr.p->m_rows_restored++;
   if(file_ptr.p->m_outstanding_operations == 0 && file_ptr.p->m_fd == RNIL)
   {
-    jam();
-    restore_lcp_conf(signal, file_ptr);
-    return;
-  }
-}
-
-void
-Restore::restore_lcp_conf(Signal* signal, FilePtr file_ptr)
-{
-  RestoreLcpConf* rep= (RestoreLcpConf*)signal->getDataPtrSend();
-  rep->senderData= file_ptr.p->m_sender_data;
-  if(file_ptr.p->is_lcp())
-  {
-    /**
-     * Temporary reset DBTUP's #disk attributes on table
-     *
-     * TUP will send RESTORE_LCP_CONF
-     */
-    c_tup->complete_restore_lcp(signal, 
-                                file_ptr.p->m_sender_ref,
-                                file_ptr.p->m_sender_data,
-                                file_ptr.p->m_table_id,
-				file_ptr.p->m_fragment_id);
-  }
-  else
-  {
+    RestoreLcpConf* rep= (RestoreLcpConf*)signal->getDataPtrSend();
+    rep->senderData= file_ptr.p->m_sender_data;
     sendSignal(file_ptr.p->m_sender_ref, 
-               GSN_RESTORE_LCP_CONF, signal, 
-               RestoreLcpConf::SignalLength, JBB);
+	       GSN_RESTORE_LCP_CONF, signal, 
+	       RestoreLcpConf::SignalLength, JBB);
+    release_file(file_ptr);
   }
-
-  signal->theData[0] = NDB_LE_ReadLCPComplete;
-  signal->theData[1] = file_ptr.p->m_table_id;
-  signal->theData[2] = file_ptr.p->m_fragment_id;
-  signal->theData[3] = Uint32(file_ptr.p->m_rows_restored >> 32);
-  signal->theData[4] = Uint32(file_ptr.p->m_rows_restored);
-  sendSignal(CMVMI_REF, GSN_EVENT_REP, signal, 5, JBB);
-
-  release_file(file_ptr);
 }
 
 void
@@ -1283,6 +1213,17 @@ Restore::parse_fragment_footer(Signal* signal, FilePtr file_ptr,
     parse_error(signal, file_ptr, __LINE__, ntohl(fh->SectionLength));
     return;
   }
+
+  if(file_ptr.p->is_lcp())
+  {
+    /**
+     * Temporary reset DBTUP's #disk attributes on table
+     */
+    c_tup->complete_restore_lcp(file_ptr.p->m_table_id,
+				file_ptr.p->m_fragment_id);
+  }
+
+  file_ptr.p->m_fragment_id = RNIL;
 }
 
 void
@@ -1331,7 +1272,7 @@ Restore::check_file_version(Signal* signal, Uint32 file_version)
   {
     char buf[255];
     char verbuf[255];
-    ndbGetVersionString(file_version, 0, 0, verbuf, sizeof(verbuf));
+    ndbGetVersionString(file_version, 0, verbuf, sizeof(verbuf));
     BaseString::snprintf(buf, sizeof(buf),
 			 "Unsupported version of LCP files found on disk, "
 			 " found: %s", verbuf);

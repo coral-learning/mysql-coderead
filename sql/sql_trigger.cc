@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2004, 2015, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2004, 2018, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,7 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA */
 
 
 #define MYSQL_LEX 1
@@ -92,9 +92,9 @@ private:
     :Stored_program_creation_ctx(thd)
   { }
 
-  Trigger_creation_ctx(const CHARSET_INFO *client_cs,
-                       const CHARSET_INFO *connection_cl,
-                       const CHARSET_INFO *db_cl)
+  Trigger_creation_ctx(CHARSET_INFO *client_cs,
+                       CHARSET_INFO *connection_cl,
+                       CHARSET_INFO *db_cl)
     :Stored_program_creation_ctx(client_cs, connection_cl, db_cl)
   { }
 };
@@ -111,9 +111,9 @@ Trigger_creation_ctx::create(THD *thd,
                              const LEX_STRING *connection_cl_name,
                              const LEX_STRING *db_cl_name)
 {
-  const CHARSET_INFO *client_cs;
-  const CHARSET_INFO *connection_cl;
-  const CHARSET_INFO *db_cl;
+  CHARSET_INFO *client_cs;
+  CHARSET_INFO *connection_cl;
+  CHARSET_INFO *db_cl;
 
   bool invalid_creation_ctx= FALSE;
 
@@ -157,7 +157,7 @@ Trigger_creation_ctx::create(THD *thd,
   if (invalid_creation_ctx)
   {
     push_warning_printf(thd,
-                        Sql_condition::WARN_LEVEL_WARN,
+                        MYSQL_ERROR::WARN_LEVEL_WARN,
                         ER_TRG_INVALID_CREATION_CTX,
                         ER(ER_TRG_INVALID_CREATION_CTX),
                         (const char *) db_name,
@@ -286,8 +286,8 @@ public:
   Handle_old_incorrect_sql_modes_hook(char *file_path)
     :path(file_path)
   {};
-  virtual bool process_unknown_string(const char *&unknown_key, uchar* base,
-                                      MEM_ROOT *mem_root, const char *end);
+  virtual bool process_unknown_string(char *&unknown_key, uchar* base,
+                                      MEM_ROOT *mem_root, char *end);
 };
 
 
@@ -298,8 +298,8 @@ public:
                                           LEX_STRING *trigger_table_arg)
     :path(file_path), trigger_table_value(trigger_table_arg)
   {};
-  virtual bool process_unknown_string(const char *&unknown_key, uchar* base,
-                                      MEM_ROOT *mem_root, const char *end);
+  virtual bool process_unknown_string(char *&unknown_key, uchar* base,
+                                      MEM_ROOT *mem_root, char *end);
 private:
   char *path;
   LEX_STRING *trigger_table_value;
@@ -329,9 +329,9 @@ public:
   virtual bool handle_condition(THD *thd,
                                 uint sql_errno,
                                 const char* sqlstate,
-                                Sql_condition::enum_warning_level level,
+                                MYSQL_ERROR::enum_warning_level level,
                                 const char* message,
-                                Sql_condition ** cond_hdl)
+                                MYSQL_ERROR ** cond_hdl)
   {
     if (sql_errno != EE_OUTOFMEMORY &&
         sql_errno != ER_OUT_OF_RESOURCES)
@@ -568,7 +568,7 @@ bool mysql_create_or_drop_trigger(THD *thd, TABLE_LIST *tables, bool create)
   if (result)
     goto end;
 
-  close_all_tables_for_name(thd, table->s, false, NULL);
+  close_all_tables_for_name(thd, table->s, FALSE, NULL);
   /*
     Reopen the table if we were under LOCK TABLES.
     Ignore the return value for now. It's better to
@@ -585,8 +585,6 @@ bool mysql_create_or_drop_trigger(THD *thd, TABLE_LIST *tables, bool create)
 end:
   if (!result)
   {
-    if (tables)
-      thd->add_to_binlog_accessed_dbs(tables->db);
     result= write_bin_log(thd, TRUE, stmt_query.ptr(), stmt_query.length());
   }
 
@@ -596,7 +594,7 @@ end:
     with the implicit commit.
   */
   if (thd->locked_tables_mode && tables && lock_upgrade_done)
-    mdl_ticket->downgrade_lock(MDL_SHARED_NO_READ_WRITE);
+    mdl_ticket->downgrade_exclusive_lock(MDL_SHARED_NO_READ_WRITE);
 
   /* Restore the query table list. Used only for drop trigger. */
   if (!create)
@@ -642,14 +640,14 @@ bool Table_triggers_list::create_trigger(THD *thd, TABLE_LIST *tables,
   LEX_STRING *trg_def;
   LEX_STRING definer_user;
   LEX_STRING definer_host;
-  sql_mode_t *trg_sql_mode;
+  ulonglong *trg_sql_mode;
   char trg_definer_holder[USER_HOST_BUFF_SIZE];
   LEX_STRING *trg_definer;
+  Item_trigger_field *trg_field;
   struct st_trigname trigname;
   LEX_STRING *trg_client_cs_name;
   LEX_STRING *trg_connection_cl_name;
   LEX_STRING *trg_db_cl_name;
-  bool was_truncated;
 
   if (check_for_broken_triggers())
     return true;
@@ -662,12 +660,8 @@ bool Table_triggers_list::create_trigger(THD *thd, TABLE_LIST *tables,
     return 1;
   }
 
-  sp_head *trg= lex->sphead;
-  int trg_event= trg->m_trg_chistics.event;
-  int trg_action_time= trg->m_trg_chistics.action_time;
-
   /* We don't allow creation of several triggers of the same type yet */
-  if (bodies[trg_event][trg_action_time] != NULL)
+  if (bodies[lex->trg_chistics.event][lex->trg_chistics.action_time] != 0)
   {
     my_error(ER_NOT_SUPPORTED_YET, MYF(0),
              "multiple triggers with the same action time"
@@ -735,24 +729,18 @@ bool Table_triggers_list::create_trigger(THD *thd, TABLE_LIST *tables,
   */
   old_field= new_field= table->field;
 
-  for (SQL_I_List<Item_trigger_field> *trig_field_list=
-         lex->sphead->m_list_of_trig_fields_item_lists.first;
-      trig_field_list;
-      trig_field_list= trig_field_list->first->next_trig_field_list)
+  for (trg_field= lex->trg_table_fields.first;
+       trg_field; trg_field= trg_field->next_trg_field)
   {
-    for (Item_trigger_field *trg_field= trig_field_list->first;
-         trg_field; trg_field= trg_field->next_trg_field)
-    {
-      /*
-        NOTE: now we do not check privileges at CREATE TRIGGER time. This will
-        be changed in the future.
-      */
-      trg_field->setup_field(thd, table, NULL);
+    /*
+      NOTE: now we do not check privileges at CREATE TRIGGER time. This will
+      be changed in the future.
+    */
+    trg_field->setup_field(thd, table, NULL);
 
-      if (!trg_field->fixed &&
-          trg_field->fix_fields(thd, (Item **)0))
-        return 1;
-    }
+    if (!trg_field->fixed &&
+        trg_field->fix_fields(thd, (Item **)0))
+      return 1;
   }
 
   /*
@@ -764,20 +752,11 @@ bool Table_triggers_list::create_trigger(THD *thd, TABLE_LIST *tables,
                                     tables->db, tables->table_name,
                                     TRG_EXT, 0);
   file.str= file_buff;
-
   trigname_file.length= build_table_filename(trigname_buff, FN_REFLEN-1,
                                              tables->db,
                                              lex->spname->m_name.str,
-                                             TRN_EXT, 0, &was_truncated);
-  // Check if we hit FN_REFLEN bytes in path length
-  if (was_truncated)
-  {
-    my_error(ER_IDENT_CAUSES_TOO_LONG_PATH, MYF(0), sizeof(trigname_buff)-1,
-             trigname_buff);
-    return 1;
-  }
+                                             TRN_EXT, 0);
   trigname_file.str= trigname_buff;
-
 
   /* Use the filesystem to enforce trigger namespace constraints. */
   if (!access(trigname_buff, F_OK))
@@ -804,7 +783,7 @@ bool Table_triggers_list::create_trigger(THD *thd, TABLE_LIST *tables,
   if (!(trg_def= alloc_lex_string(&table->mem_root)) ||
       definitions_list.push_back(trg_def, &table->mem_root) ||
 
-      !(trg_sql_mode= alloc_type<sql_mode_t>(&table->mem_root)) ||
+      !(trg_sql_mode= alloc_type<ulonglong>(&table->mem_root)) ||
       definition_modes_list.push_back(trg_sql_mode, &table->mem_root) ||
 
       !(trg_definer= alloc_lex_string(&table->mem_root)) ||
@@ -829,7 +808,7 @@ bool Table_triggers_list::create_trigger(THD *thd, TABLE_LIST *tables,
                                    lex->definer->user.str))
   {
     push_warning_printf(thd,
-                        Sql_condition::WARN_LEVEL_NOTE,
+                        MYSQL_ERROR::WARN_LEVEL_NOTE,
                         ER_NO_SUCH_USER,
                         ER(ER_NO_SUCH_USER),
                         lex->definer->user.str,
@@ -1019,7 +998,7 @@ bool Table_triggers_list::drop_trigger(THD *thd, TABLE_LIST *tables,
 
   List_iterator_fast<LEX_STRING> it_name(names_list);
 
-  List_iterator<sql_mode_t> it_mod(definition_modes_list);
+  List_iterator<ulonglong> it_mod(definition_modes_list);
   List_iterator<LEX_STRING> it_def(definitions_list);
   List_iterator<LEX_STRING> it_definer(definers_list);
   List_iterator<LEX_STRING> it_client_cs_name(client_cs_names);
@@ -1095,35 +1074,37 @@ Table_triggers_list::~Table_triggers_list()
   of record[0] (they will represent OLD.* row values in ON UPDATE trigger
   and in ON DELETE trigger which will be called during REPLACE execution).
 
+  @param table   pointer to TABLE object for which we are creating fields.
+
   @retval
     False   success
   @retval
     True    error
 */
-bool Table_triggers_list::prepare_record1_accessors()
+bool Table_triggers_list::prepare_record1_accessors(TABLE *table)
 {
   Field **fld, **old_fld;
 
-  if (!(record1_field= (Field **)alloc_root(&trigger_table->mem_root,
-                                            (trigger_table->s->fields + 1) *
+  if (!(record1_field= (Field **)alloc_root(&table->mem_root,
+                                            (table->s->fields + 1) *
                                             sizeof(Field*))))
-    return true;
+    return 1;
 
-  for (fld= trigger_table->field, old_fld= record1_field; *fld; fld++, old_fld++)
+  for (fld= table->field, old_fld= record1_field; *fld; fld++, old_fld++)
   {
     /*
       QQ: it is supposed that it is ok to use this function for field
       cloning...
     */
-    if (!(*old_fld= (*fld)->new_field(&trigger_table->mem_root, trigger_table,
-                                      trigger_table == (*fld)->table)))
-      return true;
-    (*old_fld)->move_field_offset((my_ptrdiff_t)(trigger_table->record[1] -
-                                                 trigger_table->record[0]));
+    if (!(*old_fld= (*fld)->new_field(&table->mem_root, table,
+                                      table == (*fld)->table)))
+      return 1;
+    (*old_fld)->move_field_offset((my_ptrdiff_t)(table->record[1] -
+                                                 table->record[0]));
   }
   *old_fld= 0;
 
-  return false;
+  return 0;
 }
 
 
@@ -1174,8 +1155,6 @@ bool Table_triggers_list::check_n_load(THD *thd, const char *db,
   LEX_STRING path;
   File_parser *parser;
   LEX_STRING save_db;
-  sql_digest_state *parent_digest= thd->m_digest;
-  PSI_statement_locker *parent_locker= thd->m_statement_psi;
 
   DBUG_ENTER("Table_triggers_list::check_n_load");
 
@@ -1225,7 +1204,7 @@ bool Table_triggers_list::check_n_load(THD *thd, const char *db,
 
       List_iterator_fast<LEX_STRING> it(triggers->definitions_list);
       LEX_STRING *trg_create_str;
-      sql_mode_t *trg_sql_mode;
+      ulonglong *trg_sql_mode;
 
       if (triggers->definition_modes_list.is_empty() &&
           !triggers->definitions_list.is_empty())
@@ -1236,7 +1215,7 @@ bool Table_triggers_list::check_n_load(THD *thd, const char *db,
           We use one mode (current) for all triggers, because we have not
           information about mode in old format.
         */
-        if (!(trg_sql_mode= alloc_type<sql_mode_t>(&table->mem_root)))
+        if (!(trg_sql_mode= alloc_type<ulonglong>(&table->mem_root)))
         {
           DBUG_RETURN(1); // EOM
         }
@@ -1307,7 +1286,7 @@ bool Table_triggers_list::check_n_load(THD *thd, const char *db,
           DBUG_RETURN(1); // EOM
         }
 
-        push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+        push_warning_printf(thd, MYSQL_ERROR::WARN_LEVEL_WARN,
                             ER_TRG_NO_CREATION_CTX,
                             ER(ER_TRG_NO_CREATION_CTX),
                             (const char*) db,
@@ -1369,17 +1348,17 @@ bool Table_triggers_list::check_n_load(THD *thd, const char *db,
         TODO: This could be avoided if there is no triggers
               for UPDATE and DELETE.
       */
-      if (!names_only && triggers->prepare_record1_accessors())
+      if (!names_only && triggers->prepare_record1_accessors(table))
         DBUG_RETURN(1);
 
-      List_iterator_fast<sql_mode_t> itm(triggers->definition_modes_list);
+      List_iterator_fast<ulonglong> itm(triggers->definition_modes_list);
       List_iterator_fast<LEX_STRING> it_definer(triggers->definers_list);
       List_iterator_fast<LEX_STRING> it_client_cs_name(triggers->client_cs_names);
       List_iterator_fast<LEX_STRING> it_connection_cl_name(triggers->connection_cl_names);
       List_iterator_fast<LEX_STRING> it_db_cl_name(triggers->db_cl_names);
       LEX *old_lex= thd->lex, lex;
-      sp_rcontext *sp_runtime_ctx_saved= thd->sp_runtime_ctx;
-      sql_mode_t save_sql_mode= thd->variables.sql_mode;
+      sp_rcontext *save_spcont= thd->spcont;
+      ulong save_sql_mode= thd->variables.sql_mode;
       LEX_STRING *on_table_name;
 
       thd->lex= &lex;
@@ -1389,10 +1368,11 @@ bool Table_triggers_list::check_n_load(THD *thd, const char *db,
       thd->reset_db((char*) db, strlen(db));
       while ((trg_create_str= it++))
       {
+        sp_head *sp;
         trg_sql_mode= itm++;
         LEX_STRING *trg_definer= it_definer++;
 
-        thd->variables.sql_mode= *trg_sql_mode;
+        thd->variables.sql_mode= (ulong)*trg_sql_mode;
 
         Parser_state parser_state;
         if (parser_state.init(thd, trg_create_str->str, trg_create_str->length))
@@ -1407,15 +1387,11 @@ bool Table_triggers_list::check_n_load(THD *thd, const char *db,
                                        it_db_cl_name++);
 
         lex_start(thd);
-        thd->sp_runtime_ctx= NULL;
+        thd->spcont= NULL;
 
         Deprecated_trigger_syntax_handler error_handler;
         thd->push_internal_handler(&error_handler);
-        thd->m_digest= NULL;
-        thd->m_statement_psi= NULL;
         bool parse_error= parse_sql(thd, & parser_state, creation_ctx);
-        thd->m_digest= parent_digest;
-        thd->m_statement_psi= parent_locker;
         thd->pop_internal_handler();
 
         /*
@@ -1433,7 +1409,7 @@ bool Table_triggers_list::check_n_load(THD *thd, const char *db,
           if (!triggers->m_has_unparseable_trigger)
             triggers->set_parse_error_message(error_handler.get_error_message());
           /* Currently sphead is always set to NULL in case of a parse error */
-          DBUG_ASSERT(lex.sphead == NULL);
+          DBUG_ASSERT(lex.sphead == 0);
           if (error_handler.get_trigger_name())
           {
             LEX_STRING *trigger_name;
@@ -1474,17 +1450,15 @@ bool Table_triggers_list::check_n_load(THD *thd, const char *db,
           continue;
         }
 
-        sp_head *sp= lex.sphead;
-        sp->set_info(0, 0, &lex.sp_chistics, *trg_sql_mode);
-        sp->m_trg_list= triggers;
+        lex.sphead->set_info(0, 0, &lex.sp_chistics, (ulong) *trg_sql_mode);
 
-        int trg_event= sp->m_trg_chistics.event;
-        int trg_action_time= sp->m_trg_chistics.action_time;
+        int event= lex.trg_chistics.event;
+        int action_time= lex.trg_chistics.action_time;
 
-        triggers->bodies[trg_event][trg_action_time]= sp;
+        sp= triggers->bodies[event][action_time]= lex.sphead;
         lex.sphead= NULL; /* Prevent double cleanup. */
 
-        sp->set_info(0, 0, &lex.sp_chistics, *trg_sql_mode);
+        sp->set_info(0, 0, &lex.sp_chistics, (ulong) *trg_sql_mode);
         sp->set_creation_ctx(creation_ctx);
 
         if (!trg_definer->length)
@@ -1495,7 +1469,7 @@ bool Table_triggers_list::check_n_load(THD *thd, const char *db,
             warning here.
           */
 
-          push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+          push_warning_printf(thd, MYSQL_ERROR::WARN_LEVEL_WARN,
                               ER_TRG_NO_DEFINER, ER(ER_TRG_NO_DEFINER),
                               (const char*) db,
                               (const char*) sp->m_name.str);
@@ -1556,6 +1530,14 @@ bool Table_triggers_list::check_n_load(THD *thd, const char *db,
         }
 
         /*
+          Gather all Item_trigger_field objects representing access to fields
+          in old/new versions of row in trigger into lists containing all such
+          objects for the triggers with same action and timing.
+        */
+        triggers->trigger_fields[lex.trg_chistics.event]
+                                [lex.trg_chistics.action_time]=
+          lex.trg_table_fields.first;
+        /*
           Also let us bind these objects to Field objects in table being
           opened.
 
@@ -1564,25 +1546,20 @@ bool Table_triggers_list::check_n_load(THD *thd, const char *db,
           SELECT)...
           Anyway some things can be checked only during trigger execution.
         */
-        for (SQL_I_List<Item_trigger_field> *trig_field_list=
-               sp->m_list_of_trig_fields_item_lists.first;
-             trig_field_list;
-             trig_field_list= trig_field_list->first->next_trig_field_list)
+        for (Item_trigger_field *trg_field= lex.trg_table_fields.first;
+             trg_field;
+             trg_field= trg_field->next_trg_field)
         {
-          for (Item_trigger_field *trg_field= trig_field_list->first;
-               trg_field;
-               trg_field= trg_field->next_trg_field)
-          {
-            trg_field->setup_field(thd, table,
-              &triggers->subject_table_grants[trg_event][trg_action_time]);
-          }
+          trg_field->setup_field(thd, table,
+            &triggers->subject_table_grants[lex.trg_chistics.event]
+                                           [lex.trg_chistics.action_time]);
         }
 
         lex_end(&lex);
       }
       thd->reset_db(save_db.str, save_db.length);
       thd->lex= old_lex;
-      thd->sp_runtime_ctx= sp_runtime_ctx_saved;
+      thd->spcont= save_spcont;
       thd->variables.sql_mode= save_sql_mode;
 
       DBUG_RETURN(0);
@@ -1591,7 +1568,7 @@ err_with_lex_cleanup:
       // QQ: anything else ?
       lex_end(&lex);
       thd->lex= old_lex;
-      thd->sp_runtime_ctx= sp_runtime_ctx_saved;
+      thd->spcont= save_spcont;
       thd->variables.sql_mode= save_sql_mode;
       thd->reset_db(save_db.str, save_db.length);
       DBUG_RETURN(1);
@@ -1633,7 +1610,7 @@ bool Table_triggers_list::get_trigger_info(THD *thd, trg_event_type event,
                                            trg_action_time_type time_type,
                                            LEX_STRING *trigger_name,
                                            LEX_STRING *trigger_stmt,
-                                           sql_mode_t *sql_mode,
+                                           ulong *sql_mode,
                                            LEX_STRING *definer,
                                            LEX_STRING *client_cs_name,
                                            LEX_STRING *connection_cl_name,
@@ -1679,14 +1656,14 @@ bool Table_triggers_list::get_trigger_info(THD *thd, trg_event_type event,
 void Table_triggers_list::get_trigger_info(THD *thd,
                                            int trigger_idx,
                                            LEX_STRING *trigger_name,
-                                           sql_mode_t *sql_mode,
+                                           ulonglong *sql_mode,
                                            LEX_STRING *sql_original_stmt,
                                            LEX_STRING *client_cs_name,
                                            LEX_STRING *connection_cl_name,
                                            LEX_STRING *db_cl_name)
 {
   List_iterator_fast<LEX_STRING> it_trigger_name(names_list);
-  List_iterator_fast<sql_mode_t> it_sql_mode(definition_modes_list);
+  List_iterator_fast<ulonglong> it_sql_mode(definition_modes_list);
   List_iterator_fast<LEX_STRING> it_sql_orig_stmt(definitions_list);
   List_iterator_fast<LEX_STRING> it_client_cs_name(client_cs_names);
   List_iterator_fast<LEX_STRING> it_connection_cl_name(connection_cl_names);
@@ -1754,7 +1731,7 @@ bool add_table_for_trigger(THD *thd,
   LEX *lex= thd->lex;
   char trn_path_buff[FN_REFLEN];
   LEX_STRING trn_path= { trn_path_buff, 0 };
-  LEX_STRING tbl_name= { NULL, 0 };
+  LEX_STRING tbl_name;
 
   DBUG_ENTER("add_table_for_trigger");
 
@@ -1765,7 +1742,7 @@ bool add_table_for_trigger(THD *thd,
     if (if_exists)
     {
       push_warning_printf(thd,
-                          Sql_condition::WARN_LEVEL_NOTE,
+                          MYSQL_ERROR::WARN_LEVEL_NOTE,
                           ER_TRG_DOES_NOT_EXIST,
                           ER(ER_TRG_DOES_NOT_EXIST));
 
@@ -1809,7 +1786,7 @@ bool Table_triggers_list::drop_all_triggers(THD *thd, char *db, char *name)
   bool result= 0;
   DBUG_ENTER("drop_all_triggers");
 
-  memset(&table, 0, sizeof(table));
+  bzero(&table, sizeof(table));
   init_sql_alloc(&table.mem_root, 8192, 0);
 
   if (Table_triggers_list::check_n_load(thd, db, name, &table, 1))
@@ -1881,7 +1858,7 @@ Table_triggers_list::change_table_name_in_triggers(THD *thd,
 {
   char path_buff[FN_REFLEN];
   LEX_STRING *def, *on_table_name, new_def;
-  sql_mode_t save_sql_mode= thd->variables.sql_mode;
+  ulong save_sql_mode= thd->variables.sql_mode;
   List_iterator_fast<LEX_STRING> it_def(definitions_list);
   List_iterator_fast<LEX_STRING> it_on_table_name(on_table_names_list);
   List_iterator_fast<ulonglong> it_mode(definition_modes_list);
@@ -1894,7 +1871,7 @@ Table_triggers_list::change_table_name_in_triggers(THD *thd,
   while ((def= it_def++))
   {
     on_table_name= it_on_table_name++;
-    thd->variables.sql_mode= *(it_mode++);
+    thd->variables.sql_mode= (ulong) *(it_mode++);
 
     /* Construct CREATE TRIGGER statement with new table name. */
     buff.length(0);
@@ -2029,7 +2006,7 @@ bool Table_triggers_list::change_table_name(THD *thd, const char *db,
   LEX_STRING *err_trigname;
   DBUG_ENTER("change_table_name");
 
-  memset(&table, 0, sizeof(table));
+  bzero(&table, sizeof(table));
   init_sql_alloc(&table.mem_root, 8192, 0);
 
   /*
@@ -2243,43 +2220,6 @@ add_tables_and_routines_for_triggers(THD *thd,
 
 
 /**
-  Check if any of the marked fields are used in the trigger.
-
-  @param used_fields  Bitmap over fields to check
-  @param event_type   Type of event triggers for which we are going to inspect
-  @param action_time  Type of trigger action time we are going to inspect
-*/
-
-bool Table_triggers_list::is_fields_updated_in_trigger(MY_BITMAP *used_fields,
-                                                       trg_event_type event_type,
-                                                       trg_action_time_type action_time)
-{
-  Item_trigger_field *trg_field;
-  sp_head *sp= bodies[event_type][action_time];
-  DBUG_ASSERT(used_fields->n_bits == trigger_table->s->fields);
-
-  for (SQL_I_List<Item_trigger_field> *trig_field_list=
-         sp->m_list_of_trig_fields_item_lists.first;
-      trig_field_list;
-      trig_field_list= trig_field_list->first->next_trig_field_list)
-  {
-    for (trg_field= trig_field_list->first; trg_field;
-         trg_field= trg_field->next_trg_field)
-    {
-      /* We cannot check fields which does not present in table. */
-      if (trg_field->field_idx != (uint)-1)
-      {
-        if (bitmap_is_set(used_fields, trg_field->field_idx) &&
-            trg_field->get_settable_routine_parameter())
-          return true;
-      }
-    }
-  }
-  return false;
-}
-
-
-/**
   Mark fields of subject table which we read/set in its triggers
   as such.
 
@@ -2288,6 +2228,7 @@ bool Table_triggers_list::is_fields_updated_in_trigger(MY_BITMAP *used_fields,
   and thus informs handler that values for these fields should be
   retrieved/stored during execution of statement.
 
+  @param thd    Current thread context
   @param event  Type of event triggers for which we are going to inspect
 */
 
@@ -2298,26 +2239,15 @@ void Table_triggers_list::mark_fields_used(trg_event_type event)
 
   for (action_time= 0; action_time < (int)TRG_ACTION_MAX; action_time++)
   {
-    sp_head *sp= bodies[event][action_time];
-
-    if (!sp)
-      continue;
-
-    for (SQL_I_List<Item_trigger_field> *trig_field_list=
-           sp->m_list_of_trig_fields_item_lists.first;
-         trig_field_list;
-         trig_field_list= trig_field_list->first->next_trig_field_list)
+    for (trg_field= trigger_fields[event][action_time]; trg_field;
+         trg_field= trg_field->next_trg_field)
     {
-      for (trg_field= trig_field_list->first; trg_field;
-           trg_field= trg_field->next_trg_field)
+      /* We cannot mark fields which does not present in table. */
+      if (trg_field->field_idx != (uint)-1)
       {
-        /* We cannot mark fields which does not present in table. */
-        if (trg_field->field_idx != (uint)-1)
-        {
-          bitmap_set_bit(trigger_table->read_set, trg_field->field_idx);
-          if (trg_field->get_settable_routine_parameter())
-            bitmap_set_bit(trigger_table->write_set, trg_field->field_idx);
-        }
+        bitmap_set_bit(trigger_table->read_set, trg_field->field_idx);
+        if (trg_field->get_settable_routine_parameter())
+          bitmap_set_bit(trigger_table->write_set, trg_field->field_idx);
       }
     }
   }
@@ -2337,9 +2267,7 @@ void Table_triggers_list::mark_fields_used(trg_event_type event)
 void Table_triggers_list::set_parse_error_message(char *error_message)
 {
   m_has_unparseable_trigger= true;
-  size_t len= sizeof(m_parse_error_message);
-  strncpy(m_parse_error_message, error_message, len - 1);
-  m_parse_error_message[len - 1] = '\0';
+  strcpy(m_parse_error_message, error_message);
 }
 
 
@@ -2366,9 +2294,10 @@ void Table_triggers_list::set_parse_error_message(char *error_message)
 #define INVALID_SQL_MODES_LENGTH 13
 
 bool
-Handle_old_incorrect_sql_modes_hook::
-process_unknown_string(const char *&unknown_key, uchar* base,
-                       MEM_ROOT *mem_root, const char *end)
+Handle_old_incorrect_sql_modes_hook::process_unknown_string(char *&unknown_key,
+                                                            uchar* base,
+                                                            MEM_ROOT *mem_root,
+                                                            char *end)
 {
   DBUG_ENTER("Handle_old_incorrect_sql_modes_hook::process_unknown_string");
   DBUG_PRINT("info", ("unknown key: %60s", unknown_key));
@@ -2377,11 +2306,11 @@ process_unknown_string(const char *&unknown_key, uchar* base,
       unknown_key[INVALID_SQL_MODES_LENGTH] == '=' &&
       !memcmp(unknown_key, STRING_WITH_LEN("sql_modes")))
   {
-    const char *ptr= unknown_key + INVALID_SQL_MODES_LENGTH + 1;
+    char *ptr= unknown_key + INVALID_SQL_MODES_LENGTH + 1;
 
     DBUG_PRINT("info", ("sql_modes affected by BUG#14090 detected"));
     push_warning_printf(current_thd,
-                        Sql_condition::WARN_LEVEL_NOTE,
+                        MYSQL_ERROR::WARN_LEVEL_NOTE,
                         ER_OLD_FILE_FORMAT,
                         ER(ER_OLD_FILE_FORMAT),
                         (char *)path, "TRIGGER");
@@ -2408,8 +2337,8 @@ process_unknown_string(const char *&unknown_key, uchar* base,
 */
 bool
 Handle_old_incorrect_trigger_table_hook::
-process_unknown_string(const char *&unknown_key, uchar* base,
-                       MEM_ROOT *mem_root, const char *end)
+process_unknown_string(char *&unknown_key, uchar* base, MEM_ROOT *mem_root,
+                       char *end)
 {
   DBUG_ENTER("Handle_old_incorrect_trigger_table_hook::process_unknown_string");
   DBUG_PRINT("info", ("unknown key: %60s", unknown_key));
@@ -2418,11 +2347,11 @@ process_unknown_string(const char *&unknown_key, uchar* base,
       unknown_key[INVALID_TRIGGER_TABLE_LENGTH] == '=' &&
       !memcmp(unknown_key, STRING_WITH_LEN("trigger_table")))
   {
-    const char *ptr= unknown_key + INVALID_TRIGGER_TABLE_LENGTH + 1;
+    char *ptr= unknown_key + INVALID_TRIGGER_TABLE_LENGTH + 1;
 
     DBUG_PRINT("info", ("trigger_table affected by BUG#15921 detected"));
     push_warning_printf(current_thd,
-                        Sql_condition::WARN_LEVEL_NOTE,
+                        MYSQL_ERROR::WARN_LEVEL_NOTE,
                         ER_OLD_FILE_FORMAT,
                         ER(ER_OLD_FILE_FORMAT),
                         (char *)path, "TRIGGER");

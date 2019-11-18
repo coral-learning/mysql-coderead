@@ -5,51 +5,20 @@
 
 #include "my_regex.h"
 #include "main.ih"
-#include "tests_include.h"
 
 char *progname;
 int debug = 0;
 int line = 0;
 int status = 0;
 
-int copts = MY_REG_EXTENDED;
+int copts = REG_EXTENDED;
 int eopts = 0;
-my_regoff_t startoff = 0;
-my_regoff_t endoff = 0;
+regoff_t startoff = 0;
+regoff_t endoff = 0;
 
 
 extern int split(char *string, char *fields[], int nfields, char *sep);
 extern void regprint(my_regex_t *r, FILE *d);
-
-
-#ifdef __WIN__
-char *optarg= "";
-int optind= 1;
-int opterr;
-
-/* A (very) simplified version of getopt, enough to run the registered tests. */
-int getopt(int argc, char *argv[], const char *optstring)
-{
-  char *opt= NULL;
-  int retval= -1;
-  if (optind >= argc)
-    return retval;
-
-  opt= argv[optind];
-  if (*opt != '-')
-    return retval;
-
-  retval= *(opt+1);
-  if (*(opt+1) && *(opt+2))
-    optarg= opt + 2;
-  else
-    optarg= "";
-
-  ++optind;
-  return retval;
-}
-#endif
-
 
 /*
  - main - do the simple case, hand off to regress() for regression
@@ -66,15 +35,13 @@ char *argv[];
 	size_t len;
 	int c;
 	int errflg = 0;
-	int opt_inline = 0;
 	register int i;
-        char *input_file_name= NULL;
 	extern int optind;
 	extern char *optarg;
 
 	progname = argv[0];
 
-	while ((c = getopt(argc, argv, "c:e:i:S:E:xI")) != EOF)
+	while ((c = getopt(argc, argv, "c:e:S:E:x")) != EOF)
 		switch (c) {
 		case 'c':	/* compile options */
 			copts = options('c', optarg);
@@ -82,20 +49,14 @@ char *argv[];
 		case 'e':	/* execute options */
 			eopts = options('e', optarg);
 			break;
-                case 'i':
-                        input_file_name= optarg;
-			break;
 		case 'S':	/* start offset */
-			startoff = (my_regoff_t)atoi(optarg);
+			startoff = (regoff_t)atoi(optarg);
 			break;
 		case 'E':	/* end offset */
-			endoff = (my_regoff_t)atoi(optarg);
+			endoff = (regoff_t)atoi(optarg);
 			break;
 		case 'x':	/* Debugging. */
 			debug++;
-			break;
-		case 'I':	/* Inline. */
-			opt_inline= 1;
 			break;
 		case '?':
 		default:
@@ -104,32 +65,14 @@ char *argv[];
 		}
 	if (errflg) {
 		fprintf(stderr, "usage: %s ", progname);
-		fprintf(stderr,
-                        "[-c copt][-e eopt][-i filename][-S][-E][-x][-I] [re]\n");
+		fprintf(stderr, "[-c copt][-C][-d] [re]\n");
 		exit(2);
 	}
 
-        if (opt_inline) {
-          regress(NULL);
-          exit(status);
-        }
-
-	if (optind >= argc && !input_file_name) {
+	if (optind >= argc) {
 		regress(stdin);
 		exit(status);
 	}
-
-        if (input_file_name) {
-          FILE *input_file= fopen(input_file_name, "r");
-          if (!input_file) {
-            fprintf(stderr, "Could not open '%s' : ", input_file_name);
-            perror(NULL);
-            exit(EXIT_FAILURE);
-          }
-          regress(input_file);
-          fclose(input_file);
-          exit(status);
-        }
 
 	err = my_regcomp(&re, argv[optind++], copts, &my_charset_latin1);
 	if (err) {
@@ -145,7 +88,7 @@ char *argv[];
 		exit(status);
 	}
 
-	if (eopts&MY_REG_STARTEND) {
+	if (eopts&REG_STARTEND) {
 		subs[0].rm_so = startoff;
 		subs[0].rm_eo = strlen(argv[optind]) - endoff;
 	}
@@ -156,7 +99,7 @@ char *argv[];
 			eprint(err), (int) len, (int) sizeof(erbuf), erbuf);
 		exit(status);
 	}
-	if (!(copts&MY_REG_NOSUB)) {
+	if (!(copts&REG_NOSUB)) {
 		len = (int)(subs[0].rm_eo - subs[0].rm_so);
 		if (subs[0].rm_so != -1) {
 			if (len != 0)
@@ -175,24 +118,9 @@ char *argv[];
 	exit(status);
 }
 
-char*
-get_next_line(s, size, stream)
-char *s;
-int size;
-FILE *stream;
-{
-  if (stream)
-    return fgets(s, size, stream);
-  if (test_array[line])
-    return strncpy(s, test_array[line], size);
-  return NULL;
-}
-
 /*
  - regress - main loop of regression test
  == void regress(FILE *in);
-    Reads file, line-by-line.
-    If in == NULL, we read data from test_array instead.
  */
 void
 regress(in)
@@ -207,17 +135,16 @@ FILE *in;
 	size_t ne;
 	const char *badpat = "invalid regular expression";
 #	define	SHORT	10
-	const char *bpname = "MY_REG_BADPAT";
+	const char *bpname = "REG_BADPAT";
 	my_regex_t re;
 
-	while (get_next_line(inbuf, sizeof(inbuf), in) != NULL) {
+	while (fgets(inbuf, sizeof(inbuf), in) != NULL) {
 		line++;
-		if (inbuf[0] == '#' || inbuf[0] == '\n' || inbuf[0] == '\0')
+		if (inbuf[0] == '#' || inbuf[0] == '\n')
 			continue;			/* NOTE CONTINUE */
-		if (inbuf[strlen(inbuf)-1] == '\n')
-		  inbuf[strlen(inbuf)-1] = '\0';  /* get rid of stupid \n */
+		inbuf[strlen(inbuf)-1] = '\0';	/* get rid of stupid \n */
 		if (debug)
-                  fprintf(stdout, "%d: <%s>\n", line, inbuf);
+			fprintf(stdout, "%d:\n", line);
 		nf = split(inbuf, f, MAXF, (char*) "\t\t");
 		if (nf < 3) {
 			fprintf(stderr, "bad input, line %d\n", line);
@@ -233,37 +160,37 @@ FILE *in;
 		rx_try(f[0], f[1], f[2], f[3], f[4], options('c', f[1]));
 		if (opt('&', f[1]))	/* try with either type of RE */
 			rx_try(f[0], f[1], f[2], f[3], f[4],
-					options('c', f[1]) &~ MY_REG_EXTENDED);
+					options('c', f[1]) &~ REG_EXTENDED);
 	}
 
-	ne = my_regerror(MY_REG_BADPAT, (my_regex_t *)NULL, erbuf, sizeof(erbuf));
+	ne = my_regerror(REG_BADPAT, (my_regex_t *)NULL, erbuf, sizeof(erbuf));
 	if (strcmp(erbuf, badpat) != 0 || ne != strlen(badpat)+1) {
 		fprintf(stderr, "end: regerror() test gave `%s' not `%s'\n",
 							erbuf, badpat);
 		status = 1;
 	}
-	ne = my_regerror(MY_REG_BADPAT, (my_regex_t *)NULL, erbuf, (size_t)SHORT);
+	ne = my_regerror(REG_BADPAT, (my_regex_t *)NULL, erbuf, (size_t)SHORT);
 	if (strncmp(erbuf, badpat, SHORT-1) != 0 || erbuf[SHORT-1] != '\0' ||
 						ne != strlen(badpat)+1) {
 		fprintf(stderr, "end: regerror() short test gave `%s' not `%.*s'\n",
 						erbuf, SHORT-1, badpat);
 		status = 1;
 	}
-	ne = my_regerror(MY_REG_ITOA|MY_REG_BADPAT, (my_regex_t *)NULL, erbuf, sizeof(erbuf));
+	ne = my_regerror(REG_ITOA|REG_BADPAT, (my_regex_t *)NULL, erbuf, sizeof(erbuf));
 	if (strcmp(erbuf, bpname) != 0 || ne != strlen(bpname)+1) {
 		fprintf(stderr, "end: regerror() ITOA test gave `%s' not `%s'\n",
 						erbuf, bpname);
 		status = 1;
 	}
 	re.re_endp = bpname;
-	ne = my_regerror(MY_REG_ATOI, &re, erbuf, sizeof(erbuf));
-	if (atoi(erbuf) != (int)MY_REG_BADPAT) {
+	ne = my_regerror(REG_ATOI, &re, erbuf, sizeof(erbuf));
+	if (atoi(erbuf) != (int)REG_BADPAT) {
 		fprintf(stderr, "end: regerror() ATOI test gave `%s' not `%ld'\n",
-						erbuf, (long)MY_REG_BADPAT);
+						erbuf, (long)REG_BADPAT);
 		status = 1;
 	} else if (ne != strlen(erbuf)+1) {
 		fprintf(stderr, "end: regerror() ATOI test len(`%s') = %ld\n",
-						erbuf, (long)MY_REG_BADPAT);
+						erbuf, (long)REG_BADPAT);
 		status = 1;
 	}
 }
@@ -290,14 +217,14 @@ int opts;			/* may not match f1 */
 	char erbuf[100];
 	int err;
 	int len;
-	const char *type = (opts & MY_REG_EXTENDED) ? "ERE" : "BRE";
+	const char *type = (opts & REG_EXTENDED) ? "ERE" : "BRE";
 	register int i;
 	char *grump;
 	char f0copy[1000];
 	char f2copy[1000];
 
 	strcpy(f0copy, f0);
-	re.re_endp = (opts&MY_REG_PEND) ? f0copy + strlen(f0copy) : NULL;
+	re.re_endp = (opts&REG_PEND) ? f0copy + strlen(f0copy) : NULL;
 	fixstr(f0copy);
 	err = my_regcomp(&re, f0copy, opts, &my_charset_latin1);
 	if (err != 0 && (!opt('C', f1) || err != efind(f2))) {
@@ -309,7 +236,7 @@ int opts;			/* may not match f1 */
 		status = 1;
 	} else if (err == 0 && opt('C', f1)) {
 		/* unexpected success */
-		fprintf(stderr, "%d: %s should have given MY_REG_%s\n",
+		fprintf(stderr, "%d: %s should have given REG_%s\n",
 						line, type, f2);
 		status = 1;
 		err = 1;	/* so we won't try regexec */
@@ -323,7 +250,7 @@ int opts;			/* may not match f1 */
 	strcpy(f2copy, f2);
 	fixstr(f2copy);
 
-	if (options('e', f1)&MY_REG_STARTEND) {
+	if (options('e', f1)&REG_STARTEND) {
 		if (strchr(f2, '(') == NULL || strchr(f2, ')') == NULL)
 			fprintf(stderr, "%d: bad STARTEND syntax\n", line);
 		subs[0].rm_so = strchr(f2, '(') - f2 + 1;
@@ -331,7 +258,7 @@ int opts;			/* may not match f1 */
 	}
 	err = my_regexec(&re, f2copy, NSUBS, subs, options('e', f1));
 
-	if (err != 0 && (f3 != NULL || err != MY_REG_NOMATCH)) {
+	if (err != 0 && (f3 != NULL || err != REG_NOMATCH)) {
 		/* unexpected error or wrong error */
 		len = my_regerror(err, &re, erbuf, sizeof(erbuf));
 		fprintf(stderr, "%d: %s exec error %s, %d/%d `%s'\n",
@@ -346,7 +273,7 @@ int opts;			/* may not match f1 */
 						line, type);
 		status = 1;
 		err = 1;		/* just on principle */
-	} else if (opts&MY_REG_NOSUB) {
+	} else if (opts&REG_NOSUB) {
 		/* nothing more to check */
 	} else if ((grump = check(f2, subs[0], f3)) != NULL) {
 		fprintf(stderr, "%d: %s %s\n", line, type, grump);
@@ -396,41 +323,41 @@ char *s;
 		if (strchr(legal, *p) != NULL)
 			switch (*p) {
 			case 'b':
-				o &= ~MY_REG_EXTENDED;
+				o &= ~REG_EXTENDED;
 				break;
 			case 'i':
-				o |= MY_REG_ICASE;
+				o |= REG_ICASE;
 				break;
 			case 's':
-				o |= MY_REG_NOSUB;
+				o |= REG_NOSUB;
 				break;
 			case 'n':
-				o |= MY_REG_NEWLINE;
+				o |= REG_NEWLINE;
 				break;
 			case 'm':
-				o &= ~MY_REG_EXTENDED;
-				o |= MY_REG_NOSPEC;
+				o &= ~REG_EXTENDED;
+				o |= REG_NOSPEC;
 				break;
 			case 'p':
-				o |= MY_REG_PEND;
+				o |= REG_PEND;
 				break;
 			case '^':
-				o |= MY_REG_NOTBOL;
+				o |= REG_NOTBOL;
 				break;
 			case '$':
-				o |= MY_REG_NOTEOL;
+				o |= REG_NOTEOL;
 				break;
 			case '#':
-				o |= MY_REG_STARTEND;
+				o |= REG_STARTEND;
 				break;
 			case 't':	/* trace */
-				o |= MY_REG_TRACE;
+				o |= REG_TRACE;
 				break;
 			case 'l':	/* force long representation */
-				o |= MY_REG_LARGE;
+				o |= REG_LARGE;
 				break;
 			case 'r':	/* force backref use */
-				o |= MY_REG_BACKR;
+				o |= REG_BACKR;
 				break;
 			}
 	return(o);
@@ -563,7 +490,7 @@ int err;
 	static char epbuf[100];
 	size_t len;
 
-	len = my_regerror(MY_REG_ITOA|err, (my_regex_t *)NULL, epbuf, sizeof(epbuf));
+	len = my_regerror(REG_ITOA|err, (my_regex_t *)NULL, epbuf, sizeof(epbuf));
 	assert(len <= sizeof(epbuf));
 	return(epbuf);
 }
@@ -579,9 +506,9 @@ char *name;
 	static char efbuf[100];
 	my_regex_t re;
 
-	snprintf(efbuf, sizeof(efbuf), "MY_REG_%s", name);
+	snprintf(efbuf, sizeof(efbuf), "REG_%s", name);
 	assert(strlen(efbuf) < sizeof(efbuf));
 	re.re_endp = efbuf;
-	(void) my_regerror(MY_REG_ATOI, &re, efbuf, sizeof(efbuf));
+	(void) my_regerror(REG_ATOI, &re, efbuf, sizeof(efbuf));
 	return(atoi(efbuf));
 }

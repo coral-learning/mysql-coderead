@@ -1,4 +1,4 @@
-/* Copyright (c) 2001, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2001, 2017, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -53,11 +53,7 @@ int my_readlink(char *to, const char *filename, myf MyFlags)
     else
     {
       if (MyFlags & MY_WME)
-      {
-        char errbuf[MYSYS_STRERROR_SIZE];
-        my_error(EE_CANT_READLINK, MYF(0), filename,
-                 errno, my_strerror(errbuf, sizeof(errbuf), errno));
-      }
+	my_error(EE_CANT_READLINK, MYF(0), filename, errno);
       result= -1;
     }
   }
@@ -86,11 +82,7 @@ int my_symlink(const char *content, const char *linkname, myf MyFlags)
     result= -1;
     my_errno=errno;
     if (MyFlags & MY_WME)
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      my_error(EE_CANT_SYMLINK, MYF(0), linkname, content,
-               errno, my_strerror(errbuf, sizeof(errbuf), errno));
-    }
+      my_error(EE_CANT_SYMLINK, MYF(0), linkname, content, errno);
   }
   else if ((MyFlags & MY_SYNC_DIR) && my_sync_dir_by_file(linkname, MyFlags))
     result= -1;
@@ -107,11 +99,18 @@ int my_symlink(const char *content, const char *linkname, myf MyFlags)
 #endif
 
 
-int my_is_symlink(const char *filename MY_ATTRIBUTE((unused)))
+int my_is_symlink(const char *filename __attribute__((unused)),
+                  ST_FILE_ID *file_id)
 {
 #if defined (HAVE_LSTAT) && defined (S_ISLNK)
   struct stat stat_buff;
-  return !lstat(filename, &stat_buff) && S_ISLNK(stat_buff.st_mode);
+  int result= !lstat(filename, &stat_buff) && S_ISLNK(stat_buff.st_mode);
+  if (file_id && !result)
+  {
+    file_id->st_dev= stat_buff.st_dev;
+    file_id->st_ino= stat_buff.st_ino;
+  }
+  return result;
 #elif defined (_WIN32)
   DWORD dwAttr = GetFileAttributes(filename);
   return (dwAttr != INVALID_FILE_ATTRIBUTES) &&
@@ -147,11 +146,7 @@ int my_realpath(char *to, const char *filename, myf MyFlags)
     DBUG_PRINT("error",("realpath failed with errno: %d", errno));
     my_errno=errno;
     if (MyFlags & MY_WME)
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      my_error(EE_REALPATH, MYF(0), filename,
-               my_errno, my_strerror(errbuf, sizeof(errbuf), my_errno));
-    }
+      my_error(EE_REALPATH, MYF(0), filename, my_errno);
     my_load_path(to, filename, NullS);
     result= -1;
   }
@@ -162,11 +157,7 @@ int my_realpath(char *to, const char *filename, myf MyFlags)
   {
     my_errno= (ret > FN_REFLEN) ? ENAMETOOLONG : GetLastError();
     if (MyFlags & MY_WME)
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      my_error(EE_REALPATH, MYF(0), filename,
-               my_errno, my_strerror(errbuf, sizeof(errbuf), my_errno));
-    }
+      my_error(EE_REALPATH, MYF(0), filename, my_errno);
     /* 
       GetFullPathName didn't work : use my_load_path() which is a poor 
       substitute original name but will at least be able to resolve 
@@ -179,4 +170,21 @@ int my_realpath(char *to, const char *filename, myf MyFlags)
   my_load_path(to, filename, NullS);
 #endif
   return 0;
+}
+
+
+/**
+  Return non-zero if the file descriptor and a previously lstat-ed file
+  identified by file_id point to the same file
+*/
+int my_is_same_file(File file, const ST_FILE_ID *file_id)
+{
+  MY_STAT stat_buf;
+  if (my_fstat(file, &stat_buf, MYF(0)) == -1)
+  {
+    my_errno= errno;
+    return 0;
+  }
+  return (stat_buf.st_dev == file_id->st_dev)
+    && (stat_buf.st_ino == file_id->st_ino);
 }

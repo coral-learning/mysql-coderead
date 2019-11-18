@@ -1,4 +1,4 @@
-/* Copyright (c) 2002, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2002, 2010, Oracle and/or its affiliates. All rights reserved.
    
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -79,7 +79,7 @@ static double rt_data[]=
   -1
 };
 
-int main(int argc MY_ATTRIBUTE((unused)),char *argv[] MY_ATTRIBUTE((unused)))
+int main(int argc __attribute__((unused)),char *argv[] __attribute__((unused)))
 {
   MY_INIT(argv[0]);
   exit(run_test("rt_test"));
@@ -147,7 +147,7 @@ static int run_test(const char *filename)
   if (!silent)
     printf("- Creating isam-file\n");
   
-  memset(&create_info, 0, sizeof(create_info));
+  bzero((char*) &create_info,sizeof(create_info));
   create_info.max_rows=10000000;
   
   if (mi_create(filename,
@@ -193,7 +193,7 @@ static int run_test(const char *filename)
     my_errno=0;
     create_record(record,i);
     
-    memset(read_record, 0, MAX_REC_LENGTH);
+    bzero((char*) read_record,MAX_REC_LENGTH);
     error=mi_rkey(file,read_record,0,record+1,0,HA_READ_MBR_EQUAL);
     
     if (error && error!=HA_ERR_KEY_NOT_FOUND)
@@ -214,7 +214,7 @@ static int run_test(const char *filename)
   for (i=0; i < nrecords/4; i++)
   {
     my_errno=0;
-    memset(read_record, 0, MAX_REC_LENGTH);
+    bzero((char*) read_record,MAX_REC_LENGTH);
     error=mi_rrnd(file,read_record,i == 0 ? 0L : HA_OFFSET_ERROR);
     if (error)
     {
@@ -236,7 +236,7 @@ static int run_test(const char *filename)
   for (i=0; i < (nrecords - nrecords/4) ; i++)
   {
     my_errno=0;
-    memset(read_record, 0, MAX_REC_LENGTH);
+    bzero((char*) read_record,MAX_REC_LENGTH);
     error=mi_rrnd(file,read_record,i == 0 ? 0L : HA_OFFSET_ERROR);
     if (error)
     {
@@ -349,7 +349,7 @@ static int read_with_pos (MI_INFO * file,int silent)
   for (i=0;;i++)
   {
     my_errno=0;
-    memset(read_record, 0, MAX_REC_LENGTH);
+    bzero((char*) read_record,MAX_REC_LENGTH);
     error=mi_rrnd(file,read_record,i == 0 ? 0L : HA_OFFSET_ERROR);
     if (error)
     {
@@ -367,7 +367,7 @@ static int read_with_pos (MI_INFO * file,int silent)
 
 
 static void print_record(uchar * record,
-			 my_off_t offs MY_ATTRIBUTE((unused)),
+			 my_off_t offs __attribute__((unused)),
 			 const char * tail)
 {
   int i;
@@ -394,7 +394,7 @@ static void create_record1(uchar *record,uint rownr)
    uchar * pos;
    double c=rownr+10;
    
-   memset(record, 0, MAX_REC_LENGTH);
+   bzero((char*) record,MAX_REC_LENGTH);
    record[0]=0x01; /* DEL marker */
 
    for (pos=record+1, i=0; i<2*ndims; i++)
@@ -420,7 +420,7 @@ static void create_record(uchar *record,uint rownr)
 }
 
 #else
-int main(int argc MY_ATTRIBUTE((unused)),char *argv[] MY_ATTRIBUTE((unused)))
+int main(int argc __attribute__((unused)),char *argv[] __attribute__((unused)))
 {
   exit(0);
 }

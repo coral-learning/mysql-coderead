@@ -79,6 +79,12 @@
  *
  */
 
+/*
+  We can't have SAFE_MUTEX defined here as this will cause recursion
+  in pthread_mutex_lock
+*/
+
+#undef SAFE_MUTEX
 #include <my_global.h>
 #include <m_string.h>
 #include <errno.h>
@@ -230,12 +236,6 @@ struct settings {
 
 
 static BOOLEAN init_done= FALSE; /* Set to TRUE when initialization done */
-/**
-  Global debugging settings.
-  This structure shared between all threads,
-  and is the last element in each thread @c CODE_STATE::stack chain.
-  Protected by @c THR_LOCK_init_settings.
-*/
 static struct settings init_settings;
 static const char *db_process= 0;/* Pointer to process name; argv[0] */
 my_bool _dbug_on_= TRUE;	 /* FALSE if no debugging at all */
@@ -265,7 +265,6 @@ typedef struct _db_code_state_ {
   uint u_line;                  /* User source code line number */
   int  locked;                  /* If locked with _db_lock_file_ */
   const char *u_keyword;        /* Keyword for current macro */
-  uint m_read_lock_count;
 } CODE_STATE;
 
 /*
@@ -325,7 +324,6 @@ static void DbugVfprintf(FILE *stream, const char* format, va_list args);
  */
 
 #define ERR_MISSING_RETURN "missing DBUG_RETURN or DBUG_VOID_RETURN macro in function \"%s\"\n"
-#define ERR_MISSING_UNLOCK "missing DBUG_UNLOCK_FILE macro in function \"%s\"\n"
 #define ERR_OPEN "%s: can't open debug output stream \"%s\": "
 #define ERR_CLOSE "%s: can't close debug file: "
 #define ERR_ABORT "%s: debugger aborting because %s\n"
@@ -351,20 +349,6 @@ static void DbugVfprintf(FILE *stream, const char* format, va_list args);
 #include <my_pthread.h>
 static pthread_mutex_t THR_LOCK_dbug;
 
-/**
-  A mutex protecting flushing of gcov data, see _db_flush_gcov_().
-  We don't re-use THR_LOCK_dbug, because that would disallow:
-  DBUG_LOCK_FILE; ..... DBUG_SUICIDE(); .... DBUG_UNLOCK_FILE;
-*/
-static pthread_mutex_t THR_LOCK_gcov;
-
-/**
-  Lock, to protect @c init_settings.
-  For performance reasons,
-  the member @c init_settings.flags is not protected.
-*/
-static rw_lock_t THR_LOCK_init_settings;
-
 static CODE_STATE *code_state(void)
 {
   CODE_STATE *cs, **cs_ptr;
@@ -380,9 +364,7 @@ static CODE_STATE *code_state(void)
   {
     init_done=TRUE;
     pthread_mutex_init(&THR_LOCK_dbug, NULL);
-    pthread_mutex_init(&THR_LOCK_gcov, NULL);
-    my_rwlock_init(&THR_LOCK_init_settings, NULL);
-    memset(&init_settings, 0, sizeof(init_settings));
+    bzero(&init_settings, sizeof(init_settings));
     init_settings.out_file=stderr;
     init_settings.flags=OPEN_APPEND;
   }
@@ -392,44 +374,14 @@ static CODE_STATE *code_state(void)
   if (!(cs= *cs_ptr))
   {
     cs=(CODE_STATE*) DbugMalloc(sizeof(*cs));
-    memset(cs, 0, sizeof(*cs));
+    bzero((uchar*) cs,sizeof(*cs));
     cs->process= db_process ? db_process : "dbug";
     cs->func="?func";
     cs->file="?file";
     cs->stack=&init_settings;
-    cs->m_read_lock_count= 0;
     *cs_ptr= cs;
   }
   return cs;
-}
-
-/**
-  Lock the stack debugging settings.
-  Only the shared (global) settings are locked if necessary,
-  per thread settings are local and safe to use.
-  This lock is re entrant.
-  @sa unlock_stack
-*/
-static void read_lock_stack(CODE_STATE *cs)
-{
-  if (cs->stack == &init_settings)
-  {
-    if (++(cs->m_read_lock_count) == 1)
-      rw_rdlock(&THR_LOCK_init_settings);
-  }
-}
-
-/**
-  Unlock the stack debugging settings.
-  @sa read_lock_stack
-*/
-static void unlock_stack(CODE_STATE *cs)
-{
-  if (cs->stack == &init_settings)
-  {
-    if (--(cs->m_read_lock_count) == 0)
-      rw_unlock(&THR_LOCK_init_settings);
-  }
 }
 
 /*
@@ -502,24 +454,7 @@ int DbugParse(CODE_STATE *cs, const char *control)
   int rel, f_used=0;
   struct settings *stack;
 
-  /*
-    Make sure we are not changing settings while inside a
-      DBUG_LOCK_FILE
-      DBUG_UNLOCK_FILE
-    section, that is a mis use, that would cause changing
-    DBUG_FILE while the caller prints to it.
-  */
-  assert(! cs->locked);
-
   stack= cs->stack;
-
-  /*
-    When parsing the global init_settings itself,
-    make sure to block every other thread using dbug functions.
-  */
-  assert(cs->m_read_lock_count == 0);
-  if (stack == &init_settings)
-    rw_wrlock(&THR_LOCK_init_settings);
 
   if (control[0] == '-' && control[1] == '#')
     control+=2;
@@ -550,9 +485,6 @@ int DbugParse(CODE_STATE *cs, const char *control)
     stack->prof_file= stack->next->prof_file;
     if (stack->next == &init_settings)
     {
-      assert(stack != &init_settings);
-      rw_rdlock(&THR_LOCK_init_settings);
-
       /*
         Never share with the global parent - it can change under your feet.
 
@@ -564,8 +496,6 @@ int DbugParse(CODE_STATE *cs, const char *control)
       stack->p_functions= ListCopy(init_settings.p_functions);
       stack->keywords= ListCopy(init_settings.keywords);
       stack->processes= ListCopy(init_settings.processes);
-
-      rw_unlock(&THR_LOCK_init_settings);
     }
     else
     {
@@ -592,7 +522,7 @@ int DbugParse(CODE_STATE *cs, const char *control)
         if (!is_shared(stack, keywords))
           FreeList(stack->keywords);
         stack->keywords=NULL;
-        stack->flags&= ~DEBUG_ON;
+        stack->flags &= ~DEBUG_ON;
         break;
       }
       if (rel && is_shared(stack, keywords))
@@ -600,29 +530,11 @@ int DbugParse(CODE_STATE *cs, const char *control)
       if (sign < 0)
       {
         if (DEBUGGING)
-        {
           stack->keywords= ListDel(stack->keywords, control, end);
-          /* Turn off DEBUG_ON if it is last keyword to be removed. */
-          if (stack->keywords == NULL)
-            stack->flags&= ~DEBUG_ON;
-        }
-        break;
+      break;
       }
-
-      /* Do not add keyword if debugging all is enabled. */
-      if (!(DEBUGGING && stack->keywords == NULL))
-      {
-        stack->keywords= ListAdd(stack->keywords, control, end);
-        stack->flags|= DEBUG_ON;
-      }
-
-      /* If debug all is enabled, make the keyword list empty. */
-      if (sign == 1 && control == end)
-      {
-        FreeList(stack->keywords);
-        stack->keywords= NULL;
-      }
-
+      stack->keywords= ListAdd(stack->keywords, control, end);
+      stack->flags |= DEBUG_ON;
       break;
     case 'D':
       stack->delay= atoi(control);
@@ -679,11 +591,10 @@ int DbugParse(CODE_STATE *cs, const char *control)
       /* fall through */
     case 'a':
     case 'o':
-      /* In case we already have an open file. */
-      if (!is_shared(stack, out_file))
-        DBUGCloseFile(cs, stack->out_file);
       if (sign < 0)
       {
+        if (!is_shared(stack, out_file))
+          DBUGCloseFile(cs, stack->out_file);
         stack->flags &= ~FLUSH_ON_WRITE;
         stack->out_file= stderr;
         break;
@@ -753,21 +664,6 @@ int DbugParse(CODE_STATE *cs, const char *control)
     control=end+1;
     end= DbugStrTok(control);
   }
-
-  if (stack->next == &init_settings)
-  {
-    /*
-      Enforce nothing is shared with the global init_settings
-    */
-    assert((stack->functions == NULL) || (stack->functions != init_settings.functions));
-    assert((stack->p_functions == NULL) || (stack->p_functions != init_settings.p_functions));
-    assert((stack->keywords == NULL) || (stack->keywords != init_settings.keywords));
-    assert((stack->processes == NULL) || (stack->processes != init_settings.processes));
-  }
-
-  if (stack == &init_settings)
-    rw_unlock(&THR_LOCK_init_settings);
-
   return !rel || f_used;
 }
 
@@ -898,20 +794,11 @@ void _db_set_(const char *control)
   CODE_STATE *cs;
   uint old_fflags;
   get_code_state_or_return;
-
-  read_lock_stack(cs);
   old_fflags=fflags(cs);
-  unlock_stack(cs);
-
   if (cs->stack == &init_settings)
     PushState(cs);
-
   if (DbugParse(cs, control))
-  {
-    read_lock_stack(cs);
     FixTraceFlags(old_fflags, cs);
-    unlock_stack(cs);
-  }
 }
 
 /*
@@ -937,19 +824,10 @@ void _db_push_(const char *control)
   CODE_STATE *cs;
   uint old_fflags;
   get_code_state_or_return;
-
-  read_lock_stack(cs);
   old_fflags=fflags(cs);
-  unlock_stack(cs);
-
   PushState(cs);
-
   if (DbugParse(cs, control))
-  {
-    read_lock_stack(cs);
     FixTraceFlags(old_fflags, cs);
-    unlock_stack(cs);
-  }
 }
 
 
@@ -982,7 +860,7 @@ int _db_is_pushed_()
 void _db_set_init_(const char *control)
 {
   CODE_STATE tmp_cs;
-  memset(&tmp_cs, 0, sizeof(tmp_cs));
+  bzero((uchar*) &tmp_cs, sizeof(tmp_cs));
   tmp_cs.stack= &init_settings;
   tmp_cs.process= db_process ? db_process : "dbug";
   DbugParse(&tmp_cs, control);
@@ -1016,16 +894,10 @@ void _db_pop_()
   discard= cs->stack;
   if (discard != &init_settings)
   {
-    read_lock_stack(cs);
     old_fflags=fflags(cs);
-    unlock_stack(cs);
-
     cs->stack= discard->next;
     FreeState(cs, discard, 1);
-
-    read_lock_stack(cs);
     FixTraceFlags(old_fflags, cs);
-    unlock_stack(cs);
   }
 }
 
@@ -1127,8 +999,6 @@ int _db_explain_ (CODE_STATE *cs, char *buf, size_t len)
 
   get_code_state_if_not_set_or_return *buf=0;
 
-  read_lock_stack(cs);
-
   op_list_to_buf('d', cs->stack->keywords, DEBUGGING);
   op_int_to_buf ('D', cs->stack->delay, 0);
   op_list_to_buf('f', cs->stack->functions, cs->stack->functions);
@@ -1148,8 +1018,6 @@ int _db_explain_ (CODE_STATE *cs, char *buf, size_t len)
   op_intf_to_buf('t', cs->stack->maxdepth, MAXDEPTH, TRACING);
   op_bool_to_buf('T', cs->stack->flags & TIMESTAMP_ON);
 
-  unlock_stack(cs);
-
   *buf= '\0';
   return 0;
 
@@ -1158,8 +1026,6 @@ overflow:
   *end++= '.';
   *end++= '.';
   *end=   '\0';
-
-  unlock_stack(cs);
   return 1;
 }
 
@@ -1186,7 +1052,7 @@ overflow:
 int _db_explain_init_(char *buf, size_t len)
 {
   CODE_STATE cs;
-  memset(&cs, 0, sizeof(cs));
+  bzero((uchar*) &cs,sizeof(cs));
   cs.stack=&init_settings;
   return _db_explain_(&cs, buf, len);
 }
@@ -1238,8 +1104,6 @@ void _db_enter_(const char *_func_, const char *_file_,
   }
   save_errno= errno;
 
-  read_lock_stack(cs);
-
   _stack_frame_->func= cs->func;
   _stack_frame_->file= cs->file;
   cs->func=  _func_;
@@ -1271,8 +1135,6 @@ void _db_enter_(const char *_func_, const char *_file_,
     break;
   }
   errno=save_errno;
-
-  unlock_stack(cs);
 }
 
 /*
@@ -1309,8 +1171,6 @@ void _db_return_(uint _line_, struct _db_stack_frame_ *_stack_frame_)
     DbugExit(buf);
   }
 
-  read_lock_stack(cs);
-
   if (DoTrace(cs) & DO_TRACE)
   {
     if (TRACING)
@@ -1333,8 +1193,6 @@ void _db_return_(uint _line_, struct _db_stack_frame_ *_stack_frame_)
   if (cs->framep != NULL)
     cs->framep= cs->framep->prev;
   errno=save_errno;
-
-  unlock_stack(cs);
 }
 
 
@@ -1370,38 +1228,6 @@ void _db_pargs_(uint _line_, const char *keyword)
 /*
  *  FUNCTION
  *
- *    _db_enabled_    check if debug is enabled for the keyword used in
- *    DBUG_PRINT
- *
- *  SYNOPSIS
- *
- *    int _db_enabled_();
- *
- *  DESCRIPTION
- *
- *    The function checks if the debug output is to be enabled for the keyword
- *    specified in DBUG_PRINT macro. _db_doprnt_ will be called only if this
- *    function evaluates to 1.
- */
-
-int _db_enabled_()
-{
-  CODE_STATE *cs;
-
-  get_code_state_or_return 0;
-
-  if (! DEBUGGING)
-    return 0;
-
-  if (_db_keyword_(cs, cs->u_keyword, 0))
-    return 1;
-
-  return 0;
-}
-
-/*
- *  FUNCTION
- *
  *      _db_doprnt_    handle print of debug lines
  *
  *  SYNOPSIS
@@ -1412,9 +1238,11 @@ int _db_enabled_()
  *
  *  DESCRIPTION
  *
- *      This function handles the printing of the arguments via the format
- *      string.  The line number of the DBUG macro in the source is found in
- *      u_line.
+ *      When invoked via one of the DBUG macros, tests the current keyword
+ *      set by calling _db_pargs_() to see if that macro has been selected
+ *      for processing via the debugger control string, and if so, handles
+ *      printing of the arguments via the format string.  The line number
+ *      of the DBUG macro in the source is found in u_line.
  *
  *      Note that the format string SHOULD NOT include a terminating
  *      newline, this is supplied automatically.
@@ -1427,31 +1255,25 @@ void _db_doprnt_(const char *format,...)
 {
   va_list args;
   CODE_STATE *cs;
-  int save_errno;
-
   get_code_state_or_return;
 
-  /* Dirty read, for DBUG_PRINT() performance. */
-  if (! DEBUGGING)
-    return;
-
   va_start(args,format);
-  read_lock_stack(cs);
 
-  save_errno=errno;
-  if (!cs->locked)
-    pthread_mutex_lock(&THR_LOCK_dbug);
-  DoPrefix(cs, cs->u_line);
-  if (TRACING)
-    Indent(cs, cs->level + 1);
-  else
-    (void) fprintf(cs->stack->out_file, "%s: ", cs->func);
-  (void) fprintf(cs->stack->out_file, "%s: ", cs->u_keyword);
-  DbugVfprintf(cs->stack->out_file, format, args);
-  DbugFlush(cs);
-  errno=save_errno;
-
-  unlock_stack(cs);
+  if (_db_keyword_(cs, cs->u_keyword, 0))
+  {
+    int save_errno=errno;
+    if (!cs->locked)
+      pthread_mutex_lock(&THR_LOCK_dbug);
+    DoPrefix(cs, cs->u_line);
+    if (TRACING)
+      Indent(cs, cs->level + 1);
+    else
+      (void) fprintf(cs->stack->out_file, "%s: ", cs->func);
+    (void) fprintf(cs->stack->out_file, "%s: ", cs->u_keyword);
+    DbugVfprintf(cs->stack->out_file, format, args);
+    DbugFlush(cs);
+    errno=save_errno;
+  }
   va_end(args);
 }
 
@@ -1493,12 +1315,6 @@ void _db_dump_(uint _line_, const char *keyword,
   CODE_STATE *cs;
   get_code_state_or_return;
 
-  /* Dirty read, for DBUG_DUMP() performance. */
-  if (! DEBUGGING)
-    return;
-
-  read_lock_stack(cs);
-
   if (_db_keyword_(cs, keyword, 0))
   {
     if (!cs->locked)
@@ -1507,7 +1323,7 @@ void _db_dump_(uint _line_, const char *keyword,
     if (TRACING)
     {
       Indent(cs, cs->level + 1);
-      pos= MY_MIN(MY_MAX(cs->level-cs->stack->sub_level,0)*INDENT,80);
+      pos= min(max(cs->level-cs->stack->sub_level,0)*INDENT,80);
     }
     else
     {
@@ -1532,8 +1348,6 @@ void _db_dump_(uint _line_, const char *keyword,
     (void) fputc('\n',cs->stack->out_file);
     DbugFlush(cs);
   }
-
-  unlock_stack(cs);
 }
 
 
@@ -1598,7 +1412,7 @@ next:
         }
         else
         {
-          (*cur)->flags&=~(EXCLUDE | SUBDIR);
+          (*cur)->flags&=~(EXCLUDE & SUBDIR);
           (*cur)->flags|=INCLUDE | subdir;
         }
         goto next;
@@ -1734,7 +1548,7 @@ static void PushState(CODE_STATE *cs)
   struct settings *new_malloc;
 
   new_malloc= (struct settings *) DbugMalloc(sizeof(struct settings));
-  memset(new_malloc, 0, sizeof(struct settings));
+  bzero(new_malloc, sizeof(struct settings));
   new_malloc->next= cs->stack;
   cs->stack= new_malloc;
 }
@@ -1811,17 +1625,6 @@ void _db_end_()
   _dbug_on_= 1;
   get_code_state_or_return;
 
-  /*
-    The caller may have missed a DBUG_UNLOCK_FILE,
-    we are breaking this lock to enforce DBUG_END can proceed.
-  */
-  if (cs->locked)
-  {
-    fprintf(stderr, ERR_MISSING_UNLOCK, "(unknown)");
-    cs->locked= 0;
-    pthread_mutex_unlock(&THR_LOCK_dbug);
-  }
-
   while ((discard= cs->stack))
   {
     if (discard == &init_settings)
@@ -1829,9 +1632,10 @@ void _db_end_()
     cs->stack= discard->next;
     FreeState(cs, discard, 1);
   }
-
-  rw_wrlock(&THR_LOCK_init_settings);
   tmp= init_settings;
+
+  /* Use mutex lock to make it less likely anyone access out_file */
+  pthread_mutex_lock(&THR_LOCK_dbug);
   init_settings.flags=    OPEN_APPEND;
   init_settings.out_file= stderr;
   init_settings.prof_file= stderr;
@@ -1842,7 +1646,7 @@ void _db_end_()
   init_settings.p_functions= 0;
   init_settings.keywords= 0;
   init_settings.processes= 0;
-  rw_unlock(&THR_LOCK_init_settings);
+  pthread_mutex_unlock(&THR_LOCK_dbug);
   FreeState(cs, &tmp, 0);
 }
 
@@ -1907,22 +1711,11 @@ FILE *_db_fp_(void)
 
 BOOLEAN _db_keyword_(CODE_STATE *cs, const char *keyword, int strict)
 {
-  BOOLEAN result;
   get_code_state_if_not_set_or_return FALSE;
-
-  /* Dirty read, for DBUG_EXECUTE(), DBUG_EXECUTE_IF() ... performance. */
-  if (! DEBUGGING)
-    return FALSE;
-
-  read_lock_stack(cs);
-
   strict=strict ? INCLUDE : INCLUDE|MATCHED;
-  result= DoTrace(cs) & DO_TRACE &&
-          InList(cs->stack->keywords, keyword) & strict;
 
-  unlock_stack(cs);
-
-  return result;
+  return DEBUGGING && DoTrace(cs) & DO_TRACE &&
+         InList(cs->stack->keywords, keyword) & strict;
 }
 
 /*
@@ -1950,7 +1743,7 @@ static void Indent(CODE_STATE *cs, int indent)
 {
   REGISTER int count;
 
-  indent= MY_MAX(indent-1-cs->stack->sub_level,0)*INDENT;
+  indent= max(indent-1-cs->stack->sub_level,0)*INDENT;
   for (count= 0; count < indent ; count++)
   {
     if ((count % INDENT) == 0)
@@ -2430,32 +2223,11 @@ void _db_flush_()
 
 
 #ifndef __WIN__
-
-#ifdef HAVE_GCOV
-extern void __gcov_flush();
-#endif
-
-void _db_flush_gcov_()
-{
-#ifdef HAVE_GCOV
-  // Gcov will assert() if we try to flush in parallel.
-  pthread_mutex_lock(&THR_LOCK_gcov);
-  __gcov_flush();
-  pthread_mutex_unlock(&THR_LOCK_gcov);
-#endif
-}
-
 void _db_suicide_()
 {
   int retval;
   sigset_t new_mask;
   sigfillset(&new_mask);
-
-#ifdef HAVE_GCOV
-  fprintf(stderr, "Flushing gcov data\n");
-  fflush(stderr);
-  _db_flush_gcov_();
-#endif
 
   fprintf(stderr, "SIGKILL myself\n");
   fflush(stderr);

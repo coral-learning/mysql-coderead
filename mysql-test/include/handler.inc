@@ -19,7 +19,7 @@
 #               main testing code put into include/handler.inc
 #
 
-eval SET SESSION DEFAULT_STORAGE_ENGINE = $engine_type;
+eval SET SESSION STORAGE_ENGINE = $engine_type;
 
 --disable_warnings
 drop table if exists t1,t3,t4,t5;
@@ -804,7 +804,6 @@ create table t1 (a int, key a (a));
 insert into t1 (a) values (1), (2), (3), (4), (5);
 create table t2 (a int, key a (a)) select * from t1; 
 create temporary table t3 (a int, key a (a)) select * from t2;
-create temporary table t4 like t3;
 handler t1 open;
 handler t2 open;
 handler t3 open;
@@ -821,8 +820,6 @@ handler t1 read next;
 handler t2 close;
 --error ER_LOCK_OR_ACTIVE_TRANSACTION
 handler t3 open;
---error ER_LOCK_OR_ACTIVE_TRANSACTION
-handler t4 open;
 --echo # After UNLOCK TABLES handlers should be around and
 --echo # we should be able to continue reading through them.
 unlock tables;
@@ -832,7 +829,7 @@ handler t2 read next;
 handler t2 close;
 handler t3 read next;
 handler t3 close;
-drop temporary tables t3, t4;
+drop temporary table t3;
 --echo #
 --echo # Other operations that implicitly close handler:
 --echo #
@@ -1837,45 +1834,4 @@ HANDLER t1 READ FIRST WHERE f1() = 1;
 
 HANDLER t1 CLOSE;
 DROP FUNCTION f1;
-DROP TABLE t1;
-
---echo #
---echo # Bug#13008220 HANDLER SQL STATEMENT CAN MISS TO INITIALIZE
---echo #              FOR RANDOM READ
---echo #
---echo # A handler can only have one active 'cursor' at a time,
---echo # so switching between index and/or random should restart the cursor.
-
-CREATE TABLE t1(a INT, b INT, KEY b(b), KEY ab(a, b));
-INSERT INTO t1 VALUES (2, 20), (1, 10), (4, 40), (3, 30);
-HANDLER t1 OPEN;
-HANDLER t1 READ b FIRST;
-HANDLER t1 READ NEXT;
-HANDLER t1 READ NEXT;
-HANDLER t1 READ b FIRST;
-HANDLER t1 READ b NEXT;
-HANDLER t1 READ b NEXT;
-HANDLER t1 READ FIRST;
-HANDLER t1 READ b FIRST;
-HANDLER t1 READ NEXT;
-HANDLER t1 READ NEXT;
-HANDLER t1 READ NEXT;
-HANDLER t1 READ NEXT;
-HANDLER t1 READ NEXT;
-HANDLER t1 READ b NEXT;
-HANDLER t1 READ b NEXT;
-HANDLER t1 READ b NEXT;
-HANDLER t1 READ b NEXT;
-HANDLER t1 READ b NEXT;
-HANDLER t1 READ NEXT;
-HANDLER t1 READ b NEXT;
-HANDLER t1 READ FIRST;
-HANDLER t1 READ b PREV;
-HANDLER t1 READ b LAST;
-HANDLER t1 READ NEXT;
-HANDLER t1 READ ab FIRST;
-HANDLER t1 READ b NEXT;
-HANDLER t1 READ ab LAST;
-HANDLER t1 READ b PREV;
-HANDLER t1 CLOSE;
 DROP TABLE t1;

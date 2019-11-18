@@ -1,4 +1,4 @@
-# Copyright (c) 2006, 2015, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2006, 2018, Oracle and/or its affiliates. All rights reserved.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,30 +15,31 @@
 
 INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/include
-  ${CMAKE_SOURCE_DIR}/mysys_ssl
-  ${ZLIB_INCLUDE_DIR}
   ${SSL_INCLUDE_DIRS}
   ${CMAKE_SOURCE_DIR}/libmysql
   ${CMAKE_SOURCE_DIR}/regex
   ${CMAKE_SOURCE_DIR}/sql
   ${CMAKE_SOURCE_DIR}/strings
-  ${EDITLINE_INCLUDE_DIR}
+  ${READLINE_INCLUDE_DIR}
   ${CMAKE_CURRENT_BINARY_DIR}
 )
 
-
-## We will need libeay32.dll and ssleay32.dll when running client executables.
-COPY_OPENSSL_DLLS(copy_openssl_client)
-
+ADD_DEFINITIONS(${READLINE_DEFINES})
 ADD_DEFINITIONS(${SSL_DEFINES})
 MYSQL_ADD_EXECUTABLE(mysql completion_hash.cc mysql.cc readline.cc sql_string.cc)
 TARGET_LINK_LIBRARIES(mysql mysqlclient)
 IF(UNIX)
-  TARGET_LINK_LIBRARIES(mysql ${EDITLINE_LIBRARY})
+  TARGET_LINK_LIBRARIES(mysql ${READLINE_LIBRARY})
 ENDIF(UNIX)
 
 MYSQL_ADD_EXECUTABLE(mysqltest mysqltest.cc COMPONENT Test)
 SET_SOURCE_FILES_PROPERTIES(mysqltest.cc PROPERTIES COMPILE_FLAGS "-DTHREADS")
+# mysqltest has unused result errors, so we skip Werror
+CHECK_C_COMPILER_FLAG("-Werror" HAVE_WERROR_FLAG)
+IF(HAVE_WERROR_FLAG)
+  INCLUDE(${MYSQL_CMAKE_SCRIPT_DIR}/compile_flags.cmake)
+  ADD_COMPILE_FLAGS(mysqltest.cc COMPILE_FLAGS "-Wno-error")
+ENDIF()
 TARGET_LINK_LIBRARIES(mysqltest mysqlclient regex)
 
 
@@ -72,22 +73,12 @@ MYSQL_ADD_EXECUTABLE(mysqlslap mysqlslap.c)
 SET_SOURCE_FILES_PROPERTIES(mysqlslap.c PROPERTIES COMPILE_FLAGS "-DTHREADS")
 TARGET_LINK_LIBRARIES(mysqlslap mysqlclient)
 
-MYSQL_ADD_EXECUTABLE(mysql_config_editor mysql_config_editor.cc)
-TARGET_LINK_LIBRARIES(mysql_config_editor mysqlclient)
-
 # "WIN32" also covers 64 bit. "echo" is used in some files below "mysql-test/".
 IF(WIN32)
   MYSQL_ADD_EXECUTABLE(echo echo.c)
 ENDIF(WIN32)
 
-SET_TARGET_PROPERTIES (
-  mysql_plugin 
-  mysql_upgrade
-  mysqlcheck
-  mysqldump
-  mysqlimport
-  mysqlshow
-  mysqlslap
+SET_TARGET_PROPERTIES (mysqlcheck mysqldump mysqlimport mysql_upgrade mysqlshow mysqlslap mysql_plugin 
 PROPERTIES HAS_CXX TRUE)
 
 ADD_DEFINITIONS(-DHAVE_DLOPEN)

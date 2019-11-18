@@ -190,6 +190,8 @@ END;
 SELECT f1_insert_select(2);
 f1_insert_select(2)
 1
+Warnings:
+Warning	1048	Column 'f2' cannot be null
 SELECT * FROM t1_not_null ORDER BY f1,f2;
 f1	f2
 2	0
@@ -265,6 +267,8 @@ END;
 SELECT f1_insert_with_two_rows();
 f1_insert_with_two_rows()
 1
+Warnings:
+Warning	1048	Column 'f2' cannot be null
 SELECT * FROM t1_not_null ORDER BY f1,f2;
 f1	f2
 10	0
@@ -387,11 +391,11 @@ DROP VIEW v1_func;
 
 # FUNCTION in CREATE TABLE ... AS SELECT
 CREATE TABLE t1_fail AS SELECT f1_two_inserts() FROM t1_select;
-ERROR HY000: Can't update table 't1_not_null' while 't1_fail' is being created.
+ERROR 23000: Column 'f2' cannot be null
 SELECT * FROM t1_not_null ORDER BY f1,f2;
 f1	f2
 CREATE TABLE t1_fail AS SELECT * FROM t1_select WHERE 1 = f1_two_inserts();
-ERROR HY000: Can't update table 't1_not_null' while 't1_fail' is being created.
+ERROR 23000: Column 'f2' cannot be null
 SELECT * FROM t1_not_null ORDER BY f1,f2;
 f1	f2
 

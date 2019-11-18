@@ -19,7 +19,6 @@
 /* Headers we may want to use. */
 #cmakedefine STDC_HEADERS 1
 #cmakedefine _GNU_SOURCE 1
-#cmakedefine HAVE_LLVM_LIBCPP 1
 #cmakedefine HAVE_ALLOCA_H 1
 #cmakedefine HAVE_AIO_H 1
 #cmakedefine HAVE_ARPA_INET_H 1
@@ -31,6 +30,7 @@
 #cmakedefine HAVE_CXXABI_H 1
 #cmakedefine HAVE_NCURSES_H 1
 #cmakedefine HAVE_NDIR_H 1
+#cmakedefine HAVE_DIRENT_H 1
 #cmakedefine HAVE_DLFCN_H 1
 #cmakedefine HAVE_EXECINFO_H 1
 #cmakedefine HAVE_FCNTL_H 1
@@ -40,6 +40,7 @@
 #cmakedefine HAVE_FNMATCH_H 1
 #cmakedefine HAVE_FPU_CONTROL_H 1
 #cmakedefine HAVE_GRP_H 1
+#cmakedefine HAVE_EXPLICIT_TEMPLATE_INSTANTIATION 1
 #cmakedefine HAVE_IA64INTRIN_H 1
 #cmakedefine HAVE_IEEEFP_H 1
 #cmakedefine HAVE_INTTYPES_H 1
@@ -113,13 +114,13 @@
 #cmakedefine HAVE_LIBCRYPT 1
 #cmakedefine HAVE_LIBMTMALLOC 1
 #cmakedefine HAVE_LIBWRAP 1
-#cmakedefine HAVE_LIBRESOLV 1
 /* Does "struct timespec" have a "sec" and "nsec" field? */
 #cmakedefine HAVE_TIMESPEC_TS_SEC 1
 
 /* Readline */
 #cmakedefine HAVE_HIST_ENTRY 1
 #cmakedefine USE_LIBEDIT_INTERFACE 1
+#cmakedefine USE_NEW_READLINE_INTERFACE 1
 
 #cmakedefine FIONREAD_IN_SYS_IOCTL 1
 #cmakedefine GWINSZ_IN_SYS_IOCTL 1
@@ -127,17 +128,18 @@
 #cmakedefine FIONREAD_IN_SYS_FILIO 1
 
 /* Functions we may want to use. */
-#cmakedefine HAVE_ALIGNED_MALLOC 1
-#cmakedefine HAVE_ALIGNED_FREE 1
 #cmakedefine HAVE_AIOWAIT 1
 #cmakedefine HAVE_ALARM 1
 #cmakedefine HAVE_ALLOCA 1
+#cmakedefine HAVE_BFILL 1
 #cmakedefine HAVE_BMOVE 1
+#cmakedefine HAVE_BZERO 1
 #cmakedefine HAVE_INDEX 1
 #cmakedefine HAVE_CHOWN 1
 #cmakedefine HAVE_CLOCK_GETTIME 1
 #cmakedefine HAVE_CRYPT 1
 #cmakedefine HAVE_CUSERID 1
+#cmakedefine HAVE_CXX_NEW 1
 #cmakedefine HAVE_DIRECTIO 1
 #cmakedefine HAVE_DLERROR 1
 #cmakedefine HAVE_DLOPEN 1
@@ -187,12 +189,13 @@
 #cmakedefine HAVE_LSTAT 1
 #cmakedefine HAVE_MEMALIGN 1
 /* #cmakedefine HAVE_MLOCK 1 see Bug#54662 */
+#cmakedefine HAVE_NPTL 1
 #cmakedefine HAVE_NL_LANGINFO 1
 #cmakedefine HAVE_MADVISE 1
 #cmakedefine HAVE_DECL_MADVISE 1
 #cmakedefine HAVE_DECL_TGOTO 1
 #cmakedefine HAVE_DECL_MHA_MAPSIZE_VA
-#cmakedefine HAVE_MALLOC_INFO 1
+#cmakedefine HAVE_MALLINFO 1
 #cmakedefine HAVE_MEMCPY 1
 #cmakedefine HAVE_MEMMOVE 1
 #cmakedefine HAVE_MKSTEMP 1
@@ -203,14 +206,12 @@
 #cmakedefine HAVE_POLL 1
 #cmakedefine HAVE_PORT_CREATE 1
 #cmakedefine HAVE_POSIX_FALLOCATE 1
-#cmakedefine HAVE_POSIX_MEMALIGN 1
 #cmakedefine HAVE_PREAD 1
 #cmakedefine HAVE_PAUSE_INSTRUCTION 1
 #cmakedefine HAVE_FAKE_PAUSE_INSTRUCTION 1
 #cmakedefine HAVE_RDTSCLL 1
 #cmakedefine HAVE_READ_REAL_TIME 1
 #cmakedefine HAVE_PTHREAD_ATTR_CREATE 1
-#cmakedefine HAVE_PTHREAD_ATTR_GETGUARDSIZE 1
 #cmakedefine HAVE_PTHREAD_ATTR_GETSTACKSIZE 1
 #cmakedefine HAVE_PTHREAD_ATTR_SETPRIO 1
 #cmakedefine HAVE_PTHREAD_ATTR_SETSCHEDPARAM 1
@@ -232,6 +233,7 @@
 #cmakedefine HAVE_PUTENV 1
 #cmakedefine HAVE_RE_COMP 1
 #cmakedefine HAVE_REGCOMP 1
+#cmakedefine HAVE_READDIR_R 1
 #cmakedefine HAVE_READLINK 1
 #cmakedefine HAVE_REALPATH 1
 #cmakedefine HAVE_RENAME 1
@@ -287,7 +289,9 @@
 #cmakedefine HAVE_TZNAME 1
 #cmakedefine HAVE_AIO_READ 1
 /* Symbols we may use */
+#cmakedefine HAVE_SYS_ERRLIST 1
 /* used by stacktrace functions */
+#cmakedefine HAVE_BSS_START 1
 #cmakedefine HAVE_BACKTRACE 1
 #cmakedefine HAVE_BACKTRACE_SYMBOLS 1
 #cmakedefine HAVE_BACKTRACE_SYMBOLS_FD 1
@@ -304,26 +308,6 @@
 #cmakedefine STRUCT_DIRENT_HAS_D_NAMLEN 1
 #cmakedefine SPRINTF_RETURNS_INT 1
 
-#cmakedefine DNS_USE_CPU_CLOCK_FOR_ID 1
-#cmakedefine HAVE_EPOLL 1
-#cmakedefine HAVE_EPOLL_CTL 1
-/* #cmakedefine HAVE_EVENT_PORTS 1 */
-#cmakedefine HAVE_INET_NTOP 1
-#cmakedefine HAVE_KQUEUE 1
-#cmakedefine HAVE_WORKING_KQUEUE 1
-#cmakedefine HAVE_SIGNAL 1
-#cmakedefine HAVE_TIMERADD 1
-#cmakedefine HAVE_TIMERCLEAR 1
-#cmakedefine HAVE_TIMERCMP 1
-#cmakedefine HAVE_TIMERISSET 1
-
-#cmakedefine HAVE_DEVPOLL 1
-#cmakedefine HAVE_SIGNAL_H 1
-#cmakedefine HAVE_SYS_DEVPOLL_H 1
-#cmakedefine HAVE_SYS_EPOLL_H 1
-#cmakedefine HAVE_SYS_EVENT_H 1
-#cmakedefine HAVE_SYS_QUEUE_H 1
-#cmakedefine HAVE_TAILQFOREACH 1
 #define USE_MB 1
 #define USE_MB_IDENT 1
 
@@ -398,7 +382,7 @@
 
 #cmakedefine HAVE_MBSTATE_T
 
-#define MAX_INDEXES 64U
+#define MAX_INDEXES 64
 
 #cmakedefine QSORT_TYPE_IS_VOID 1
 #cmakedefine RETQSORTTYPE @RETQSORTTYPE@
@@ -416,9 +400,8 @@
 #cmakedefine WORDS_BIGENDIAN 1 
 #endif
 
-/*
-  Define to `__inline__' or `__inline' if that's what the C compiler calls it.
-*/
+/* Define to `__inline__' or `__inline' if that's what the C compiler calls
+   it, or to nothing if 'inline' is not supported under any name.  */
 #cmakedefine C_HAS_inline 1
 #if !(C_HAS_inline)
 #ifndef __cplusplus
@@ -490,10 +473,10 @@
 #cmakedefine STACK_DIRECTION @STACK_DIRECTION@
 
 #define SYSTEM_TYPE "@SYSTEM_TYPE@"
-#define MACHINE_TYPE "@MYSQL_MACHINE_TYPE@"
+#define MACHINE_TYPE "@CMAKE_SYSTEM_PROCESSOR@"
 #cmakedefine HAVE_DTRACE 1
 
-#cmakedefine SIGNAL_WITH_VIO_SHUTDOWN 1
+#cmakedefine SIGNAL_WITH_VIO_CLOSE 1
 
 /* Windows stuff, mostly functions, that have Posix analogs but named differently */
 #cmakedefine S_IROTH @S_IROTH@
@@ -522,14 +505,8 @@
 #define setenv(a,b,c) _putenv_s(a,b)
 #endif
 
-/*
-   Memcached config options
-*/
-#cmakedefine WITH_INNODB_MEMCACHED 1
-#cmakedefine ENABLE_MEMCACHED_SASL 1
-#cmakedefine ENABLE_MEMCACHED_SASL_PWDB 1
-#cmakedefine HAVE_SASL_SASL_H 1
-#cmakedefine HAVE_HTONLL 1
+
+
 
 /*
   MySQL features
@@ -539,14 +516,7 @@
 #cmakedefine EXTRA_DEBUG 1
 #cmakedefine BACKUP_TEST 1
 #cmakedefine CYBOZU 1
-#cmakedefine OPTIMIZER_TRACE 1
 #cmakedefine USE_SYMDIR 1
-
-/*
-   InnoDB config options
-*/
-#cmakedefine INNODB_COMPILER_HINTS
-#cmakedefine INNODB_PAGE_ATOMIC_REF_COUNT
 
 /* Character sets and collations */
 #cmakedefine MYSQL_DEFAULT_CHARSET_NAME "@MYSQL_DEFAULT_CHARSET_NAME@"
@@ -600,7 +570,7 @@
 #cmakedefine HAVE_CHARSET_utf32 1
 #cmakedefine HAVE_UCA_COLLATIONS 1
 #cmakedefine HAVE_COMPRESS 1
-#cmakedefine COMPILE_FLAG_WERROR 1
+
 
 /*
   Stuff that always need to be defined (compile breaks without it)
@@ -636,10 +606,8 @@
 
 #cmakedefine SO_EXT "@CMAKE_SHARED_MODULE_SUFFIX@"
 
-#define MYSQL_VERSION_MAJOR @MAJOR_VERSION@
-#define MYSQL_VERSION_MINOR @MINOR_VERSION@
-#define MYSQL_VERSION_PATCH @PATCH_VERSION@
-#define MYSQL_VERSION_EXTRA "@EXTRA_VERSION@"
+#define MYSQL_MAJOR_VERSION @MAJOR_VERSION@
+#define MYSQL_MINOR_VERSION @MINOR_VERSION@
 
 #define PACKAGE "mysql"
 #define PACKAGE_BUGREPORT ""
@@ -655,11 +623,6 @@
 
 #cmakedefine SIZEOF_TIME_T @SIZEOF_TIME_T@
 #cmakedefine TIME_T_UNSIGNED @TIME_T_UNSIGNED@
-
-/* CPU information */
-
-#cmakedefine CPU_LEVEL1_DCACHE_LINESIZE @CPU_LEVEL1_DCACHE_LINESIZE@
-#cmakedefine HAVE_LIBNUMA 1
 
 /* For --secure-file-priv */
 #cmakedefine DEFAULT_SECURE_FILE_PRIV_DIR @DEFAULT_SECURE_FILE_PRIV_DIR@

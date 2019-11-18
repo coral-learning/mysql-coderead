@@ -6,17 +6,7 @@
 let server_log= $MYSQLTEST_VARDIR/log/mysqld.1.err;
 let SEARCH_FILE= $server_log;
 let $restart_file= $MYSQLTEST_VARDIR/tmp/mysqld.1.expect;
-let $secure_file_priv_arg= \"null\";
 --echo #-----------------------------------------------------------------------
-
---exec echo "wait" > $restart_file
---shutdown_server
---source include/wait_until_disconnected.inc
---remove_file $server_log
---exec echo "restart:--secure-file-priv=$secure_file_priv_arg" > $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
---enable_reconnect
---source include/wait_until_connected_again.inc
---disable_reconnect
 
 --echo # Search for : --secure-file-priv is set to NULL. Operations
 --echo #              related to importing and exporting data are

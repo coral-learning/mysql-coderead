@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include <ndb_global.h>
 
@@ -24,7 +23,6 @@
 #include <ErrorHandlingMacros.hpp>
 
 #include "LongSignal.hpp"
-#include "LongSignalImpl.hpp"
 
 #include <signaldata/EventReport.hpp>
 #include <signaldata/TestOrd.hpp>
@@ -33,25 +31,13 @@
 
 #include "VMSignal.hpp"
 #include <NdbOut.hpp>
-#include "TransporterCallbackKernel.hpp"
+#include "DataBuffer.hpp"
+
 
 /**
  * The instance
  */
 SectionSegmentPool g_sectionSegmentPool;
-
-/* Instance debugging vars
- * Set from DBTC
- */
-int ErrorSignalReceive= 0;
-int ErrorMaxSegmentsToSeize= 0;
-
-/**
- * This variable controls if ErrorSignalReceive/ErrorMaxSegmentsToSeize
- *   is active...This to make sure only received signals are affected
- *   and not long signals sent inside node
- */
-extern bool ErrorImportActive;
 
 struct ConnectionError
 {
@@ -75,64 +61,168 @@ const char *lookupConnectionError(Uint32 err)
   return connectionError[i].text;
 }
 
-#include <DebuggerNames.hpp>
-
-#ifndef NDBD_MULTITHREADED
-extern TransporterRegistry globalTransporterRegistry; // Forward declaration
-
-class TransporterCallbackKernelNonMT : public TransporterCallbackKernel
-{
+bool
+import(Ptr<SectionSegment> & first, const Uint32 * src, Uint32 len){
   /**
-   * Check to see if jobbbuffers are starting to get full
-   * and if so call doJob
+   * Dummy data used when setting prev.m_nextSegment for first segment of a
+   *   section
    */
-  int checkJobBuffer() { return globalScheduler.checkDoJob(); }
-  void reportSendLen(NodeId nodeId, Uint32 count, Uint64 bytes);
-  Uint32 get_bytes_to_send_iovec(NodeId node, struct iovec *dst, Uint32 max)
-  {
-    return globalTransporterRegistry.get_bytes_to_send_iovec(node, dst, max);
-  }
-  Uint32 bytes_sent(NodeId node, Uint32 bytes)
-  {
-    return globalTransporterRegistry.bytes_sent(node, bytes);
-  }
-  bool has_data_to_send(NodeId node)
-  {
-    return globalTransporterRegistry.has_data_to_send(node);
-  }
-  void reset_send_buffer(NodeId node, bool should_be_empty)
-  {
-    globalTransporterRegistry.reset_send_buffer(node, should_be_empty);
-  }
-};
-static TransporterCallbackKernelNonMT myTransporterCallback;
-TransporterRegistry globalTransporterRegistry(&myTransporterCallback);
-#endif
+  Uint32 dummyPrev[4]; 
 
-#ifdef NDBD_MULTITHREADED
-static SectionSegmentPool::Cache cache(1024,1024);
+  first.p = 0;
+  if(g_sectionSegmentPool.seize(first)){
+    ;
+  } else {
+    return false;
+  }
 
-void
-mt_set_section_chunk_size()
-{
-  g_sectionSegmentPool.setChunkSize(256);
+  first.p->m_sz = len;
+  first.p->m_ownerRef = 0;
+  
+  Ptr<SectionSegment> prevPtr = { (SectionSegment *)&dummyPrev[0], 0 };
+  Ptr<SectionSegment> currPtr = first;
+  
+  while(len > SectionSegment::DataLength){
+    prevPtr.p->m_nextSegment = currPtr.i;
+    memcpy(&currPtr.p->theData[0], src, 4 * SectionSegment::DataLength);
+    src += SectionSegment::DataLength;
+    len -= SectionSegment::DataLength;
+    prevPtr = currPtr;
+    if(g_sectionSegmentPool.seize(currPtr)){
+      ;
+    } else {
+      first.p->m_lastSegment = prevPtr.i;
+      return false;
+    }
+  }
+
+  first.p->m_lastSegment = currPtr.i;
+  currPtr.p->m_nextSegment = RNIL;
+  memcpy(&currPtr.p->theData[0], src, 4 * len);
+  return true;
 }
 
-#else
-void mt_set_section_chunk_size(){}
-#endif
+void
+linkSegments(Uint32 head, Uint32 tail){
+  
+  Ptr<SectionSegment> headPtr;
+  g_sectionSegmentPool.getPtr(headPtr, head);
+  
+  Ptr<SectionSegment> tailPtr;
+  g_sectionSegmentPool.getPtr(tailPtr, tail);
+  
+  Ptr<SectionSegment> oldTailPtr;
+  g_sectionSegmentPool.getPtr(oldTailPtr, headPtr.p->m_lastSegment);
+  
+  headPtr.p->m_lastSegment = tailPtr.p->m_lastSegment;
+  headPtr.p->m_sz += tailPtr.p->m_sz;
+  
+  oldTailPtr.p->m_nextSegment = tailPtr.i;
+}
+
+void 
+copy(Uint32 * & insertPtr, 
+     class SectionSegmentPool & thePool, const SegmentedSectionPtr & _ptr){
+
+  Uint32 len = _ptr.sz;
+  SectionSegment * ptrP = _ptr.p;
+  
+  while(len > 60){
+    memcpy(insertPtr, &ptrP->theData[0], 4 * 60);
+    len -= 60;
+    insertPtr += 60;
+    ptrP = thePool.getPtr(ptrP->m_nextSegment);
+  }
+  memcpy(insertPtr, &ptrP->theData[0], 4 * len);
+  insertPtr += len;
+}
 
 void
-TransporterCallbackKernel::deliver_signal(SignalHeader * const header,
-                                          Uint8 prio,
-                                          Uint32 * const theData,
-                                          LinearSectionPtr ptr[3])
-{
+copy(Uint32 * dst, SegmentedSectionPtr src){
+  copy(dst, g_sectionSegmentPool, src);
+}
+
+void
+getSections(Uint32 secCount, SegmentedSectionPtr ptr[3]){
+  Uint32 tSec0 = ptr[0].i;
+  Uint32 tSec1 = ptr[1].i;
+  Uint32 tSec2 = ptr[2].i;
+  SectionSegment * p;
+  switch(secCount){
+  case 3:
+    p = g_sectionSegmentPool.getPtr(tSec2);
+    ptr[2].p = p;
+    ptr[2].sz = p->m_sz;
+  case 2:
+    p = g_sectionSegmentPool.getPtr(tSec1);
+    ptr[1].p = p;
+    ptr[1].sz = p->m_sz;
+  case 1:
+    p = g_sectionSegmentPool.getPtr(tSec0);
+    ptr[0].p = p;
+    ptr[0].sz = p->m_sz;
+  case 0:
+    return;
+  }
+  char msg[40];
+  sprintf(msg, "secCount=%d", secCount);
+  ErrorReporter::handleAssert(msg, __FILE__, __LINE__);
+}
+
+void
+getSection(SegmentedSectionPtr & ptr, Uint32 i){
+  ptr.i = i;
+  SectionSegment * p = g_sectionSegmentPool.getPtr(i);
+  ptr.p = p;
+  ptr.sz = p->m_sz;
+}
+
+#define relSz(x) ((x + SectionSegment::DataLength - 1) / SectionSegment::DataLength)
+
+void
+release(SegmentedSectionPtr & ptr){
+  g_sectionSegmentPool.releaseList(relSz(ptr.sz),
+				   ptr.i, 
+				   ptr.p->m_lastSegment);
+}
+
+void
+releaseSections(Uint32 secCount, SegmentedSectionPtr ptr[3]){
+  Uint32 tSec0 = ptr[0].i;
+  Uint32 tSz0 = ptr[0].sz;
+  Uint32 tSec1 = ptr[1].i;
+  Uint32 tSz1 = ptr[1].sz;
+  Uint32 tSec2 = ptr[2].i;
+  Uint32 tSz2 = ptr[2].sz;
+  switch(secCount){
+  case 3:
+    g_sectionSegmentPool.releaseList(relSz(tSz2), tSec2, 
+				     ptr[2].p->m_lastSegment);
+  case 2:
+    g_sectionSegmentPool.releaseList(relSz(tSz1), tSec1, 
+				     ptr[1].p->m_lastSegment);
+  case 1:
+    g_sectionSegmentPool.releaseList(relSz(tSz0), tSec0, 
+				     ptr[0].p->m_lastSegment);
+  case 0:
+    return;
+  }
+  char msg[40];
+  sprintf(msg, "secCount=%d", secCount);
+  ErrorReporter::handleAssert(msg, __FILE__, __LINE__);
+}
+
+#include <DebuggerNames.hpp>
+
+void
+execute(void * callbackObj, 
+	SignalHeader * const header, 
+	Uint8 prio, 
+	Uint32 * const theData,
+	LinearSectionPtr ptr[3]){
 
   const Uint32 secCount = header->m_noOfSections;
   const Uint32 length = header->theLength;
-
-  // if this node is not MT LQH then instance bits are stripped at execute
 
 #ifdef TRACE_DISTRIBUTED
   ndbout_c("recv: %s(%d) from (%s, %d)",
@@ -141,22 +231,17 @@ TransporterCallbackKernel::deliver_signal(SignalHeader * const header,
 	   getBlockName(refToBlock(header->theSendersBlockRef)),
 	   refToNode(header->theSendersBlockRef));
 #endif
-
+  
   bool ok = true;
   Ptr<SectionSegment> secPtr[3];
-  bzero(secPtr, sizeof(secPtr));
-  secPtr[0].p = secPtr[1].p = secPtr[2].p = 0;
-
-  ErrorImportActive = true;
   switch(secCount){
   case 3:
-    ok &= import(SPC_CACHE_ARG secPtr[2], ptr[2].p, ptr[2].sz);
+    ok &= import(secPtr[2], ptr[2].p, ptr[2].sz);
   case 2:
-    ok &= import(SPC_CACHE_ARG secPtr[1], ptr[1].p, ptr[1].sz);
+    ok &= import(secPtr[1], ptr[1].p, ptr[1].sz);
   case 1:
-    ok &= import(SPC_CACHE_ARG secPtr[0], ptr[0].p, ptr[0].sz);
+    ok &= import(secPtr[0], ptr[0].p, ptr[0].sz);
   }
-  ErrorImportActive = false;
 
   /**
    * Check that we haven't received a too long signal
@@ -172,17 +257,7 @@ TransporterCallbackKernel::deliver_signal(SignalHeader * const header,
     secPtrI[1] = secPtr[1].i;
     secPtrI[2] = secPtr[2].i;
 
-#ifndef NDBD_MULTITHREADED
     globalScheduler.execute(header, prio, theData, secPtrI);  
-#else
-    if (prio == JBB)
-      sendlocal(receiverThreadId,
-                header, theData, secPtrI);
-    else
-      sendprioa(receiverThreadId,
-                header, theData, secPtrI);
-
-#endif
     return;
   }
   
@@ -191,17 +266,14 @@ TransporterCallbackKernel::deliver_signal(SignalHeader * const header,
    */
   for(Uint32 i = 0; i<secCount; i++){
     if(secPtr[i].p != 0){
-      g_sectionSegmentPool.releaseList(SPC_SEIZE_ARG
-                                       relSz(secPtr[i].p->m_sz),
-                                       secPtr[i].i, 
+      g_sectionSegmentPool.releaseList(relSz(ptr[i].sz), secPtr[i].i, 
 				       secPtr[i].p->m_lastSegment);
     }
   }
-
-  SignalDroppedRep * rep = (SignalDroppedRep*)theData;
   Uint32 gsn = header->theVerId_signalNumber;
   Uint32 len = header->theLength;
   Uint32 newLen= (len > 22 ? 22 : len);
+  SignalDroppedRep * rep = (SignalDroppedRep*)theData;
   memmove(rep->originalData, theData, (4 * newLen));
   rep->originalGsn = gsn;
   rep->originalLength = len;
@@ -209,17 +281,7 @@ TransporterCallbackKernel::deliver_signal(SignalHeader * const header,
   header->theVerId_signalNumber = GSN_SIGNAL_DROPPED_REP;
   header->theLength = newLen + 3;
   header->m_noOfSections = 0;
-#ifndef NDBD_MULTITHREADED
   globalScheduler.execute(header, prio, theData, secPtrI);    
-#else
-  if (prio == JBB)
-    sendlocal(receiverThreadId,
-              header, theData, NULL);
-  else
-    sendprioa(receiverThreadId,
-              header, theData, NULL);
-    
-#endif
 }
 
 NdbOut & 
@@ -229,12 +291,48 @@ operator<<(NdbOut& out, const SectionSegment & ss){
 }
 
 void
-TransporterCallbackKernel::reportError(NodeId nodeId,
-                                       TransporterError errorCode,
-                                       const char *info)
+print(SectionSegment * s, Uint32 len, FILE* out){
+  for(Uint32 i = 0; i<len; i++){
+    fprintf(out, "H\'0x%.8x ", s->theData[i]);
+    if(((i + 1) % 6) == 0)
+      fprintf(out, "\n");
+  }
+}
+
+void
+print(SegmentedSectionPtr ptr, FILE* out){
+
+  ptr.p = g_sectionSegmentPool.getPtr(ptr.i);
+  Uint32 len = ptr.p->m_sz;
+  
+  fprintf(out, "ptr.i = %d(%p) ptr.sz = %d(%d)\n", ptr.i, ptr.p, len, ptr.sz);
+  while(len > SectionSegment::DataLength){
+    print(ptr.p, SectionSegment::DataLength, out);
+    
+    len -= SectionSegment::DataLength;
+    fprintf(out, "ptr.i = %d\n", ptr.p->m_nextSegment);
+    ptr.p = g_sectionSegmentPool.getPtr(ptr.p->m_nextSegment);
+  }
+  
+  print(ptr.p, len, out);
+  fprintf(out, "\n");
+}
+
+int
+checkJobBuffer() {
+  /** 
+   * Check to see if jobbbuffers are starting to get full
+   * and if so call doJob
+   */
+  return globalScheduler.checkDoJob();
+}
+
+void
+reportError(void * callbackObj, NodeId nodeId,
+	    TransporterError errorCode, const char *info)
 {
 #ifdef DEBUG_TRANSPORTER
-  ndbout_c("reportError (%d, 0x%x) %s", nodeId, errorCode, info ? info : "");
+  ndbout_c("reportError (%d, 0x%x) %s", nodeId, errorCode, info ? info : "")
 #endif
 
   DBUG_ENTER("reportError");
@@ -246,7 +344,7 @@ TransporterCallbackKernel::reportError(NodeId nodeId,
   case TE_SIGNAL_LOST_SEND_BUFFER_FULL:
   {
     char msg[64];
-    BaseString::snprintf(msg, sizeof(msg), "Remote node id %d.%s%s", nodeId,
+    snprintf(msg, sizeof(msg), "Remote note id %d.%s%s", nodeId,
 	     info ? " " : "", info ? info : "");
     ErrorReporter::handleError(NDBD_EXIT_SIGNAL_LOST_SEND_BUFFER_FULL,
 			       msg, __FILE__, NST_ErrorHandler);
@@ -254,7 +352,7 @@ TransporterCallbackKernel::reportError(NodeId nodeId,
   case TE_SIGNAL_LOST:
   {
     char msg[64];
-    BaseString::snprintf(msg, sizeof(msg), "Remote node id %d,%s%s", nodeId,
+    snprintf(msg, sizeof(msg), "Remote node id %d,%s%s", nodeId,
 	     info ? " " : "", info ? info : "");
     ErrorReporter::handleError(NDBD_EXIT_SIGNAL_LOST,
 			       msg, __FILE__, NST_ErrorHandler);
@@ -262,7 +360,7 @@ TransporterCallbackKernel::reportError(NodeId nodeId,
   case TE_SHM_IPC_PERMANENT:
   {
     char msg[128];
-    BaseString::snprintf(msg, sizeof(msg),
+    snprintf(msg, sizeof(msg),
 	     "Remote node id %d.%s%s",
 	     nodeId, info ? " " : "", info ? info : "");
     ErrorReporter::handleError(NDBD_EXIT_CONNECTION_SETUP_FAILED,
@@ -273,10 +371,11 @@ TransporterCallbackKernel::reportError(NodeId nodeId,
   }
  
   if(errorCode & TE_DO_DISCONNECT){
-    reportDisconnect(nodeId, errorCode);
+    reportDisconnect(callbackObj, nodeId, errorCode);
   }
   
-  SignalT<3> signal;
+  SignalT<3> signalT;
+  Signal &signal= *(Signal*)&signalT;
   memset(&signal.header, 0, sizeof(signal.header));
 
 
@@ -291,15 +390,7 @@ TransporterCallbackKernel::reportError(NodeId nodeId,
   signal.header.theLength = 3;  
   signal.header.theSendersSignalId = 0;
   signal.header.theSendersBlockRef = numberToRef(0, globalData.ownId);
-  signal.header.theReceiversBlockNumber = CMVMI;
-  signal.header.theVerId_signalNumber = GSN_EVENT_REP;
-#ifndef NDBD_MULTITHREADED
-  Uint32 secPtr[3];
-  globalScheduler.execute(&signal.header, JBA, signal.theData, secPtr);
-#else
-  sendprioa(receiverThreadId,
-            &signal.header, signal.theData, NULL);
-#endif
+  globalScheduler.execute(&signal, JBA, CMVMI, GSN_EVENT_REP);
 
   DBUG_VOID_RETURN;
 }
@@ -307,57 +398,41 @@ TransporterCallbackKernel::reportError(NodeId nodeId,
 /**
  * Report average send length in bytes (4096 last sends)
  */
-#ifndef NDBD_MULTITHREADED
 void
-TransporterCallbackKernelNonMT::reportSendLen(NodeId nodeId, Uint32 count,
-                                              Uint64 bytes)
-{
+reportSendLen(void * callbackObj, 
+	      NodeId nodeId, Uint32 count, Uint64 bytes){
 
-  SignalT<3> signal;
+  SignalT<3> signalT;
+  Signal &signal= *(Signal*)&signalT;
   memset(&signal.header, 0, sizeof(signal.header));
 
   signal.header.theLength = 3;
   signal.header.theSendersSignalId = 0;
   signal.header.theSendersBlockRef = numberToRef(0, globalData.ownId);
-  signal.header.theReceiversBlockNumber = CMVMI;
-  signal.header.theVerId_signalNumber = GSN_EVENT_REP;
-
   signal.theData[0] = NDB_LE_SendBytesStatistic;
   signal.theData[1] = nodeId;
-  signal.theData[2] = Uint32(bytes/count);
-
-  Uint32 secPtr[3];
-  globalScheduler.execute(&signal.header, JBA, signal.theData, secPtr);
+  signal.theData[2] = (bytes/count);
+  globalScheduler.execute(&signal, JBA, CMVMI, GSN_EVENT_REP);
 }
-#endif
 
 /**
  * Report average receive length in bytes (4096 last receives)
  */
 void
-TransporterCallbackKernel::reportReceiveLen(NodeId nodeId, Uint32 count,
-                                            Uint64 bytes)
-{
+reportReceiveLen(void * callbackObj, 
+		 NodeId nodeId, Uint32 count, Uint64 bytes){
 
-  SignalT<3> signal;
+  SignalT<3> signalT;
+  Signal &signal= *(Signal*)&signalT;
   memset(&signal.header, 0, sizeof(signal.header));
 
   signal.header.theLength = 3;  
   signal.header.theSendersSignalId = 0;
   signal.header.theSendersBlockRef = numberToRef(0, globalData.ownId);
-  signal.header.theReceiversBlockNumber = CMVMI;
-  signal.header.theVerId_signalNumber = GSN_EVENT_REP;
-
   signal.theData[0] = NDB_LE_ReceiveBytesStatistic;
   signal.theData[1] = nodeId;
-  signal.theData[2] = Uint32(bytes/count);
-#ifndef NDBD_MULTITHREADED
-  Uint32 secPtr[3];
-  globalScheduler.execute(&signal.header, JBA, signal.theData, secPtr);
-#else
-  sendprioa(receiverThreadId,
-            &signal.header, signal.theData, NULL);
-#endif
+  signal.theData[2] = (bytes/count);
+  globalScheduler.execute(&signal, JBA, CMVMI, GSN_EVENT_REP);
 }
 
 /**
@@ -365,59 +440,42 @@ TransporterCallbackKernel::reportReceiveLen(NodeId nodeId, Uint32 count,
  */
 
 void
-TransporterCallbackKernel::reportConnect(NodeId nodeId)
-{
+reportConnect(void * callbackObj, NodeId nodeId){
 
-  SignalT<1> signal;
+  SignalT<1> signalT;
+  Signal &signal= *(Signal*)&signalT;
   memset(&signal.header, 0, sizeof(signal.header));
 
   signal.header.theLength = 1; 
   signal.header.theSendersSignalId = 0;
   signal.header.theSendersBlockRef = numberToRef(0, globalData.ownId);
-  signal.header.theReceiversBlockNumber = CMVMI;
-  signal.header.theVerId_signalNumber = GSN_CONNECT_REP;
-
   signal.theData[0] = nodeId;
   
-#ifndef NDBD_MULTITHREADED
-  Uint32 secPtr[3];
-  globalScheduler.execute(&signal.header, JBA, signal.theData, secPtr);
-#else
-  sendprioa(receiverThreadId,
-            &signal.header, signal.theData, NULL);
-#endif
+  globalScheduler.execute(&signal, JBA, CMVMI, GSN_CONNECT_REP);
 }
 
 /**
  * Report connection broken
  */
 void
-TransporterCallbackKernel::reportDisconnect(NodeId nodeId, Uint32 errNo)
-{
+reportDisconnect(void * callbackObj, NodeId nodeId, Uint32 errNo){
 
   DBUG_ENTER("reportDisconnect");
 
-  SignalT<sizeof(DisconnectRep)/4> signal;
+  SignalT<sizeof(DisconnectRep)/4> signalT;
+  Signal &signal= *(Signal*)&signalT;
   memset(&signal.header, 0, sizeof(signal.header));
 
   signal.header.theLength = DisconnectRep::SignalLength; 
   signal.header.theSendersSignalId = 0;
   signal.header.theSendersBlockRef = numberToRef(0, globalData.ownId);
   signal.header.theTrace = TestOrd::TraceDisconnect;
-  signal.header.theVerId_signalNumber = GSN_DISCONNECT_REP;
-  signal.header.theReceiversBlockNumber = CMVMI;
 
-  DisconnectRep * rep = CAST_PTR(DisconnectRep, &signal.theData[0]);
+  DisconnectRep * const  rep = (DisconnectRep *)&signal.theData[0];
   rep->nodeId = nodeId;
   rep->err = errNo;
 
-#ifndef NDBD_MULTITHREADED
-  Uint32 secPtr[3];
-  globalScheduler.execute(&signal.header, JBA, signal.theData, secPtr);
-#else
-  sendprioa(receiverThreadId,
-            &signal.header, signal.theData, NULL);
-#endif
+  globalScheduler.execute(&signal, JBA, CMVMI, GSN_DISCONNECT_REP);
 
   DBUG_VOID_RETURN;
 }
@@ -448,8 +506,7 @@ SignalLoggerManager::printSegmentedSection(FILE * output,
 }
 
 void
-TransporterCallbackKernel::transporter_recv_from(NodeId nodeId)
-{
+transporter_recv_from(void * callbackObj, NodeId nodeId){
   globalData.m_nodeInfo[nodeId].m_heartbeat_cnt= 0;
   return;
 }

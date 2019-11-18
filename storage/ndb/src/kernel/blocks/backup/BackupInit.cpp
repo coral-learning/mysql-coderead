@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003-2008 MySQL AB, 2008 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 //****************************************************************************
 // 
@@ -29,8 +27,8 @@
 
 //extern const unsigned Ndbcntr::g_sysTableCount;
 
-Backup::Backup(Block_context& ctx, Uint32 instanceNumber) :
-  SimulatedBlock(BACKUP, ctx, instanceNumber),
+Backup::Backup(Block_context& ctx) :
+  SimulatedBlock(BACKUP, ctx),
   c_nodes(c_nodePool),
   c_backups(c_backupPool)
 {
@@ -61,15 +59,14 @@ Backup::Backup(Block_context& ctx, Uint32 instanceNumber) :
   addRecSignal(GSN_GET_TABINFOREF, &Backup::execGET_TABINFOREF);
   addRecSignal(GSN_GET_TABINFO_CONF, &Backup::execGET_TABINFO_CONF);
 
-  addRecSignal(GSN_CREATE_TRIG_IMPL_REF, &Backup::execCREATE_TRIG_IMPL_REF);
-  addRecSignal(GSN_CREATE_TRIG_IMPL_CONF, &Backup::execCREATE_TRIG_IMPL_CONF);
+  addRecSignal(GSN_CREATE_TRIG_REF, &Backup::execCREATE_TRIG_REF);
+  addRecSignal(GSN_CREATE_TRIG_CONF, &Backup::execCREATE_TRIG_CONF);
 
-  addRecSignal(GSN_DROP_TRIG_IMPL_REF, &Backup::execDROP_TRIG_IMPL_REF);
-  addRecSignal(GSN_DROP_TRIG_IMPL_CONF, &Backup::execDROP_TRIG_IMPL_CONF);
+  addRecSignal(GSN_DROP_TRIG_REF, &Backup::execDROP_TRIG_REF);
+  addRecSignal(GSN_DROP_TRIG_CONF, &Backup::execDROP_TRIG_CONF);
 
-  addRecSignal(GSN_DIH_SCAN_TAB_CONF, &Backup::execDIH_SCAN_TAB_CONF);
-  addRecSignal(GSN_DIH_SCAN_GET_NODES_CONF,
-               &Backup::execDIH_SCAN_GET_NODES_CONF);
+  addRecSignal(GSN_DI_FCOUNTCONF, &Backup::execDI_FCOUNTCONF);
+  addRecSignal(GSN_DIGETPRIMCONF, &Backup::execDIGETPRIMCONF);
 
   addRecSignal(GSN_FSOPENREF, &Backup::execFSOPENREF, true);
   addRecSignal(GSN_FSOPENCONF, &Backup::execFSOPENCONF);
@@ -114,8 +111,6 @@ Backup::Backup(Block_context& ctx, Uint32 instanceNumber) :
 
   addRecSignal(GSN_WAIT_GCP_REF, &Backup::execWAIT_GCP_REF);
   addRecSignal(GSN_WAIT_GCP_CONF, &Backup::execWAIT_GCP_CONF);
-  addRecSignal(GSN_BACKUP_LOCK_TAB_CONF, &Backup::execBACKUP_LOCK_TAB_CONF);
-  addRecSignal(GSN_BACKUP_LOCK_TAB_REF, &Backup::execBACKUP_LOCK_TAB_REF);
 
   /**
    * Testing
@@ -127,8 +122,6 @@ Backup::Backup(Block_context& ctx, Uint32 instanceNumber) :
   
   addRecSignal(GSN_LCP_PREPARE_REQ, &Backup::execLCP_PREPARE_REQ);
   addRecSignal(GSN_END_LCPREQ, &Backup::execEND_LCPREQ);
-
-  addRecSignal(GSN_DBINFO_SCANREQ, &Backup::execDBINFO_SCANREQ);
 }
   
 Backup::~Backup()
@@ -138,6 +131,7 @@ Backup::~Backup()
 BLOCK_FUNCTIONS(Backup)
 
 template class ArrayPool<Backup::Page32>;
+template class ArrayPool<Backup::Attribute>;
 template class ArrayPool<Backup::Fragment>;
 
 void
@@ -168,14 +162,7 @@ Backup::execREAD_CONFIG_REQ(Signal* signal)
 			    &c_defaults.m_disk_write_speed);
   ndb_mgm_get_int_parameter(p, CFG_DB_DISK_SYNCH_SIZE,
 			    &c_defaults.m_disk_synch_size);
-  ndb_mgm_get_int_parameter(p, CFG_DB_COMPRESSED_BACKUP,
-			    &c_defaults.m_compressed_backup);
-  ndb_mgm_get_int_parameter(p, CFG_DB_COMPRESSED_LCP,
-			    &c_defaults.m_compressed_lcp);
 
-  m_backup_report_frequency = 0;
-  ndb_mgm_get_int_parameter(p, CFG_DB_BACKUP_REPORT_FREQUENCY, 
-			    &m_backup_report_frequency);
   /*
     We adjust the disk speed parameters from bytes per second to rather be
     words per 100 milliseconds. We convert disk synch size from bytes per
@@ -196,6 +183,7 @@ Backup::execREAD_CONFIG_REQ(Signal* signal)
   c_backupPool.setSize(noBackups + 1);
   c_backupFilePool.setSize(3 * noBackups + 1);
   c_tablePool.setSize(noBackups * noTables + 1);
+  c_attributePool.setSize(noBackups * noAttribs + MAX_ATTRIBUTES_IN_TABLE);
   c_triggerPool.setSize(noBackups * 3 * noTables);
   c_fragmentPool.setSize(noBackups * noFrags + 1);
   
@@ -212,6 +200,7 @@ Backup::execREAD_CONFIG_REQ(Signal* signal)
   c_defaults.m_minWriteSize = szWrite;
   c_defaults.m_maxWriteSize = maxWriteSize;
   c_defaults.m_lcp_buffer_size = szDataBuf;
+  
 
   Uint32 szMem = 0;
   ndb_mgm_get_int_parameter(p, CFG_DB_BACKUP_MEM, &szMem);
@@ -225,7 +214,7 @@ Backup::execREAD_CONFIG_REQ(Signal* signal)
     SLList<Table> tables(c_tablePool);
     TablePtr ptr;
     while(tables.seize(ptr)){
-      new (ptr.p) Table(c_fragmentPool);
+      new (ptr.p) Table(c_attributePool, c_fragmentPool);
     }
     tables.release();
   }

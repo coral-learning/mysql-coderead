@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Copyright (c) 2002, 2012, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2002, 2016, Oracle and/or its affiliates. All rights reserved.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -31,6 +31,20 @@ set_echo_compat() {
 	*c*,*)   echo_n=-n echo_c=     ;;
 	*)       echo_n=   echo_c='\c' ;;
     esac
+}
+
+validate_reply () {
+    ret=0
+    if [ -z "$1" ]; then
+	reply=y
+	return $ret
+    fi
+    case $1 in
+        y|Y|yes|Yes|YES) reply=y ;;
+        n|N|no|No|NO)    reply=n ;;
+        *) ret=1 ;;
+    esac
+    return $ret
 }
 
 prepare() {
@@ -135,47 +149,21 @@ set_root_password() {
     fi
 
     esc_pass=`basic_single_escape "$password1"`
-
-    # attempt to lift the password expiration flag for root first
-    do_query "SET PASSWORD=PASSWORD('$esc_pass');"
-    if [ $? -ne 0 ]; then
-	echo "root password update failed!"
+    do_query "UPDATE mysql.user SET Password=PASSWORD('$esc_pass') WHERE User='root';"
+    if [ $? -eq 0 ]; then
+	echo "Password updated successfully!"
+	echo "Reloading privilege tables.."
+	reload_privilege_tables
+	if [ $? -eq 1 ]; then
+		clean_and_exit
+	fi
+	echo
+	rootpass=$password1
+	make_config
+    else
+	echo "Password update failed!"
 	clean_and_exit
     fi
-
-    # now since the password has changed, lets use the new one.
-    rootpass=$password1
-    make_config
-
-    # set password for all root users
-    # do the old password
-    do_query "SET @@old_passwords=1; UPDATE mysql.user SET Password=PASSWORD('$esc_pass'), password_expired='N' WHERE User='root' and plugin = 'mysql_old_password';"
-    if [ $? -ne 0 ]; then
-	echo "old password update failed!"
-	clean_and_exit
-    fi
-
-    # do the native password
-    do_query "SET @@old_passwords=0; UPDATE mysql.user SET Password=PASSWORD('$esc_pass'), password_expired='N' WHERE User='root' and plugin in ('', 'mysql_native_password');"
-    if [ $? -ne 0 ]; then
-	echo "native password update failed!"
-	clean_and_exit
-    fi
-
-    # do the sha256 password
-    do_query "SET @@old_passwords=2; UPDATE mysql.user SET authentication_string=PASSWORD('$esc_pass'), password_expired='N' WHERE User='root' and plugin = 'sha256_password';"
-    if [ $? -ne 0 ]; then
-	echo "sha256 password update failed!"
-	clean_and_exit
-    fi
-
-    echo "Password updated successfully!"
-    echo "Reloading privilege tables.."
-    reload_privilege_tables
-    if [ $? -eq 1 ]; then
-            clean_and_exit
-    fi
-    echo
 
     return 0
 }
@@ -284,15 +272,18 @@ echo "Setting the root password ensures that nobody can log into the MySQL"
 echo "root user without the proper authorisation."
 echo
 
-if [ $hadpass -eq 0 ]; then
-    echo $echo_n "Set root password? [Y/n] $echo_c"
-else
-    echo "You already have a root password set, so you can safely answer 'n'."
-    echo
-    echo $echo_n "Change the root password? [Y/n] $echo_c"
-fi
+while true ; do
+    if [ $hadpass -eq 0 ]; then
+	echo $echo_n "Set root password? [Y/n] $echo_c"
+    else
+	echo "You already have a root password set, so you can safely answer 'n'."
+	echo
+	echo $echo_n "Change the root password? [Y/n] $echo_c"
+    fi
+    read reply
+    validate_reply $reply && break
+done
 
-read reply
 if [ "$reply" = "n" ]; then
     echo " ... skipping."
 else
@@ -316,9 +307,11 @@ echo "go a bit smoother.  You should remove them before moving into a"
 echo "production environment."
 echo
 
-echo $echo_n "Remove anonymous users? [Y/n] $echo_c"
-
-read reply
+while true ; do
+    echo $echo_n "Remove anonymous users? [Y/n] $echo_c"
+    read reply
+    validate_reply $reply && break
+done
 if [ "$reply" = "n" ]; then
     echo " ... skipping."
 else
@@ -334,9 +327,11 @@ echo
 echo "Normally, root should only be allowed to connect from 'localhost'.  This"
 echo "ensures that someone cannot guess at the root password from the network."
 echo
-
-echo $echo_n "Disallow root login remotely? [Y/n] $echo_c"
-read reply
+while true ; do
+    echo $echo_n "Disallow root login remotely? [Y/n] $echo_c"
+    read reply
+    validate_reply $reply && break
+done
 if [ "$reply" = "n" ]; then
     echo " ... skipping."
 else
@@ -354,8 +349,12 @@ echo "access.  This is also intended only for testing, and should be removed"
 echo "before moving into a production environment."
 echo
 
-echo $echo_n "Remove test database and access to it? [Y/n] $echo_c"
-read reply
+while true ; do
+    echo $echo_n "Remove test database and access to it? [Y/n] $echo_c"
+    read reply
+    validate_reply $reply && break
+done
+
 if [ "$reply" = "n" ]; then
     echo " ... skipping."
 else
@@ -372,8 +371,12 @@ echo "Reloading the privilege tables will ensure that all changes made so far"
 echo "will take effect immediately."
 echo
 
-echo $echo_n "Reload privilege tables now? [Y/n] $echo_c"
-read reply
+while true ; do
+    echo $echo_n "Reload privilege tables now? [Y/n] $echo_c"
+    read reply
+    validate_reply $reply && break
+done
+
 if [ "$reply" = "n" ]; then
     echo " ... skipping."
 else

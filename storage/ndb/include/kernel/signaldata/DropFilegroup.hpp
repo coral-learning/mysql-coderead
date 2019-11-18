@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2005-2008 MySQL AB
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2005-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef DROP_FILEGROUP_HPP
 #define DROP_FILEGROUP_HPP
@@ -34,22 +32,13 @@ struct DropFilegroupReq {
    */
   friend bool printDROP_FILEGROUP_REQ(FILE*, const Uint32*, Uint32, Uint16);
   
-  STATIC_CONST( SignalLength = 7 );
+  STATIC_CONST( SignalLength = 4 );
   STATIC_CONST( GSN = GSN_DROP_FILEGROUP_REQ );
   
-  union {
-    Uint32 senderData;
-    Uint32 clientData;
-  };
-  union {
-    Uint32 senderRef;
-    Uint32 clientRef;
-  };
+  Uint32 senderData;
+  Uint32 senderRef;
   Uint32 filegroup_id;
   Uint32 filegroup_version;
-  Uint32 requestInfo;
-  Uint32 transKey;
-  Uint32 transId;
 };
 
 struct DropFilegroupRef {
@@ -69,7 +58,7 @@ struct DropFilegroupRef {
    */
   friend bool printDROP_FILEGROUP_REF(FILE*, const Uint32*, Uint32, Uint16);
   
-  STATIC_CONST( SignalLength = 9 );
+  STATIC_CONST( SignalLength = 7 );
   STATIC_CONST( GSN = GSN_DROP_FILEGROUP_REF );
 
   enum ErrorCode {
@@ -88,8 +77,7 @@ struct DropFilegroupRef {
   Uint32 errorCode;
   Uint32 errorLine; 
   Uint32 errorKey;
-  Uint32 errorNodeId;
-  Uint32 transId;
+
 };
 
 struct DropFilegroupConf {
@@ -109,14 +97,13 @@ struct DropFilegroupConf {
    */
   friend bool printDROP_FILEGROUP_CONF(FILE*, const Uint32*, Uint32, Uint16);
   
-  STATIC_CONST( SignalLength = 5 );
+  STATIC_CONST( SignalLength = 4 );
   STATIC_CONST( GSN = GSN_DROP_FILEGROUP_CONF );
 
   Uint32 senderData;
   Uint32 senderRef;
   Uint32 filegroupId;
   Uint32 filegroupVersion;
-  Uint32 transId;
 };
 
 struct DropFileReq {
@@ -132,22 +119,13 @@ struct DropFileReq {
    */
   friend bool printDROP_FILE_REQ(FILE*, const Uint32*, Uint32, Uint16);
   
-  STATIC_CONST( SignalLength = 7 );
+  STATIC_CONST( SignalLength = 4 );
   STATIC_CONST( GSN = GSN_DROP_FILE_REQ );
   
-  union {
-    Uint32 senderData;
-    Uint32 clientData;
-  };
-  union {
-    Uint32 senderRef;
-    Uint32 clientRef;
-  };
+  Uint32 senderData;
+  Uint32 senderRef;
   Uint32 file_id;
   Uint32 file_version;
-  Uint32 requestInfo;
-  Uint32 transKey;
-  Uint32 transId;
 };
 
 struct DropFileRef {
@@ -167,7 +145,7 @@ struct DropFileRef {
    */
   friend bool printDROP_FILE_REF(FILE*, const Uint32*, Uint32, Uint16);
   
-  STATIC_CONST( SignalLength = 9 );
+  STATIC_CONST( SignalLength = 7 );
   STATIC_CONST( GSN = GSN_DROP_FILE_REF );
 
   enum ErrorCode {
@@ -186,8 +164,7 @@ struct DropFileRef {
   Uint32 errorCode;
   Uint32 errorLine; 
   Uint32 errorKey;
-  Uint32 errorNodeId;
-  Uint32 transId;
+
 };
 
 struct DropFileConf {
@@ -207,14 +184,13 @@ struct DropFileConf {
    */
   friend bool printDROP_FILE_CONF(FILE*, const Uint32*, Uint32, Uint16);
   
-  STATIC_CONST( SignalLength = 5 );
+  STATIC_CONST( SignalLength = 4 );
   STATIC_CONST( GSN = GSN_DROP_FILE_CONF );
 
   Uint32 senderData;
   Uint32 senderRef;
   Uint32 fileId;
   Uint32 fileVersion;
-  Uint32 transId;
 };
 
 #endif

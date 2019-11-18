@@ -1,4 +1,4 @@
-/* Copyright (c) 2008, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2008, 2010, Oracle and/or its affiliates. All rights reserved.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -19,7 +19,6 @@
   schema tables (implementation).
 */
 
-#include "my_global.h"
 #include "pfs_column_values.h"
 
 LEX_STRING PERFORMANCE_SCHEMA_str=
@@ -40,11 +39,3 @@ LEX_STRING thread_instrument_prefix=
 LEX_STRING file_instrument_prefix=
 { C_STRING_WITH_LEN("wait/io/file/") };
 
-LEX_STRING stage_instrument_prefix=
-{ C_STRING_WITH_LEN("stage/") };
-
-LEX_STRING statement_instrument_prefix=
-{ C_STRING_WITH_LEN("statement/") };
-
-LEX_STRING socket_instrument_prefix=
-{ C_STRING_WITH_LEN("wait/io/socket/") };

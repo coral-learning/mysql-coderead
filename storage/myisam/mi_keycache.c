@@ -1,4 +1,5 @@
-/* Copyright (c) 2003, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2008 MySQL AB, 2009 Sun Microsystems, Inc.
+   Use is subject to license terms.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -47,7 +48,7 @@
 */
 
 int mi_assign_to_key_cache(MI_INFO *info,
-			   ulonglong key_map MY_ATTRIBUTE((unused)),
+			   ulonglong key_map __attribute__((unused)),
 			   KEY_CACHE *key_cache)
 {
   int error= 0;

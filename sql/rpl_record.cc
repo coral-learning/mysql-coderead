@@ -1,4 +1,4 @@
-/* Copyright (c) 2007, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2007, 2013, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -10,19 +10,16 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #include "sql_priv.h"
 #include "unireg.h"
 #include "rpl_rli.h"
 #include "rpl_record.h"
-#include "rpl_slave.h"                  // Need to pull in slave_print_msg
+#include "slave.h"                  // Need to pull in slave_print_msg
 #include "rpl_utility.h"
 #include "rpl_rli.h"
-
-using std::min;
-using std::max;
 
 /**
    Pack a record of data for a table into a format suitable for
@@ -79,9 +76,6 @@ pack_row(TABLE *table, MY_BITMAP const* cols,
   unsigned int null_bits= (1U << 8) - 1;
   // Mask to mask out the correct but among the null bits
   unsigned int null_mask= 1U;
-  DBUG_PRINT("debug", ("null ptr: 0x%lx; row start: %p; null bytes: %d",
-                       (ulong) null_ptr, row_data, null_byte_count));
-  DBUG_DUMP("cols", (uchar*) cols->bitmap, cols->last_word_ptr - cols->bitmap + 1);
   for ( ; (field= *p_field) ; p_field++)
   {
     if (bitmap_is_set(cols, p_field - table->field))
@@ -89,8 +83,6 @@ pack_row(TABLE *table, MY_BITMAP const* cols,
       my_ptrdiff_t offset;
       if (field->is_null(rec_offset))
       {
-        DBUG_PRINT("debug", ("Is NULL; null_mask: 0x%x; null_bits: 0x%x",
-                             null_mask, null_bits));
         offset= def_offset;
         null_bits |= null_mask;
       }
@@ -128,12 +120,6 @@ pack_row(TABLE *table, MY_BITMAP const* cols,
         null_bits= (1U << 8) - 1;
       }
     }
-#ifndef DBUG_OFF
-    else
-    {
-      DBUG_PRINT("debug", ("Skipped"));
-    }
-#endif
   }
 
   /*
@@ -215,18 +201,6 @@ unpack_row(Relay_log_info const *rli,
   uchar const *null_ptr= row_data;
   uchar const *pack_ptr= row_data + master_null_byte_count;
 
-  if (bitmap_is_clear_all(cols))
-  {
-    /**
-       There was no data sent from the master, so there is 
-       nothing to unpack.    
-     */
-    *current_row_end= pack_ptr;
-    *master_reclength= 0;
-    DBUG_RETURN(error);
-  }
-
-
   Field **const begin_ptr = table->field;
   Field **field_ptr;
   Field **const end_ptr= begin_ptr + colcnt;
@@ -270,11 +244,6 @@ unpack_row(Relay_log_info const *rli,
                          (*field_ptr)->field_name,
                          (long) (field_ptr - begin_ptr)));
     DBUG_ASSERT(f != NULL);
-
-    DBUG_PRINT("debug", ("field: %s; null mask: 0x%x; null bits: 0x%lx;"
-                         " row start: %p; null bytes: %ld",
-                         f->field_name, null_mask, (ulong) null_bits,
-                         pack_ptr, (ulong) master_null_byte_count));
 
     /*
       No need to bother about columns that does not exist: they have
@@ -321,7 +290,7 @@ unpack_row(Relay_log_info const *rli,
         else
         {
           f->set_default();
-          push_warning_printf(current_thd, Sql_condition::WARN_LEVEL_WARN,
+          push_warning_printf(current_thd, MYSQL_ERROR::WARN_LEVEL_WARN,
                               ER_BAD_NULL_ERROR, ER(ER_BAD_NULL_ERROR),
                               f->field_name);
         }
@@ -347,20 +316,11 @@ unpack_row(Relay_log_info const *rli,
           DBUG_RETURN(ER_SLAVE_CORRUPT_EVENT);
         }
         pack_ptr= f->unpack(f->ptr, pack_ptr, metadata, TRUE);
-	DBUG_PRINT("debug", ("Unpacked; metadata: 0x%x;"
+	DBUG_PRINT("debug", ("field: %s; metadata: 0x%x;"
                              " pack_ptr: 0x%lx; pack_ptr': 0x%lx; bytes: %d",
-                             metadata, (ulong) old_pack_ptr, (ulong) pack_ptr,
+                             f->field_name, metadata,
+                             (ulong) old_pack_ptr, (ulong) pack_ptr,
                              (int) (pack_ptr - old_pack_ptr)));
-
-        /*
-          The raw size of the field, as calculated in calc_field_size,
-          should match the one reported by Field_*::unpack unless it is
-          a old decimal data type which is unsupported datatype in
-          RBR mode.
-         */
-        DBUG_ASSERT(tabledef->type(i) == MYSQL_TYPE_DECIMAL ||
-                    tabledef->calc_field_size(i, (uchar *) old_pack_ptr) ==
-                    (uint32) (pack_ptr - old_pack_ptr));
       }
 
       /*
@@ -398,19 +358,13 @@ unpack_row(Relay_log_info const *rli,
 
       null_mask <<= 1;
     }
-#ifndef DBUG_OFF
-    else
-    {
-      DBUG_PRINT("debug", ("Non-existent: skipped"));
-    }
-#endif
     i++;
   }
 
   /*
     throw away master's extra fields
   */
-  uint max_cols= min<ulong>(tabledef->size(), cols->n_bits);
+  uint max_cols= min(tabledef->size(), cols->n_bits);
   for (; i < max_cols; i++)
   {
     if (bitmap_is_set(cols, i))
@@ -466,17 +420,24 @@ unpack_row(Relay_log_info const *rli,
   be NULL. Otherwise error is reported.
  
   @param table  Table whose record[0] buffer is prepared. 
+  @param skip   Number of columns for which default/nullable check 
+                should be skipped.
   @param check  Specifies if lack of default error needs checking.
 
   @returns 0 on success or a handler level error code
  */ 
-int prepare_record(TABLE *const table, const MY_BITMAP *cols, const bool check)
+int prepare_record(TABLE *const table, const uint skip, const bool check)
 {
   DBUG_ENTER("prepare_record");
 
   restore_record(table, s->default_values);
 
-  if (!check)
+  /*
+     This skip should be revisited in 6.0, because in 6.0 RBR one 
+     can have holes in the row (as the grain of the writeset is 
+     the column and not the entire row).
+   */
+  if (skip >= table->s->fields || !check)
     DBUG_RETURN(0);
 
   /*
@@ -485,53 +446,20 @@ int prepare_record(TABLE *const table, const MY_BITMAP *cols, const bool check)
     explicit value for a field not having the explicit default 
     (@c check_that_all_fields_are_given_values()).
   */
-  
-  DBUG_PRINT_BITSET("debug", "cols: %s", cols);
-  /**
-    Save a reference to the original write set bitmaps.
-    We will need this to restore the bitmaps at the end.
-  */
-  MY_BITMAP *old_write_set= table->write_set;
-  /**
-    Just to be sure that tmp_set is currently not in use as
-    the read_set already.
-  */
-  DBUG_ASSERT(table->write_set != &table->tmp_set);
-  /* set the temporary write_set */
-  table->column_bitmaps_set_no_signal(table->read_set,
-                                      &table->tmp_set);
-  /**
-    Set table->write_set bits for all the columns as they
-    will be checked in set_default() function.
-  */
-  bitmap_set_all(table->write_set);
-
-  for (Field **field_ptr= table->field; *field_ptr; ++field_ptr)
+  for (Field **field_ptr= table->field+skip; *field_ptr; ++field_ptr)
   {
-    uint field_index= (uint) (field_ptr - table->field);
-    if (field_index >= cols->n_bits || !bitmap_is_set(cols, field_index))
+    Field *const f= *field_ptr;
+    if ((f->flags &  NO_DEFAULT_VALUE_FLAG) &&
+        (f->real_type() != MYSQL_TYPE_ENUM))
     {
-      Field *const f= *field_ptr;
-      if ((f->flags &  NO_DEFAULT_VALUE_FLAG) &&
-          (f->real_type() != MYSQL_TYPE_ENUM))
-      {
-        f->set_default();
-        push_warning_printf(current_thd,
-                            Sql_condition::WARN_LEVEL_WARN,
-                            ER_NO_DEFAULT_FOR_FIELD,
-                            ER(ER_NO_DEFAULT_FOR_FIELD),
-                            f->field_name);
-      }
-      else if (f->has_insert_default_function())
-      {
-        f->set_default();
-      }
+      f->set_default();
+      push_warning_printf(current_thd,
+                          MYSQL_ERROR::WARN_LEVEL_WARN,
+                          ER_NO_DEFAULT_FOR_FIELD,
+                          ER(ER_NO_DEFAULT_FOR_FIELD),
+                          f->field_name);
     }
   }
-
-  /* set the write_set back to original*/
-  table->column_bitmaps_set_no_signal(table->read_set,
-                                      old_write_set);
 
   DBUG_RETURN(0);
 }

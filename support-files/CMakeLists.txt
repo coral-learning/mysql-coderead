@@ -1,4 +1,4 @@
-# Copyright (c) 2006, 2012, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2006, 2016, Oracle and/or its affiliates. All rights reserved.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,7 +16,6 @@
 IF(WIN32)
   SET(localstatedir "C:\\\\mysql\\\\data\\\\")
   SET(ini_file_extension "ini")
-  SET(CNF_SOCKET_LINE "")
 ELSE()
   SET(localstatedir "${MYSQL_DATADIR}")
   SET(prefix "${CMAKE_INSTALL_PREFIX}")
@@ -31,10 +30,7 @@ ELSE()
   SET(MYSQLD_USER "mysql")
   SET(ini_file_extension "cnf")
   SET(HOSTNAME "hostname")
-  SET(CNF_SOCKET_LINE "# socket = .....")
 ENDIF()
-
-  SET(dictionary "${CMAKE_INSTALL_PREFIX}/${INSTALL_SHAREDIR}/dictionary.txt" )
 
 # XXX: shouldn't we just have variables for all this stuff and centralise
 # XXX: their configuration in install_layout.cmake?
@@ -44,26 +40,35 @@ ELSE()
   SET(inst_location ${INSTALL_SUPPORTFILESDIR})
 ENDIF()
 
-SET(inifile my-default)
-CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/${inifile}.cnf.sh 
-               ${CMAKE_CURRENT_BINARY_DIR}/${inifile}.${ini_file_extension} @ONLY)
-INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/${inifile}.${ini_file_extension}
-        DESTINATION ${inst_location} COMPONENT IniFiles)
+FOREACH(inifile my-huge my-innodb-heavy-4G my-large my-medium my-small)
+  CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/${inifile}.cnf.sh 
+                 ${CMAKE_CURRENT_BINARY_DIR}/${inifile}.${ini_file_extension} @ONLY)
+  INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/${inifile}.${ini_file_extension}
+          DESTINATION ${inst_location} COMPONENT IniFiles)
+ENDFOREACH()
 
 IF(UNIX)
+  IF(CMAKE_SYSTEM_NAME MATCHES "Linux")
+    SET (PIDOF "pidof")
+  ELSE()
+    SET (PIDOF "pgrep -d' ' -f")
+  ENDIF()
   SET(prefix ${CMAKE_INSTALL_PREFIX})
-  FOREACH(script  mysqld_multi.server mysql-log-rotate binary-configure)
+  FOREACH(script  mysqld_multi.server mysql-log-rotate binary-configure
+    config.medium.ini config.small.ini config.huge.ini ndb-config-2-node.ini)
     CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/${script}.sh 
                    ${CMAKE_CURRENT_BINARY_DIR}/${script} @ONLY )
 
     IF(script MATCHES ".ini")
       SET(comp IniFiles)
+      SET(permissions OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
     ELSE()
       SET(comp Server_Scripts)
+      SET(permissions OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
     ENDIF()
     INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/${script} 
        DESTINATION ${inst_location} COMPONENT ${comp}
-       PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+       PERMISSIONS ${permissions})
   ENDFOREACH()
   IF(INSTALL_SUPPORTFILESDIR)
     INSTALL(FILES magic DESTINATION ${inst_location} COMPONENT SupportFiles)

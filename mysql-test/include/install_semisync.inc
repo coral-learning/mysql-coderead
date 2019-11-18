@@ -32,7 +32,8 @@ if ($value == No such row)
     SET GLOBAL rpl_semi_sync_slave_enabled = 1;
     SET sql_log_bin = 1;
 }
---source include/start_slave_io.inc
+START SLAVE IO_THREAD;
+--source include/wait_for_slave_io_to_start.inc
 --enable_query_log
 
 --source include/end_include_file.inc

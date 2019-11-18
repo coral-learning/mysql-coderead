@@ -1,7 +1,7 @@
 #ifndef SQL_COMMON_INCLUDED
 #define SQL_COMMON_INCLUDED
 
-/* Copyright (c) 2003, 2012, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003, 2018, Oracle and/or its affiliates. All rights reserved.
    
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -23,7 +23,6 @@ extern "C" {
 #endif
 
 #include <mysql.h>
-#include <hash.h>
 
 extern const char	*unknown_sqlstate;
 extern const char	*cant_connect_sqlstate;
@@ -32,12 +31,8 @@ extern const char	*not_error_sqlstate;
 struct st_mysql_options_extention {
   char *plugin_dir;
   char *default_auth;
-  char *ssl_crl;				/* PEM CRL file */
-  char *ssl_crlpath;				/* PEM directory of CRL-s? */
-  HASH connection_attributes;
-  char *server_public_key_path;
-  size_t connection_attributes_length;
   my_bool enable_cleartext_plugin;
+  unsigned int ssl_mode;
 };
 
 typedef struct st_mysql_methods
@@ -101,6 +96,9 @@ void set_stmt_error(MYSQL_STMT *stmt, int errcode, const char *sqlstate,
 void set_mysql_error(MYSQL *mysql, int errcode, const char *sqlstate);
 void set_mysql_extended_error(MYSQL *mysql, int errcode, const char *sqlstate,
                               const char *format, ...);
+#ifdef EMBEDDED_LIBRARY
+int embedded_ssl_check(MYSQL *mysql);
+#endif
 
 /* client side of the pluggable authentication */
 struct st_plugin_vio_info;
@@ -111,8 +109,8 @@ int mysql_client_plugin_init();
 void mysql_client_plugin_deinit();
 struct st_mysql_client_plugin;
 extern struct st_mysql_client_plugin *mysql_client_builtins[];
-uchar * send_client_connect_attrs(MYSQL *mysql, uchar *buf);
 extern my_bool libmysql_cleartext_plugin_enabled;
+int is_file_or_dir_world_writable(const char *filepath);
 
 #ifdef	__cplusplus
 }

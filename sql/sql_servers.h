@@ -1,7 +1,7 @@
 #ifndef SQL_SERVERS_INCLUDED
 #define SQL_SERVERS_INCLUDED
 
-/* Copyright (c) 2006, 2012, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2006, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -17,7 +17,7 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA */
 
 #include "my_global.h"                  /* uint */
-#include "rpl_slave.h" // for tables_ok(), rpl_filter
+#include "slave.h" // for tables_ok(), rpl_filter
 
 class THD;
 typedef struct st_lex_server_options LEX_SERVER_OPTIONS;
@@ -38,13 +38,13 @@ bool servers_reload(THD *thd);
 void servers_free(bool end=0);
 
 /* insert functions */
-bool create_server(THD *thd, LEX_SERVER_OPTIONS *server_options);
+int create_server(THD *thd, LEX_SERVER_OPTIONS *server_options);
 
-/* drop functions */
-bool drop_server(THD *thd, LEX_SERVER_OPTIONS *server_options, bool if_exists);
+/* drop functions */ 
+int drop_server(THD *thd, LEX_SERVER_OPTIONS *server_options);
 
 /* update functions */
-bool alter_server(THD *thd, LEX_SERVER_OPTIONS *server_options);
+int alter_server(THD *thd, LEX_SERVER_OPTIONS *server_options);
 
 /* lookup functions */
 FOREIGN_SERVER *get_server_by_name(MEM_ROOT *mem, const char *server_name,

@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -23,7 +23,6 @@
 #define IMPORT_VERSION "3.7"
 
 #include "client_priv.h"
-#include "my_default.h"
 #include "mysql_version.h"
 
 #include <welcome_copyright_notice.h>   /* ORACLE_WELCOME_COPYRIGHT_NOTICE */
@@ -43,7 +42,7 @@ static char *add_load_option(char *ptr,const char *object,
 
 static my_bool	verbose=0,lock_tables=0,ignore_errors=0,opt_delete=0,
 		replace=0,silent=0,ignore=0,opt_compress=0,
-                opt_low_priority= 0, tty_password= 0, opt_secure_auth= 1;
+                opt_low_priority= 0, tty_password= 0;
 static my_bool debug_info_flag= 0, debug_check_flag= 0;
 static uint opt_use_threads=0, opt_local_file=0, my_end_arg= 0;
 static char	*opt_password=0, *current_user=0,
@@ -54,7 +53,6 @@ static char	*opt_password=0, *current_user=0,
 static uint opt_enable_cleartext_plugin= 0;
 static my_bool using_opt_enable_cleartext_plugin= 0;
 static uint     opt_mysql_port= 0, opt_protocol= 0;
-static char *opt_bind_addr = NULL;
 static char * opt_mysql_unix_port=0;
 static char *opt_plugin_dir= 0, *opt_default_auth= 0;
 static longlong opt_ignore_lines= -1;
@@ -66,9 +64,6 @@ static char *shared_memory_base_name=0;
 
 static struct my_option my_long_options[] =
 {
-  {"bind-address", 0, "IP address to bind to.",
-   (uchar**) &opt_bind_addr, (uchar**) &opt_bind_addr, 0, GET_STR,
-   REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"character-sets-dir", OPT_CHARSETS_DIR,
    "Directory for character set files.", &charsets_dir,
    &charsets_dir, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
@@ -142,7 +137,7 @@ static struct my_option my_long_options[] =
    &opt_low_priority, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"password", 'p',
    "Password to use when connecting to server. If password is not given it's asked from the tty.",
-   0, 0, 0, GET_PASSWORD, OPT_ARG, 0, 0, 0, 0, 0, 0},
+   0, 0, 0, GET_STR, OPT_ARG, 0, 0, 0, 0, 0, 0},
 #ifdef __WIN__
   {"pipe", 'W', "Use named pipes to connect to server.", 0, 0, 0, GET_NO_ARG,
    NO_ARG, 0, 0, 0, 0, 0, 0},
@@ -163,9 +158,6 @@ static struct my_option my_long_options[] =
    0, 0, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"replace", 'r', "If duplicate unique key was found, replace old row.",
    &replace, &replace, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"secure-auth", OPT_SECURE_AUTH, "Refuse client connecting to server if it"
-    " uses old (pre-4.1.1) protocol.",
-    &opt_secure_auth, &opt_secure_auth, 0, GET_BOOL, NO_ARG, 1, 0, 0, 0, 0, 0},
 #ifdef HAVE_SMEM
   {"shared-memory-base-name", OPT_SHARED_MEMORY_BASE_NAME,
    "Base name of shared memory.", &shared_memory_base_name, &shared_memory_base_name,
@@ -223,7 +215,7 @@ file. The SQL command 'LOAD DATA INFILE' is used to import the rows.\n");
 
 
 static my_bool
-get_one_option(int optid, const struct my_option *opt MY_ATTRIBUTE((unused)),
+get_one_option(int optid, const struct my_option *opt __attribute__((unused)),
 	       char *argument)
 {
   switch(optid) {
@@ -446,21 +438,13 @@ static MYSQL *db_connect(char *host, char *database,
 		  (char*) &opt_local_file);
 #ifdef HAVE_OPENSSL
   if (opt_use_ssl)
-  {
     mysql_ssl_set(mysql, opt_ssl_key, opt_ssl_cert, opt_ssl_ca,
 		  opt_ssl_capath, opt_ssl_cipher);
-    mysql_options(mysql, MYSQL_OPT_SSL_CRL, opt_ssl_crl);
-    mysql_options(mysql, MYSQL_OPT_SSL_CRLPATH, opt_ssl_crlpath);
-  }
   mysql_options(mysql,MYSQL_OPT_SSL_VERIFY_SERVER_CERT,
                 (char*)&opt_ssl_verify_server_cert);
 #endif
   if (opt_protocol)
     mysql_options(mysql,MYSQL_OPT_PROTOCOL,(char*)&opt_protocol);
-  if (opt_bind_addr)
-    mysql_options(mysql,MYSQL_OPT_BIND,opt_bind_addr);
-  if (!opt_secure_auth)
-    mysql_options(mysql, MYSQL_SECURE_AUTH,(char*)&opt_secure_auth);
 #ifdef HAVE_SMEM
   if (shared_memory_base_name)
     mysql_options(mysql,MYSQL_SHARED_MEMORY_BASE_NAME,shared_memory_base_name);
@@ -477,12 +461,9 @@ static MYSQL *db_connect(char *host, char *database,
                   (char*)&opt_enable_cleartext_plugin);
 
   mysql_options(mysql, MYSQL_SET_CHARSET_NAME, default_charset);
-  mysql_options(mysql, MYSQL_OPT_CONNECT_ATTR_RESET, 0);
-  mysql_options4(mysql, MYSQL_OPT_CONNECT_ATTR_ADD,
-                 "program_name", "mysqlimport");
   if (!(mysql_connect_ssl_check(mysql, host, user, passwd, database,
                                 opt_mysql_port, opt_mysql_unix_port,
-                                0, opt_ssl_required)))
+                                0, opt_ssl_mode == SSL_MODE_REQUIRED)))
   {
     ignore_errors=0;	  /* NO RETURN FROM db_error */
     db_error(mysql);
@@ -634,11 +615,8 @@ int main(int argc, char **argv)
   char **argv_to_free;
   MY_INIT(argv[0]);
 
-  my_getopt_use_args_separator= TRUE;
   if (load_defaults("my",load_default_groups,&argc,&argv))
     return 1;
-  my_getopt_use_args_separator= FALSE;
-
   /* argv is changed in the program */
   argv_to_free= argv;
   if (get_options(&argc, &argv))

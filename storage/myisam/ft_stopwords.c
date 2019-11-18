@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 /* Written by Sergei A. Golubchik, who has a shared copyright to this code */
 
@@ -30,7 +30,7 @@ typedef struct st_ft_stopwords
 
 static TREE *stopwords3=NULL;
 
-static int FT_STOPWORD_cmp(void* cmp_arg MY_ATTRIBUTE((unused)),
+static int FT_STOPWORD_cmp(void* cmp_arg __attribute__((unused)),
 			   FT_STOPWORD *w1, FT_STOPWORD *w2)
 {
   return ha_compare_text(ft_stopword_cs,
@@ -39,7 +39,7 @@ static int FT_STOPWORD_cmp(void* cmp_arg MY_ATTRIBUTE((unused)),
 }
 
 static void FT_STOPWORD_free(FT_STOPWORD *w, TREE_FREE action,
-                             void *arg MY_ATTRIBUTE((unused)))
+                             void *arg __attribute__((unused)))
 {
   if (action == free_free)
     my_free((void*)w->pos);

@@ -11,19 +11,10 @@
 source include/have_binlog_format_statement.inc;
 source include/master-slave.inc;
 
-call mtr.add_suppression("Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT.");
-
---disable_warnings
-DROP TABLE IF EXISTS t1, t2;
-DROP PROCEDURE IF EXISTS p1;
-DROP PROCEDURE IF EXISTS p2;
-DROP TRIGGER IF EXISTS tr1;
-DROP FUNCTION IF EXISTS f1;
---enable_warnings
-
---source include/sync_slave_sql_with_master.inc
+CALL mtr.add_suppression("Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT");
+--connection slave
+CALL mtr.add_suppression("Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT");
 --connection master
-
 
 CREATE TABLE t1 (id INT AUTO_INCREMENT PRIMARY KEY);
 CREATE TABLE t2 (id INT AUTO_INCREMENT PRIMARY KEY);
@@ -78,7 +69,7 @@ echo # Result on master;
 SELECT * FROM t1;
 SELECT * FROM t2;
 
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 
 echo # Result on slave;
 SELECT * FROM t1;
@@ -98,7 +89,7 @@ echo # Result on master;
 SELECT * FROM t1;
 SELECT * FROM t2;
 
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 
 echo # Result on slave;
 SELECT * FROM t1;
@@ -113,5 +104,5 @@ DROP PROCEDURE IF EXISTS p2;
 DROP FUNCTION IF EXISTS f1;
 DROP TRIGGER IF EXISTS tr1;
 enable_warnings;
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 --source include/rpl_end.inc

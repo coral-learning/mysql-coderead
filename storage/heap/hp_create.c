@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2018, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -59,8 +59,8 @@ int heap_create(const char *name, HP_CREATE_INFO *create_info,
     
     for (i= key_segs= max_length= 0, keyinfo= keydef; i < keys; i++, keyinfo++)
     {
-      memset(&keyinfo->block, 0, sizeof(keyinfo->block));
-      memset(&keyinfo->rb_tree, 0, sizeof(keyinfo->rb_tree));
+      bzero((char*) &keyinfo->block,sizeof(keyinfo->block));
+      bzero((char*) &keyinfo->rb_tree ,sizeof(keyinfo->rb_tree));
       for (j= length= 0; j < keyinfo->keysegs; j++)
       {
 	length+= keyinfo->seg[j].length;
@@ -92,7 +92,14 @@ int heap_create(const char *name, HP_CREATE_INFO *create_info,
           /* fall_through */
         case HA_KEYTYPE_VARTEXT1:
           keyinfo->flag|= HA_VAR_LENGTH_KEY;
-          length+= 2;
+          /*
+            For BTREE algorithm, key length, greater than or equal
+            to 255, is packed on 3 bytes.
+          */
+          if (keyinfo->algorithm == HA_KEY_ALG_BTREE)
+            length+= size_to_store_key_length(keyinfo->seg[j].length);
+          else
+            length+= 2;
           /* Save number of bytes used to store length */
           keyinfo->seg[j].bit_start= 1;
           break;
@@ -101,7 +108,14 @@ int heap_create(const char *name, HP_CREATE_INFO *create_info,
           /* fall_through */
         case HA_KEYTYPE_VARTEXT2:
           keyinfo->flag|= HA_VAR_LENGTH_KEY;
-          length+= 2;
+          /*
+            For BTREE algorithm, key length, greater than or equal
+            to 255, is packed on 3 bytes.
+          */
+          if (keyinfo->algorithm == HA_KEY_ALG_BTREE)
+            length+= size_to_store_key_length(keyinfo->seg[j].length);
+          else
+            length+= 2;
           /* Save number of bytes used to store length */
           keyinfo->seg[j].bit_start= 2;
           /*
@@ -233,7 +247,7 @@ static void init_block(HP_BLOCK *block, uint reclength, ulong min_records,
 {
   uint i,recbuffer,records_in_block;
 
-  max_records= MY_MAX(min_records, max_records);
+  max_records= max(min_records,max_records);
   if (!max_records)
     max_records= 1000;			/* As good as quess as anything */
   recbuffer= (uint) (reclength + sizeof(uchar**) - 1) & ~(sizeof(uchar**) - 1);

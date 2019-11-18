@@ -1,6 +1,6 @@
 /*****************************************************************************
 
-Copyright (c) 1994, 2016, Oracle and/or its affiliates. All Rights Reserved.
+Copyright (c) 1994, 2009, Innobase Oy. All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -11,8 +11,8 @@ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
 FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
-this program; if not, write to the Free Software Foundation, Inc.,
-51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA
+this program; if not, write to the Free Software Foundation, Inc., 
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
 
 *****************************************************************************/
 
@@ -162,12 +162,6 @@ Inserts a record next to page cursor. Returns pointer to inserted record if
 succeed, i.e., enough space available, NULL otherwise. The cursor stays at
 the same logical position, but the physical position may change if it is
 pointing to a compressed page that was reorganized.
-
-IMPORTANT: The caller will have to update IBUF_BITMAP_FREE
-if this is a compressed leaf page in a secondary index.
-This has to be done either within the same mini-transaction,
-or by invoking ibuf_reset_free_bits() before mtr_commit().
-
 @return	pointer to record if succeed, NULL otherwise */
 UNIV_INLINE
 rec_t*
@@ -176,23 +170,14 @@ page_cur_tuple_insert(
 	page_cur_t*	cursor,	/*!< in/out: a page cursor */
 	const dtuple_t*	tuple,	/*!< in: pointer to a data tuple */
 	dict_index_t*	index,	/*!< in: record descriptor */
-	ulint**		offsets,/*!< out: offsets on *rec */
-	mem_heap_t**	heap,	/*!< in/out: pointer to memory heap, or NULL */
 	ulint		n_ext,	/*!< in: number of externally stored columns */
-	mtr_t*		mtr)	/*!< in: mini-transaction handle, or NULL */
-	MY_ATTRIBUTE((nonnull(1,2,3,4,5), warn_unused_result));
+	mtr_t*		mtr);	/*!< in: mini-transaction handle, or NULL */
 #endif /* !UNIV_HOTBACKUP */
 /***********************************************************//**
 Inserts a record next to page cursor. Returns pointer to inserted record if
 succeed, i.e., enough space available, NULL otherwise. The cursor stays at
 the same logical position, but the physical position may change if it is
 pointing to a compressed page that was reorganized.
-
-IMPORTANT: The caller will have to update IBUF_BITMAP_FREE
-if this is a compressed leaf page in a secondary index.
-This has to be done either within the same mini-transaction,
-or by invoking ibuf_reset_free_bits() before mtr_commit().
-
 @return	pointer to record if succeed, NULL otherwise */
 UNIV_INLINE
 rec_t*
@@ -217,38 +202,27 @@ page_cur_insert_rec_low(
 	dict_index_t*	index,	/*!< in: record descriptor */
 	const rec_t*	rec,	/*!< in: pointer to a physical record */
 	ulint*		offsets,/*!< in/out: rec_get_offsets(rec, index) */
-	mtr_t*		mtr)	/*!< in: mini-transaction handle, or NULL */
-	MY_ATTRIBUTE((nonnull(1,2,3,4), warn_unused_result));
+	mtr_t*		mtr);	/*!< in: mini-transaction handle, or NULL */
 /***********************************************************//**
 Inserts a record next to page cursor on a compressed and uncompressed
 page. Returns pointer to inserted record if succeed, i.e.,
 enough space available, NULL otherwise.
 The cursor stays at the same position.
-
-IMPORTANT: The caller will have to update IBUF_BITMAP_FREE
-if this is a compressed leaf page in a secondary index.
-This has to be done either within the same mini-transaction,
-or by invoking ibuf_reset_free_bits() before mtr_commit().
-
 @return	pointer to record if succeed, NULL otherwise */
 UNIV_INTERN
 rec_t*
 page_cur_insert_rec_zip(
 /*====================*/
-	page_cur_t*	cursor,	/*!< in/out: page cursor */
+	rec_t**		current_rec,/*!< in/out: pointer to current record after
+				which the new record is inserted */
+	buf_block_t*	block,	/*!< in: buffer block of *current_rec */
 	dict_index_t*	index,	/*!< in: record descriptor */
 	const rec_t*	rec,	/*!< in: pointer to a physical record */
 	ulint*		offsets,/*!< in/out: rec_get_offsets(rec, index) */
-	mtr_t*		mtr)	/*!< in: mini-transaction handle, or NULL */
-	MY_ATTRIBUTE((nonnull(1,2,3,4), warn_unused_result));
+	mtr_t*		mtr);	/*!< in: mini-transaction handle, or NULL */
 /*************************************************************//**
 Copies records from page to a newly created page, from a given record onward,
-including that record. Infimum and supremum records are not copied.
-
-IMPORTANT: The caller will have to update IBUF_BITMAP_FREE
-if this is a compressed leaf page in a secondary index.
-This has to be done either within the same mini-transaction,
-or by invoking ibuf_reset_free_bits() before mtr_commit(). */
+including that record. Infimum and supremum records are not copied. */
 UNIV_INTERN
 void
 page_copy_rec_list_end_to_created_page(
@@ -264,11 +238,10 @@ UNIV_INTERN
 void
 page_cur_delete_rec(
 /*================*/
-	page_cur_t*		cursor,	/*!< in/out: a page cursor */
-	const dict_index_t*	index,	/*!< in: record descriptor */
-	const ulint*		offsets,/*!< in: rec_get_offsets(
-					cursor->rec, index) */
-	mtr_t*			mtr);	/*!< in: mini-transaction handle */
+	page_cur_t*	cursor,	/*!< in/out: a page cursor */
+	dict_index_t*	index,	/*!< in: record descriptor */
+	const ulint*	offsets,/*!< in: rec_get_offsets(cursor->rec, index) */
+	mtr_t*		mtr);	/*!< in: mini-transaction handle */
 #ifndef UNIV_HOTBACKUP
 /****************************************************************//**
 Searches the right position for a page cursor.
@@ -358,24 +331,10 @@ page_cur_parse_delete_rec(
 	buf_block_t*	block,	/*!< in: page or NULL */
 	dict_index_t*	index,	/*!< in: record descriptor */
 	mtr_t*		mtr);	/*!< in: mtr or NULL */
-/*******************************************************//**
-Removes the record from a leaf page. This function does not log
-any changes. It is used by the IMPORT tablespace functions.
-@return	true if success, i.e., the page did not become too empty */
-UNIV_INTERN
-bool
-page_delete_rec(
-/*============*/
-	const dict_index_t*	index,	/*!< in: The index that the record
-					belongs to */
-	page_cur_t*		pcur,	/*!< in/out: page cursor on record
-					to delete */
-	page_zip_des_t*		page_zip,/*!< in: compressed page descriptor */
-	const ulint*		offsets);/*!< in: offsets for record */
 
 /** Index page cursor */
 
-struct page_cur_t{
+struct page_cur_struct{
 	byte*		rec;	/*!< pointer to a record on page */
 	buf_block_t*	block;	/*!< pointer to the block containing rec */
 };

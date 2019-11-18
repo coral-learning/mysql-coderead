@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003-2006 MySQL AB, 2008, 2009 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,13 +12,13 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include "ConsoleLogHandler.hpp"
 
-ConsoleLogHandler::ConsoleLogHandler(NdbOut& out)
- : LogHandler(), _out(out)
+#include <NdbOut.hpp>
+
+ConsoleLogHandler::ConsoleLogHandler() : LogHandler()
 {
 }
 
@@ -40,12 +39,6 @@ ConsoleLogHandler::close()
   return true;
 }
 
-bool
-ConsoleLogHandler::is_open()
-{
-  return true;
-}
-
 //
 // PROTECTED
 //
@@ -53,19 +46,19 @@ void
 ConsoleLogHandler::writeHeader(const char* pCategory, Logger::LoggerLevel level)
 {
   char str[LogHandler::MAX_HEADER_LENGTH];
-  _out << getDefaultHeader(str, pCategory, level);	
+  ndbout << getDefaultHeader(str, pCategory, level);	
 }
 
 void 
 ConsoleLogHandler::writeMessage(const char* pMsg)
 {
-  _out << pMsg;	
+  ndbout << pMsg;	
 }
 
 void 
 ConsoleLogHandler::writeFooter()
 {
-  _out << getDefaultFooter() << flush;
+  ndbout << getDefaultFooter() << flush;
 }
 
   

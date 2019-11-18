@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,10 +12,16 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
-#include "API.hpp"
+
+#include <NdbError.hpp>
+#include "NdbImpl.hpp"
+#include "NdbDictionaryImpl.hpp"
+#include <NdbOperation.hpp>
+#include <NdbTransaction.hpp>
+#include <NdbBlob.hpp>
+#include "NdbEventOperationImpl.hpp"
 
 static void
 update(const NdbError & _err){
@@ -78,27 +84,6 @@ NdbEventOperationImpl::getNdbError() const {
 const
 NdbError &
 NdbDictInterface::getNdbError() const {
-  update(m_error);
-  return m_error;
-}
-
-const
-NdbError &
-NdbQueryBuilderImpl::getNdbError() const {
-  update(m_error);
-  return m_error;
-}
-
-const
-NdbError &
-NdbQueryImpl::getNdbError() const {
-  update(m_error);
-  return m_error;
-}
-
-const
-NdbIndexStat::Error &
-NdbIndexStatImpl::getNdbError() const {
   update(m_error);
   return m_error;
 }

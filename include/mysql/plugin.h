@@ -1,4 +1,4 @@
-/* Copyright (c) 2005, 2014, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2005, 2013, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -48,8 +48,6 @@ class Item;
 #define MYSQL_THD void*
 #endif
 
-typedef void * MYSQL_PLUGIN;
-
 #include <mysql/services.h>
 
 #define MYSQL_XIDDATASIZE 128
@@ -73,7 +71,7 @@ typedef struct st_mysql_xid MYSQL_XID;
   Plugin API. Common for all plugin types.
 */
 
-#define MYSQL_PLUGIN_INTERFACE_VERSION 0x0104
+#define MYSQL_PLUGIN_INTERFACE_VERSION 0x0103
 
 /*
   The allowable types of plugins
@@ -86,8 +84,7 @@ typedef struct st_mysql_xid MYSQL_XID;
 #define MYSQL_AUDIT_PLUGIN           5  /* The Audit plugin type        */
 #define MYSQL_REPLICATION_PLUGIN     6	/* The replication plugin type */
 #define MYSQL_AUTHENTICATION_PLUGIN  7  /* The authentication plugin type */
-#define MYSQL_VALIDATE_PASSWORD_PLUGIN  8   /* validate password plugin type */
-#define MYSQL_MAX_PLUGIN_TYPE_NUM    9  /* The number of plugin types   */
+#define MYSQL_MAX_PLUGIN_TYPE_NUM    8  /* The number of plugin types   */
 
 /* We use the following strings to define licenses for plugins */
 #define PLUGIN_LICENSE_PROPRIETARY 0
@@ -125,16 +122,13 @@ __MYSQL_DECLARE_PLUGIN(NAME, \
 
 #define mysql_declare_plugin_end ,{0,0,0,0,0,0,0,0,0,0,0,0,0}}
 
-/**
+/*
   declarations for SHOW STATUS support in plugins
 */
 enum enum_mysql_show_type
 {
-  SHOW_UNDEF, SHOW_BOOL,
-  SHOW_INT,        ///< shown as _unsigned_ int
-  SHOW_LONG,       ///< shown as _unsigned_ long
-  SHOW_LONGLONG,   ///< shown as _unsigned_ longlong
-  SHOW_CHAR, SHOW_CHAR_PTR,
+  SHOW_UNDEF, SHOW_BOOL, SHOW_INT, SHOW_LONG,
+  SHOW_LONGLONG, SHOW_CHAR, SHOW_CHAR_PTR,
   SHOW_ARRAY, SHOW_FUNC, SHOW_DOUBLE,
   SHOW_always_last
 };
@@ -434,8 +428,8 @@ struct st_mysql_plugin
   const char *author;   /* plugin author (for I_S.PLUGINS)              */
   const char *descr;    /* general descriptive text (for I_S.PLUGINS)   */
   int license;          /* the plugin license (PLUGIN_LICENSE_XXX)      */
-  int (*init)(MYSQL_PLUGIN);  /* the function to invoke when plugin is loaded */
-  int (*deinit)(MYSQL_PLUGIN);/* the function to invoke when plugin is unloaded */
+  int (*init)(void *);  /* the function to invoke when plugin is loaded */
+  int (*deinit)(void *);/* the function to invoke when plugin is unloaded */
   unsigned int version; /* plugin version (for I_S.PLUGINS)             */
   struct st_mysql_show_var *status_vars;
   struct st_mysql_sys_var **system_vars;
@@ -508,7 +502,7 @@ struct handlerton;
 /*
   API for Replication plugin. (MYSQL_REPLICATION_PLUGIN)
 */
- #define MYSQL_REPLICATION_INTERFACE_VERSION 0x0200
+ #define MYSQL_REPLICATION_INTERFACE_VERSION 0x0100
  
  /**
     Replication plugin descriptor
@@ -557,12 +551,10 @@ const char *thd_proc_info(MYSQL_THD thd, const char *info);
 void **thd_ha_data(const MYSQL_THD thd, const struct handlerton *hton);
 void thd_storage_lock_wait(MYSQL_THD thd, long long value);
 int thd_tx_isolation(const MYSQL_THD thd);
-int thd_tx_is_read_only(const MYSQL_THD thd);
 char *thd_security_context(MYSQL_THD thd, char *buffer, unsigned int length,
                            unsigned int max_query_len);
 /* Increments the row counter, see THD::row_count */
 void thd_inc_row_count(MYSQL_THD thd);
-int thd_allow_batch(MYSQL_THD thd);
 
 /**
   Create a temporary file.
@@ -594,21 +586,6 @@ int mysql_tmpfile(const char *prefix);
 */
 int thd_killed(const MYSQL_THD thd);
 
-
-/**
-  Get binary log position for latest written entry.
-
-  @note The file variable will be set to a buffer holding the name of
-  the file name currently, but this can change if a rotation
-  occur. Copy the string if you want to retain it.
-
-  @param thd Use thread connection handle
-  @param file_var Pointer to variable that will hold the file name.
-  @param pos_var Pointer to variable that will hold the file position.
- */
-void thd_binlog_pos(const MYSQL_THD thd,
-                    const char **file_var,
-                    unsigned long long *pos_var);
 
 /**
   Return the thread id of a user thread

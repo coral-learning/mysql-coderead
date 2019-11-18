@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2008 MySQL AB
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2008 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include <NDBT.hpp>
 #include <NDBT_Test.hpp>
@@ -50,7 +48,7 @@ int runTestAtrtClient(NDBT_Context* ctx, NDBT_Step* step){
 
 
 int runTestDbUtil(NDBT_Context* ctx, NDBT_Step* step){
-  DbUtil sql("test");
+  DbUtil sql;
 
   {
     // Select all rows from mysql.user
@@ -103,16 +101,10 @@ int runTestDbUtil(NDBT_Context* ctx, NDBT_Step* step){
   }
 
   {
-    if (!sql.doQuery("DROP TABLE IF EXISTS sql_client_test"))
+    if (!sql.doQuery("CREATE TABLE sql_client_test (a int, b varchar(255))"))
       return NDBT_FAILED;
 
-    if (!sql.doQuery("CREATE TABLE sql_client_test"
-                     "(a int, b varchar(255), c bigint)"))
-      return NDBT_FAILED;
-
-    if (!sql.doQuery("INSERT INTO sql_client_test VALUES"
-                     "(1, 'hello', 456456456789),"
-                     "(2, 'bye', 9000000000)"))
+    if (!sql.doQuery("INSERT INTO sql_client_test VALUES(1, 'hello'), (2, 'bye')"))
       return NDBT_FAILED;
 
     // Select all rows from sql_client_test
@@ -135,9 +127,8 @@ int runTestDbUtil(NDBT_Context* ctx, NDBT_Step* step){
     result.reset();
     while(result.next())
     {
-      ndbout << "a: " << result.columnAsInt("a") << endl
-             << "b: " << result.column("b") << endl
-             << "c: " << result.columnAsLong("c") << endl;
+      ndbout << "a: " << result.columnAsInt("a") << endl;
+        ndbout << "b: " << result.column("b") << endl;
       if (result.columnAsInt("a") != 2){
         ndbout << "hepp1" << endl;
         return NDBT_FAILED;
@@ -145,11 +136,6 @@ int runTestDbUtil(NDBT_Context* ctx, NDBT_Step* step){
 
       if (strcmp(result.column("b"), "bye")){
         ndbout << "hepp2" << endl;
-        return NDBT_FAILED;
-      }
-
-      if (result.columnAsLong("c") != 9000000000ULL){
-        ndbout << "hepp3" << endl;
         return NDBT_FAILED;
       }
 
@@ -183,7 +169,6 @@ NDBT_TESTSUITE_END(testNDBT);
 
 int main(int argc, const char** argv){
   ndb_init();
-  NDBT_TESTSUITE_INSTANCE(testNDBT);
   return testNDBT.execute(argc, argv);
 }
 

@@ -6,7 +6,6 @@
 #
 # --let $rpl_server_number= N
 # [--let $rpl_debug= 1]
-# [--let $rpl_force_stop= 1]
 # --source include/rpl_stop_server.inc
 #
 # Parameters:
@@ -18,8 +17,6 @@
 #
 #   $rpl_debug
 #     See include/rpl_init.inc
-#   $rpl_force_stop
-#     Kill the server immediately i.e., --shutdown_server 0
 #
 # ==== See also ====
 #
@@ -38,7 +35,7 @@ if (!$_include_file_depth)
 if ($rpl_debug)
 {
   --echo $_include_file_indent con='$CURRENT_CONNECTION' warn='$ENABLED_WARNINGS' qlog='$ENABLED_QUERY_LOG' rlog='$ENABLED_RESULT_LOG' aborterr='$ENABLED_ABORT_ON_ERROR'
-  --echo $_include_file_indent==== BEGIN include/rpl_stop_server.inc ====
+  --echo $_include_file_indent==== BEGIN include/$include_filename ====
 }
 
 
@@ -50,15 +47,11 @@ if ($rpl_debug)
 --exec echo "wait" > $MYSQLTEST_VARDIR/tmp/mysqld.$rpl_server_number.expect
 
 # Send shutdown to the connected server and give
-# it 14 seconds to die before zapping it
---let $shutdown_server_timeout= 14
-if ($rpl_force_stop)
-{
-   # if force_stop is set, shutdown server immediately(equal to killing the server)
-   --let $shutdown_server_timeout= 0
-}
-shutdown_server $shutdown_server_timeout;
+# it 10 seconds to die before zapping it
+shutdown_server 10;
+
 --source include/wait_until_disconnected.inc
+
 
 --let $rpl_connection_name= $_rpl_stop_server_old_connection
 --source include/rpl_connection.inc

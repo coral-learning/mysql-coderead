@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef LQH_FRAG_HPP
 #define LQH_FRAG_HPP
@@ -34,11 +33,11 @@ class AddFragReq {
   friend bool printADD_FRAG_REQ(FILE *, const Uint32 *, Uint32, Uint16);
 
 public:
-  STATIC_CONST( SignalLength = 12 );
+  STATIC_CONST( SignalLength = 11 );
   
   enum RequestInfo {
     CreateInRunning = 0x8000000,
-    TemporaryTable  = 0x00000010
+    TemporaryTable = 0x00000010
   };
 private:
   Uint32 dihPtr;
@@ -52,7 +51,6 @@ private:
   Uint32 startGci;
   Uint32 tablespaceId;
   Uint32 logPartId;
-  Uint32 changeMask;
 };
 
 class AddFragRef {
@@ -68,11 +66,10 @@ class AddFragRef {
 
   friend bool printADD_FRAG_REF(FILE *, const Uint32 *, Uint32, Uint16);
 public:
-  STATIC_CONST( SignalLength = 2 );
+  STATIC_CONST( SignalLength = 1 );
   
 private:
   Uint32 dihPtr;
-  Uint32 fragId;
 };
 
 class AddFragConf {
@@ -105,12 +102,11 @@ class LqhFragReq {
    * Receiver(s)
    */
   friend class Dblqh;
-  friend class DblqhProxy;
   
   friend bool printLQH_FRAG_REQ(FILE *, const Uint32 *, Uint32, Uint16);
 
 public:
-  STATIC_CONST( SignalLength = 22 );
+  STATIC_CONST( SignalLength = 25 );
   
   enum RequestInfo {
     CreateInRunning = 0x8000000,
@@ -120,32 +116,35 @@ public:
 private:
   Uint32 senderData;
   Uint32 senderRef;
-  Uint32 tableId;
-  Uint32 tableVersion;
-
-  Uint32 nextLCP;
-  Uint32 startGci;
-  union {
-    Uint32 fragmentId;
-    Uint32 fragId;
-  };
+  Uint32 fragmentId;
   Uint32 requestInfo; 
-
-  Uint32 localKeyLength;
-  Uint32 lh3DistrBits;
-  Uint32 lh3PageBits;
-  Uint32 keyLength;
   Uint32 maxLoadFactor;
   Uint32 minLoadFactor;
   Uint32 kValue;
-
-  Uint32 logPartId;
+  Uint32 schemaVersion;
+  Uint32 nextLCP;
+  Uint32 noOfCharsets;
+  Uint32 startGci;
+  Uint32 tableType;             // DictTabInfo::TableType
+  Uint32 primaryTableId;        // table of index or RNIL
   Uint32 tablespace_id;       // RNIL for MM table
+  Uint16 tableId;
+  Uint16 localKeyLength;
+  Uint16 lh3DistrBits;
+  Uint16 lh3PageBits;
+  Uint16 noOfAttributes;
+  Uint16 noOfNullAttributes;
+  Uint16 noOfPagesToPreAllocate;
+  Uint16 keyLength;
+  Uint16 noOfKeyAttr;
+  Uint8 checksumIndicator;
+  Uint8 GCPIndicator;
+  Uint32 logPartId;
   Uint32 maxRowsLow;
   Uint32 maxRowsHigh;
   Uint32 minRowsLow;
   Uint32 minRowsHigh;
-  Uint32 changeMask;
+  Uint32 forceVarPartFlag;
 };
 
 class LqhFragConf {
@@ -153,7 +152,6 @@ class LqhFragConf {
    * Sender(s)
    */
   friend class Dblqh;
-  friend class DblqhProxy;
 
   /**
    * Receiver(s)
@@ -162,14 +160,11 @@ class LqhFragConf {
 
   friend bool printLQH_FRAG_CONF(FILE *, const Uint32 *, Uint32, Uint16);
 public:
-  STATIC_CONST( SignalLength = 5 );
+  STATIC_CONST( SignalLength = 2 );
 
 private:
   Uint32 senderData;
   Uint32 lqhFragPtr;
-  Uint32 tableId;
-  Uint32 fragId;
-  Uint32 changeMask;
 };
 
 class LqhFragRef {
@@ -177,7 +172,6 @@ class LqhFragRef {
    * Sender(s)
    */
   friend class Dblqh;
-  friend class DblqhProxy;
 
   /**
    * Receiver(s)
@@ -186,15 +180,11 @@ class LqhFragRef {
 
   friend bool printLQH_FRAG_REF(FILE *, const Uint32 *, Uint32, Uint16);
 public:
-  STATIC_CONST( SignalLength = 6 );
+  STATIC_CONST( SignalLength = 2 );
 
 private:
   Uint32 senderData;
   Uint32 errorCode;
-  Uint32 tableId;
-  Uint32 fragId;
-  Uint32 requestInfo;
-  Uint32 changeMask;
 };
 
 class LqhAddAttrReq {
@@ -207,14 +197,12 @@ class LqhAddAttrReq {
    * Receiver(s)
    */
   friend class Dblqh;
-  friend class DblqhProxy;
 
   friend bool printLQH_ADD_ATTR_REQ(FILE *, const Uint32 *, Uint32, Uint16);
 public:
   STATIC_CONST( HeaderLength = 4 );
   STATIC_CONST( EntryLength = 3 );
   STATIC_CONST( MAX_ATTRIBUTES = 6 );
-  STATIC_CONST( DEFAULT_VALUE_SECTION_NUM = 0 );
   struct Entry {
     Uint32 attrId;              // for index, includes primary attr id << 16
     Uint32 attrDescriptor;      // 2 words type info
@@ -233,7 +221,6 @@ class LqhAddAttrRef {
    * Sender(s)
    */
   friend class Dblqh;
-  friend class DblqhProxy;
   
   /**
    * Receiver(s)
@@ -254,7 +241,6 @@ class LqhAddAttrConf {
    * Sender(s)
    */
   friend class Dblqh;
-  friend class DblqhProxy;
   
   /**
    * Receiver(s)
@@ -263,43 +249,11 @@ class LqhAddAttrConf {
 
   friend bool printLQH_ADD_ATTR_CONF(FILE *, const Uint32 *, Uint32, Uint16);
 public:
-  STATIC_CONST( SignalLength = 2 );
+  STATIC_CONST( SignalLength = 3 );
 
 private:
   Uint32 senderData;
   Uint32 senderAttrPtr;
-};
-
-struct DropFragReq
-{
-  STATIC_CONST( SignalLength = 5 );
-  enum RequestInfo
-  {
-    AlterTableAbort = 0x1
-  };
-  Uint32 senderRef;
-  Uint32 senderData;
-  Uint32 tableId;
-  Uint32 fragId;
-  Uint32 requestInfo;
-};
-
-struct DropFragRef
-{
-  STATIC_CONST( SignalLength = 5 );
-  Uint32 senderRef;
-  Uint32 senderData;
-  Uint32 tableId;
-  Uint32 fragId;
-  Uint32 errCode;
-};
-
-struct DropFragConf
-{
-  STATIC_CONST( SignalLength = 4 );
-  Uint32 senderRef;
-  Uint32 senderData;
-  Uint32 tableId;
   Uint32 fragId;
 };
 

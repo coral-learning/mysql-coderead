@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003, 2005-2007 MySQL AB
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,46 +12,39 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include <signaldata/DropTab.hpp>
 
 bool 
-printDROP_TAB_REQ(FILE* output, const Uint32* theData, Uint32 len, Uint16)
+printDROP_TAB_REQ(FILE * output, const Uint32 * theData, Uint32 len, Uint16 receiverBlockNo)
 {
-  const DropTabReq* sig = (const DropTabReq*)theData;
-  fprintf(output, " senderRef: 0x%x", sig->senderRef);
-  fprintf(output, " senderData: %u", sig->senderData);
-  fprintf(output, " requestType: %u", sig->requestType);
-  fprintf(output, "\n");
-  fprintf(output, " tableId: %u", sig->tableId);
-  fprintf(output, " tableVersion: 0x%x", sig->tableVersion);
-  fprintf(output, "\n");
+  const DropTabReq * const sig = (DropTabReq *) theData;
+  
+  fprintf(output, 
+	  " senderRef: %x senderData: %d TableId: %d requestType: %d\n",
+	  sig->senderRef, sig->senderData, sig->tableId, sig->requestType);
   return true;
 }
 
-bool
-printDROP_TAB_CONF(FILE* output, const Uint32* theData, Uint32 len, Uint16)
+bool printDROP_TAB_CONF(FILE * output, const Uint32 * theData, Uint32 len, Uint16 receiverBlockNo)
 {
-  const DropTabConf* sig = (const DropTabConf*)theData;
-  fprintf(output, " senderRef: 0x%x", sig->senderRef);
-  fprintf(output, " senderData: %u", sig->senderData);
-  fprintf(output, "\n");
-  fprintf(output, " tableId: %u", sig->tableId);
-  fprintf(output, "\n");
+  const DropTabConf * const sig = (DropTabConf *) theData;
+
+  fprintf(output, 
+	  " senderRef: %x senderData: %d TableId: %d\n",
+	  sig->senderRef, sig->senderData, sig->tableId);
+  
   return true;
 }
 
-bool
-printDROP_TAB_REF(FILE* output, const Uint32* theData, Uint32 len, Uint16)
+bool printDROP_TAB_REF(FILE * output, const Uint32 * theData, Uint32 len, Uint16 receiverBlockNo)
 {
-  const DropTabRef* sig = (const DropTabRef*)theData;
-  fprintf(output, " senderRef: 0x%x", sig->senderRef);
-  fprintf(output, " senderData: %u", sig->senderData);
-  fprintf(output, "\n");
-  fprintf(output, " tableId: %u", sig->tableId);
-  fprintf(output, " errorCode: %u", sig->errorCode);
-  fprintf(output, "\n");
+  const DropTabRef * const sig = (DropTabRef *) theData;
+
+  fprintf(output, 
+	  " senderRef: %x senderData: %d TableId: %d errorCode: %d\n",
+	  sig->senderRef, sig->senderData, sig->tableId, sig->errorCode);
+  
   return true;
 }

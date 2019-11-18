@@ -61,10 +61,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 TINYINT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -81,10 +77,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 TINYINT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -101,10 +93,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 TINYINT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -337,10 +325,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -357,10 +341,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -377,10 +357,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -613,10 +589,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -633,10 +605,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -653,10 +621,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -889,10 +853,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -909,10 +869,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -929,10 +885,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -1165,10 +1117,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INTEGER NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -1185,10 +1133,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INTEGER NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -1205,10 +1149,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INTEGER NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -1441,10 +1381,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 BIGINT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -1461,10 +1397,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 BIGINT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -1481,10 +1413,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 BIGINT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -1717,10 +1645,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DECIMAL NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -1737,10 +1661,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DECIMAL NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -1757,10 +1677,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DECIMAL NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -1993,10 +1909,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DEC NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -2013,10 +1925,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DEC NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -2033,10 +1941,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DEC NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -2269,10 +2173,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FIXED NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -2289,10 +2189,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FIXED NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -2309,10 +2205,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FIXED NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -2545,10 +2437,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 NUMERIC NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -2565,10 +2453,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 NUMERIC NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -2585,10 +2469,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 NUMERIC NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -2821,10 +2701,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -2841,10 +2717,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -2861,10 +2733,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -3097,10 +2965,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 REAL NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -3117,10 +2981,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 REAL NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -3137,10 +2997,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 REAL NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -3373,10 +3229,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE PRECISION NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -3393,10 +3245,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE PRECISION NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -3413,10 +3261,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE PRECISION NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -3649,10 +3493,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FLOAT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -3669,10 +3509,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FLOAT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -3689,10 +3525,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FLOAT NOT NULL PRIMARY KEY, c2 CHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -3925,10 +3757,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 TINYINT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -3945,10 +3773,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 TINYINT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -3965,10 +3789,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 TINYINT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -4201,10 +4021,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -4221,10 +4037,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -4241,10 +4053,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -4477,10 +4285,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -4497,10 +4301,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -4517,10 +4317,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -4753,10 +4549,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -4773,10 +4565,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -4793,10 +4581,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -5029,10 +4813,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INTEGER NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -5049,10 +4829,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INTEGER NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -5069,10 +4845,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INTEGER NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -5305,10 +5077,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 BIGINT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -5325,10 +5093,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 BIGINT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -5345,10 +5109,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 BIGINT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -5581,10 +5341,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DECIMAL NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -5601,10 +5357,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DECIMAL NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -5621,10 +5373,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DECIMAL NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -5857,10 +5605,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DEC NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -5877,10 +5621,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DEC NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -5897,10 +5637,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DEC NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -6133,10 +5869,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FIXED NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -6153,10 +5885,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FIXED NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -6173,10 +5901,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FIXED NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -6409,10 +6133,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 NUMERIC NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -6429,10 +6149,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 NUMERIC NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -6449,10 +6165,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 NUMERIC NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -6685,10 +6397,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -6705,10 +6413,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -6725,10 +6429,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -6961,10 +6661,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 REAL NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -6981,10 +6677,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 REAL NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -7001,10 +6693,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 REAL NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -7237,10 +6925,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE PRECISION NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -7257,10 +6941,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE PRECISION NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -7277,10 +6957,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE PRECISION NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -7513,10 +7189,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FLOAT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -7533,10 +7205,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FLOAT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -7553,10 +7221,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FLOAT NOT NULL PRIMARY KEY, c2 VARCHAR(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -7789,10 +7453,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 TINYINT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -7809,10 +7469,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 TINYINT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -7829,10 +7485,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 TINYINT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -8065,10 +7717,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -8085,10 +7733,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -8105,10 +7749,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -8341,10 +7981,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -8361,10 +7997,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -8381,10 +8013,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -8617,10 +8245,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -8637,10 +8261,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -8657,10 +8277,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -8893,10 +8509,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INTEGER NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -8913,10 +8525,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INTEGER NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -8933,10 +8541,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INTEGER NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -9169,10 +8773,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 BIGINT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -9189,10 +8789,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 BIGINT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -9209,10 +8805,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 BIGINT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -9445,10 +9037,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DECIMAL NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -9465,10 +9053,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DECIMAL NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -9485,10 +9069,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DECIMAL NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -9721,10 +9301,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DEC NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -9741,10 +9317,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DEC NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -9761,10 +9333,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DEC NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -9997,10 +9565,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FIXED NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -10017,10 +9581,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FIXED NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -10037,10 +9597,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FIXED NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -10273,10 +9829,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 NUMERIC NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -10293,10 +9845,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 NUMERIC NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -10313,10 +9861,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 NUMERIC NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -10549,10 +10093,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -10569,10 +10109,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -10589,10 +10125,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -10825,10 +10357,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 REAL NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -10845,10 +10373,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 REAL NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -10865,10 +10389,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 REAL NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -11101,10 +10621,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE PRECISION NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -11121,10 +10637,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE PRECISION NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -11141,10 +10653,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE PRECISION NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -11377,10 +10885,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FLOAT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -11397,10 +10901,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FLOAT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -11417,10 +10917,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FLOAT NOT NULL PRIMARY KEY, c2 BINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -11653,10 +11149,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 TINYINT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -11673,10 +11165,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 TINYINT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -11693,10 +11181,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 TINYINT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -11929,10 +11413,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -11949,10 +11429,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -11969,10 +11445,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -12205,10 +11677,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -12225,10 +11693,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -12245,10 +11709,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -12481,10 +11941,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -12501,10 +11957,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -12521,10 +11973,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -12757,10 +12205,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INTEGER NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -12777,10 +12221,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INTEGER NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -12797,10 +12237,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 INTEGER NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -13033,10 +12469,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 BIGINT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -13053,10 +12485,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 BIGINT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -13073,10 +12501,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 BIGINT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -13309,10 +12733,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DECIMAL NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -13329,10 +12749,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DECIMAL NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -13349,10 +12765,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DECIMAL NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -13585,10 +12997,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DEC NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -13605,10 +13013,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DEC NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -13625,10 +13029,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DEC NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -13861,10 +13261,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FIXED NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -13881,10 +13277,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FIXED NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -13901,10 +13293,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FIXED NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -14137,10 +13525,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 NUMERIC NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -14157,10 +13541,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 NUMERIC NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -14177,10 +13557,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 NUMERIC NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -14413,10 +13789,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -14433,10 +13805,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -14453,10 +13821,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -14689,10 +14053,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 REAL NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -14709,10 +14069,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 REAL NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -14729,10 +14085,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 REAL NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -14965,10 +14317,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE PRECISION NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -14985,10 +14333,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE PRECISION NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -15005,10 +14349,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 DOUBLE PRECISION NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -15241,10 +14581,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FLOAT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -15261,10 +14597,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FLOAT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3
@@ -15281,10 +14613,6 @@ c1	c2	c3
 DROP TABLE t1;
 CREATE TABLE t1 (c1 FLOAT NOT NULL PRIMARY KEY, c2 VARBINARY(10), c3 TIME);
 LOAD DATA LOCAL INFILE 'suite/engines/funcs/t/load_simple.inc' INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
-Warnings:
-Note	1265	Data truncated for column 'c3' at row 1
-Note	1265	Data truncated for column 'c3' at row 2
-Note	1265	Data truncated for column 'c3' at row 3
 SELECT * INTO OUTFILE '../../tmp/t1.dat' FIELDS ENCLOSED BY '"' OPTIONALLY ENCLOSED BY ':' LINES TERMINATED BY '\r\n' FROM t1;
 SELECT * FROM t1 ORDER BY c1;
 c1	c2	c3

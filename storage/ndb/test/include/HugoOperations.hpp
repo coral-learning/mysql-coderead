@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003-2008 MySQL AB, 2008-2010 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef HUGO_OPERATIONS_HPP
 #define HUGO_OPERATIONS_HPP
@@ -54,30 +52,10 @@ public:
 			   int numRecords = 1);
   
   int pkReadRecord(Ndb*,
-                   int record,
-                   int numRecords = 1,
-                   NdbOperation::LockMode lm = NdbOperation::LM_Read,
-                   NdbOperation::LockMode * lmused = 0);
+		   int recordNo,
+		   int numRecords = 1,
+		   NdbOperation::LockMode lm = NdbOperation::LM_Read);
   
-  int pkReadRandRecord(Ndb*,
-                       int records,
-                       int numRecords = 1,
-                       NdbOperation::LockMode lm = NdbOperation::LM_Read,
-                       NdbOperation::LockMode * lmused = 0);
-
-  int pkReadRecordLockHandle(Ndb*,
-                             Vector<const NdbLockHandle*>& lockHandles,
-                             int record,
-                             int numRecords = 1,
-                             NdbOperation::LockMode lm = NdbOperation::LM_Read,
-                             NdbOperation::LockMode * lmused = 0);
-  
-  int pkUnlockRecord(Ndb*,
-                     Vector<const NdbLockHandle*>& lockHandles,
-                     int offset = 0,
-                     int numRecords = ~(0),
-                     NdbOperation::AbortOption ao = NdbOperation::AbortOnError);
-
   int pkUpdateRecord(Ndb*,
 		     int recordNo,
 		     int numRecords = 1,
@@ -87,11 +65,6 @@ public:
 		     int recordNo,
 		     int numRecords = 1);
   
-  int pkRefreshRecord(Ndb*,
-                      int recordNo,
-                      int numRecords = 1,
-                      int anyValueInfo = 0); /* 0 - none, 1+ Val | record */
-
   int execute_Commit(Ndb*, 
 		     AbortOption ao = AbortOnError);
   int execute_NoCommit(Ndb*,
@@ -114,8 +87,6 @@ public:
 		   int rowId);
 
   int equalForRow(NdbOperation*, int rowid);
-
-  bool getPartIdForRow(const NdbOperation* pOp, int rowid, Uint32& partId);
   
   int setValues(NdbOperation*, int rowId, int updateId);
   
@@ -144,24 +115,11 @@ public:
   
   int wait_async(Ndb*, int timeout = -1);
 
-  int releaseLockHandles(Ndb*,
-                         Vector<const NdbLockHandle*>& lockHandles,
-                         int offset = 0,
-                         int numRecords = ~(0));
-
-  const NdbError& getNdbError() const;
-  void setQuiet() { m_quiet = true; }
-
-  typedef Uint32 (*AnyValueCallback)(Ndb*, NdbTransaction*, int rowid, int updVal);
-
-  void setAnyValueCallback(AnyValueCallback);
-
 protected:
   void allocRows(int rows);
   void deallocRows();
 
   Vector<NDBT_ResultRow*> rows;
-  Vector<NdbIndexScanOperation*> indexScans;
   HugoCalculator calc;
 
   Vector<BaseString> savedRecords;
@@ -174,13 +132,6 @@ protected:
   int m_async_return;
   friend void HugoOperations_async_callback(int, NdbTransaction*, void*);
   void callback(int res, NdbTransaction*);
-  Uint32 getAnyValueForRowUpd(int row, int update);
-
-
-  void setNdbError(const NdbError& error);
-  NdbError m_error;
-  bool m_quiet;
-  AnyValueCallback avCallback;
 };
 
 #endif

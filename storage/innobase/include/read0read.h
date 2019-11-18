@@ -1,6 +1,6 @@
 /*****************************************************************************
 
-Copyright (c) 1997, 2016, Oracle and/or its affiliates. All Rights Reserved.
+Copyright (c) 1997, 2009, Innobase Oy. All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -11,8 +11,8 @@ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
 FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
-this program; if not, write to the Free Software Foundation, Inc.,
-51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA
+this program; if not, write to the Free Software Foundation, Inc., 
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
 
 *****************************************************************************/
 
@@ -52,19 +52,19 @@ must be closed with ..._close.
 @return	own: read view struct */
 UNIV_INTERN
 read_view_t*
-read_view_purge_open(
-/*=================*/
+read_view_oldest_copy_or_open_new(
+/*==============================*/
+	trx_id_t	cr_trx_id,	/*!< in: trx_id of creating
+					transaction, or 0 used in purge */
 	mem_heap_t*	heap);		/*!< in: memory heap from which
 					allocated */
 /*********************************************************************//**
-Remove a read view from the trx_sys->view_list. */
-UNIV_INLINE
+Closes a read view. */
+UNIV_INTERN
 void
-read_view_remove(
-/*=============*/
-	read_view_t*	view,		/*!< in: read view, can be 0 */
-	bool		own_mutex);	/*!< in: true if caller owns the
-					trx_sys_t::mutex */
+read_view_close(
+/*============*/
+	read_view_t*	view);	/*!< in: read view */
 /*********************************************************************//**
 Closes a consistent read view for MySQL. This function is called at an SQL
 statement end if the trx isolation level is <= TRX_ISO_READ_COMMITTED. */
@@ -75,14 +75,13 @@ read_view_close_for_mysql(
 	trx_t*	trx);	/*!< in: trx which has a read view */
 /*********************************************************************//**
 Checks if a read view sees the specified transaction.
-@return	true if sees */
+@return	TRUE if sees */
 UNIV_INLINE
-bool
+ibool
 read_view_sees_trx_id(
 /*==================*/
 	const read_view_t*	view,	/*!< in: read view */
-	trx_id_t		trx_id)	/*!< in: trx id */
-	MY_ATTRIBUTE((nonnull, warn_unused_result));
+	trx_id_t		trx_id);/*!< in: trx id */
 /*********************************************************************//**
 Prints a read view to stderr. */
 UNIV_INTERN
@@ -122,7 +121,7 @@ read_cursor_set_for_mysql(
 /** Read view lists the trx ids of those transactions for which a consistent
 read should not see the modifications to the database. */
 
-struct read_view_t{
+struct read_view_struct{
 	ulint		type;	/*!< VIEW_NORMAL, VIEW_HIGH_GRANULARITY */
 	undo_no_t	undo_no;/*!< 0 or if type is
 				VIEW_HIGH_GRANULARITY
@@ -146,9 +145,9 @@ struct read_view_t{
 	ulint		n_trx_ids;
 				/*!< Number of cells in the trx_ids array */
 	trx_id_t*	trx_ids;/*!< Additional trx ids which the read should
-				not see: typically, these are the read-write
-				active transactions at the time when the read
-				is serialized, except the reading transaction
+				not see: typically, these are the active
+				transactions at the time when the read is
+				serialized, except the reading transaction
 				itself; the trx ids in this array are in a
 				descending order. These trx_ids should be
 				between the "low" and "high" water marks,
@@ -176,7 +175,7 @@ struct read_view_t{
 cursors. This struct holds both heap where consistent read view
 is allocated and pointer to a read view. */
 
-struct cursor_view_t{
+struct cursor_view_struct{
 	mem_heap_t*	heap;
 				/*!< Memory heap for the cursor view */
 	read_view_t*	read_view;

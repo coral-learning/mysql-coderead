@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, 2013, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2010, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -63,7 +63,7 @@ static uint plugin_version[MYSQL_CLIENT_MAX_PLUGINS]=
   loading the same plugin twice in parallel.
 */
 struct st_client_plugin_int *plugin_list[MYSQL_CLIENT_MAX_PLUGINS];
-static mysql_mutex_t LOCK_load_client_plugin;
+static pthread_mutex_t LOCK_load_client_plugin;
 
 static int is_not_initialized(MYSQL *mysql, const char *name)
 {
@@ -117,9 +117,8 @@ find_plugin(const char *name, int type)
   @retval a pointer to an installed plugin or 0
 */
 static struct st_mysql_client_plugin *
-do_add_plugin(MYSQL *mysql, struct st_mysql_client_plugin *plugin,
-              void *dlhandle,
-              int argc, va_list args)
+add_plugin(MYSQL *mysql, struct st_mysql_client_plugin *plugin, void *dlhandle,
+           int argc, va_list args)
 {
   const char *errmsg;
   struct st_client_plugin_int plugin_int, *p;
@@ -160,7 +159,7 @@ do_add_plugin(MYSQL *mysql, struct st_mysql_client_plugin *plugin,
     goto err2;
   }
 
-  mysql_mutex_assert_owner(&LOCK_load_client_plugin);
+  safe_mutex_assert_owner(&LOCK_load_client_plugin);
 
   p->next= plugin_list[plugin->type];
   plugin_list[plugin->type]= p;
@@ -179,31 +178,6 @@ err1:
     dlclose(dlhandle);
   return NULL;
 }
-
-
-static struct st_mysql_client_plugin *
-add_plugin_noargs(MYSQL *mysql, struct st_mysql_client_plugin *plugin,
-                  void *dlhandle,
-                  int argc, ...)
-{
-  struct st_mysql_client_plugin *retval= NULL;
-  va_list ap;
-  va_start(ap, argc);
-  retval= do_add_plugin(mysql, plugin, dlhandle, argc, ap);
-  va_end(ap);
-  return retval;
-}
-
-
-static struct st_mysql_client_plugin *
-add_plugin_withargs(MYSQL *mysql, struct st_mysql_client_plugin *plugin,
-                    void *dlhandle,
-                    int argc, va_list args)
-{
-  return do_add_plugin(mysql, plugin, dlhandle, argc, args);
-}
-
-
 
 /**
   Loads plugins which are specified in the environment variable
@@ -263,21 +237,21 @@ int mysql_client_plugin_init()
   if (initialized)
     return 0;
 
-  memset(&mysql, 0, sizeof(mysql)); /* dummy mysql for set_mysql_extended_error */
+  bzero(&mysql, sizeof(mysql)); /* dummy mysql for set_mysql_extended_error */
 
-  mysql_mutex_init(0, &LOCK_load_client_plugin, MY_MUTEX_INIT_SLOW);
+  pthread_mutex_init(&LOCK_load_client_plugin, MY_MUTEX_INIT_SLOW);
   init_alloc_root(&mem_root, 128, 128);
 
-  memset(&plugin_list, 0, sizeof(plugin_list));
+  bzero(&plugin_list, sizeof(plugin_list));
 
   initialized= 1;
 
-  mysql_mutex_lock(&LOCK_load_client_plugin);
+  pthread_mutex_lock(&LOCK_load_client_plugin);
 
   for (builtin= mysql_client_builtins; *builtin; builtin++)
-    add_plugin_noargs(&mysql, *builtin, 0, 0);
+    add_plugin(&mysql, *builtin, 0, 0, 0);
 
-  mysql_mutex_unlock(&LOCK_load_client_plugin);
+  pthread_mutex_unlock(&LOCK_load_client_plugin);
 
   load_env_plugins(&mysql);
 
@@ -306,10 +280,10 @@ void mysql_client_plugin_deinit()
         dlclose(p->dlhandle);
     }
 
-  memset(&plugin_list, 0, sizeof(plugin_list));
+  bzero(&plugin_list, sizeof(plugin_list));
   initialized= 0;
   free_root(&mem_root, MYF(0));
-  mysql_mutex_destroy(&LOCK_load_client_plugin);
+  pthread_mutex_destroy(&LOCK_load_client_plugin);
 }
 
 /************* public facing functions, for client consumption *********/
@@ -322,7 +296,7 @@ mysql_client_register_plugin(MYSQL *mysql,
   if (is_not_initialized(mysql, plugin->name))
     return NULL;
 
-  mysql_mutex_lock(&LOCK_load_client_plugin);
+  pthread_mutex_lock(&LOCK_load_client_plugin);
 
   /* make sure the plugin wasn't loaded meanwhile */
   if (find_plugin(plugin->name, plugin->type))
@@ -333,9 +307,9 @@ mysql_client_register_plugin(MYSQL *mysql,
     plugin= NULL;
   }
   else
-    plugin= add_plugin_noargs(mysql, plugin, 0, 0);
+    plugin= add_plugin(mysql, plugin, 0, 0, 0);
 
-  mysql_mutex_unlock(&LOCK_load_client_plugin);
+  pthread_mutex_unlock(&LOCK_load_client_plugin);
   return plugin;
 }
 
@@ -348,7 +322,6 @@ mysql_load_plugin_v(MYSQL *mysql, const char *name, int type,
   char dlpath[FN_REFLEN+1];
   void *sym, *dlhandle;
   struct st_mysql_client_plugin *plugin;
-  const char *plugindir;
 #ifdef _WIN32
   char win_errormsg[2048];
 #endif
@@ -361,7 +334,7 @@ mysql_load_plugin_v(MYSQL *mysql, const char *name, int type,
     DBUG_RETURN (NULL);
   }
 
-  mysql_mutex_lock(&LOCK_load_client_plugin);
+  pthread_mutex_lock(&LOCK_load_client_plugin);
 
   /* make sure the plugin wasn't loaded meanwhile */
   if (type >= 0 && find_plugin(name, type))
@@ -370,22 +343,10 @@ mysql_load_plugin_v(MYSQL *mysql, const char *name, int type,
     goto err;
   }
 
-  if (mysql->options.extension && mysql->options.extension->plugin_dir)
-  {
-    plugindir= mysql->options.extension->plugin_dir;
-  }
-  else
-  {
-    plugindir= getenv("LIBMYSQL_PLUGIN_DIR");
-    if (!plugindir)
-    {
-      plugindir= PLUGINDIR;
-    }
-  }
-
   /* Compile dll path */
   strxnmov(dlpath, sizeof(dlpath) - 1,
-           plugindir, "/",
+           mysql->options.extension && mysql->options.extension->plugin_dir ?
+           mysql->options.extension->plugin_dir : PLUGINDIR, "/",
            name, SO_EXT, NullS);
    
   DBUG_PRINT ("info", ("dlopeninig %s", dlpath));
@@ -402,8 +363,8 @@ mysql_load_plugin_v(MYSQL *mysql, const char *name, int type,
       goto have_plugin;
 #endif
 
+    DBUG_PRINT ("info", ("failed to dlopen"));
 #ifdef _WIN32
-    /* There should be no win32 calls between failed dlopen() and GetLastError() */
     if(FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM,
                   0, GetLastError(), 0, win_errormsg, 2048, NULL))
       errmsg= win_errormsg;
@@ -412,7 +373,6 @@ mysql_load_plugin_v(MYSQL *mysql, const char *name, int type,
 #else
     errmsg= dlerror();
 #endif
-    DBUG_PRINT ("info", ("failed to dlopen"));
     goto err;
   }
 
@@ -446,15 +406,15 @@ have_plugin:
     goto err;
   }
 
-  plugin= add_plugin_withargs(mysql, plugin, dlhandle, argc, args);
+  plugin= add_plugin(mysql, plugin, dlhandle, argc, args);
 
-  mysql_mutex_unlock(&LOCK_load_client_plugin);
+  pthread_mutex_unlock(&LOCK_load_client_plugin);
 
   DBUG_PRINT ("leave", ("plugin loaded ok"));
   DBUG_RETURN (plugin);
 
 err:
-  mysql_mutex_unlock(&LOCK_load_client_plugin);
+  pthread_mutex_unlock(&LOCK_load_client_plugin);
   DBUG_PRINT ("leave", ("plugin load error : %s", errmsg));
   set_mysql_extended_error(mysql, CR_AUTH_PLUGIN_CANNOT_LOAD, unknown_sqlstate,
                            ER(CR_AUTH_PLUGIN_CANNOT_LOAD), name, errmsg);

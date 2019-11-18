@@ -7,7 +7,10 @@
 -- source include/have_innodb.inc
 -- source include/have_debug.inc
 
-RESET MASTER;
+--disable_warnings
+drop table if exists t1, t2;
+--enable_warnings
+reset master;
 
 create table t1 (a int) engine=innodb;
 create table t2 (a int) engine=innodb;
@@ -80,22 +83,17 @@ set @bcs = @@binlog_cache_size;
 set global binlog_cache_size=4096;
 reset master;
 
-create table t1 (a int, b char(255)) engine=innodb;
+create table t1 (a int) engine=innodb;
 
-flush status;
-show status like "binlog_cache_use";
-
-let $1=100;
+let $1=400;
 disable_query_log;
 begin;
 while ($1)
 {
- eval insert into t1 values( $1, 'just to fill void to make transaction occupying at least two buffers of the trans cache' );
+ eval insert into t1 values( $1 );
  dec $1;
 }
 commit;
---echo *** the following must show the counter value = 1 ***
-show status like "binlog_cache_use";
 enable_query_log;
 
 --source include/show_binlog_events.inc
@@ -233,17 +231,7 @@ DELETE FROM user WHERE host='localhost' AND user='@#@';
 --enable_warnings
 
 use test;
-
-# Show binlog events on a different connection because it calls
-# `SELECT UUID()` internally, which is marked unsafe. Since there is
-# an open temporary table, this causes the current connection to log
-# subsequent statements in row format.
-connect (other,localhost,root,,test);
-connection other;
 source include/show_binlog_events.inc;
-connection default;
-disconnect other;
-
 drop table t1,t2,t3,tt1;
 
 -- source extra/binlog_tests/binlog_insert_delayed.test
@@ -312,7 +300,7 @@ BINLOG '
 
 # Show binlog events to check that server ids are correct.
 --replace_column 1 # 2 # 5 #
---replace_regex /Server ver: .*, Binlog ver: .*/Server ver: #, Binlog ver: #/ /table_id: [0-9]+/table_id: #/ /SET @@SESSION.GTID_NEXT=.*$/SET @@SESSION.GTID_NEXT= 'GTID';/ /GROUPS: .*:(.*,.*)/GROUPS: GTID:(X,X)/
+--replace_regex /Server ver: .*, Binlog ver: .*/Server ver: #, Binlog ver: #/ /table_id: [0-9]+/table_id: #/
 SHOW BINLOG EVENTS;
 
 DROP TABLE t1;
@@ -357,7 +345,7 @@ SHOW SESSION VARIABLES LIKE "%_checks";
 --echo # INSERT INTO t1 VALUES(2)
 --echo # foreign_key_checks=1 and unique_checks=1
 --echo # It should not change current session's variables, even error happens
-call mtr.add_suppression("Slave SQL.*Could not execute Write_rows_v1 event on table test.t1; Duplicate entry .2. for key .PRIMARY., Error_code: 1062");
+call mtr.add_suppression("Slave SQL.*Could not execute Write_rows event on table test.t1; Duplicate entry .2. for key .PRIMARY., Error_code: 1062");
 --error 1062
 BINLOG '
 dfLtTBMBAAAAKQAAAKsBAAAAABcAAAAAAAEABHRlc3QAAnQxAAEDAAE=

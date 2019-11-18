@@ -1,5 +1,4 @@
-/* Copyright (c) 2002, 2016, Oracle and/or its affiliates. All rights
- * reserved.
+/* Copyright (c) 2002, 2012, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,11 +11,10 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include <my_global.h>
 #include <my_sys.h>
-#include "my_default.h"
 #include <mysql.h>
 #include <errmsg.h>
 #include <my_getopt.h>
@@ -43,12 +41,10 @@ static char *shared_memory_base_name= 0;
 static unsigned int  opt_port;
 static my_bool tty_password= 0, opt_silent= 0;
 
-static my_bool opt_secure_auth= 1;
 static MYSQL *mysql= 0;
 static char current_db[]= "client_test_db";
 static unsigned int test_count= 0;
 static unsigned int opt_count= 0;
-static unsigned int opt_count_read= 0;
 static unsigned int iter_count= 0;
 static my_bool have_innodb= FALSE;
 static char *opt_plugin_dir= 0, *opt_default_auth= 0;
@@ -59,9 +55,6 @@ static const char *opt_vardir= "mysql-test/var";
 
 static longlong opt_getopt_ll_test= 0;
 
-static char **defaults_argv;
-static int   original_argc;
-static char **original_argv;
 static int embedded_server_arg_count= 0;
 static char *embedded_server_args[MAX_SERVER_ARGS];
 
@@ -76,11 +69,6 @@ static time_t start_time, end_time;
 static double total_time;
 
 const char *default_dbug_option= "d:t:o,/tmp/mysql_client_test.trace";
-
-/*
-Read and parse arguments and MySQL options from my.cnf
-*/
-static const char *client_test_load_default_groups[]= { "client", 0 };
 
 struct my_tests_st
 {
@@ -107,10 +95,10 @@ DBUG_PRINT("test", ("name: %s", str));					\
    fprintf(stdout, "  \n#####################################\n");	\
  }
 
-static void print_error(MYSQL * l_mysql, const char *msg);
+static void print_error(const char *msg);
 static void print_st_error(MYSQL_STMT *stmt, const char *msg);
 static void client_disconnect(MYSQL* mysql);
-static void get_options(int *argc, char ***argv);
+
 
 /*
 Abort unless given experssion is non-zero.
@@ -139,8 +127,7 @@ static void die(const char *file, int line, const char *expr)
 }
 
 
-#define myerror(msg) print_error(mysql,msg)
-#define myerror2(l_mysql, msg) print_error(l_mysql,msg)
+#define myerror(msg) print_error(msg)
 #define mysterror(stmt, msg) print_st_error(stmt, msg)
 
 #define myquery(RES)				\
@@ -148,14 +135,6 @@ static void die(const char *file, int line, const char *expr)
  int r= (RES);					\
  if (r)						\
  myerror(NULL);					\
- DIE_UNLESS(r == 0);				\
-}
-
-#define myquery2(L_MYSQL,RES)			\
-{						\
- int r= (RES);					\
- if (r)						\
- myerror2(L_MYSQL,NULL);			\
  DIE_UNLESS(r == 0);				\
 }
 
@@ -208,17 +187,17 @@ static int cmp_double(double *a, double *b)
 
 /* Print the error message */
 
-static void print_error(MYSQL *l_mysql, const char *msg)
+static void print_error(const char *msg)
 {
  if (!opt_silent)
  {
-   if (l_mysql && mysql_errno(l_mysql))
+   if (mysql && mysql_errno(mysql))
    {
-     if (l_mysql->server_version)
-     fprintf(stdout, "\n [MySQL-%s]", l_mysql->server_version);
+     if (mysql->server_version)
+     fprintf(stdout, "\n [MySQL-%s]", mysql->server_version);
      else
      fprintf(stdout, "\n [MySQL]");
-     fprintf(stdout, "[%d] %s\n", mysql_errno(l_mysql), mysql_error(l_mysql));
+     fprintf(stdout, "[%d] %s\n", mysql_errno(mysql), mysql_error(mysql));
    }
    else if (msg)
    fprintf(stderr, " [MySQL] %s\n", msg);
@@ -261,9 +240,6 @@ static MYSQL *mysql_client_init(MYSQL* con)
 
  if (opt_default_auth && *opt_default_auth)
  mysql_options(res, MYSQL_DEFAULT_AUTH, opt_default_auth);
-
- if (!opt_secure_auth)
- mysql_options(res, MYSQL_SECURE_AUTH, (char*)&opt_secure_auth);
  return res;
 }
 
@@ -280,11 +256,9 @@ static my_bool check_have_innodb(MYSQL *conn)
  MYSQL_RES *res;
  MYSQL_ROW row;
  int rc;
- my_bool result= FALSE;
+ my_bool result;
 
- rc= mysql_query(conn, 
- "SELECT (support = 'YES' or support = 'DEFAULT' or support = 'ENABLED') "
- "AS `TRUE` FROM information_schema.engines WHERE engine = 'innodb'");
+ rc= mysql_query(conn, "show variables like 'have_innodb'");
  myquery(rc);
  res= mysql_use_result(conn);
  DIE_UNLESS(res);
@@ -292,8 +266,7 @@ static my_bool check_have_innodb(MYSQL *conn)
  row= mysql_fetch_row(res);
  DIE_UNLESS(row);
 
- if (row[0] && row[1])
- result= strcmp(row[1], "1") == 0;
+ result= strcmp(row[1], "YES") == 0;
  mysql_free_result(res);
  return result;
 }
@@ -353,9 +326,6 @@ static MYSQL* client_connect(ulong flag, uint protocol, my_bool auto_reconnect)
 
  if (opt_default_auth && *opt_default_auth)
  mysql_options(mysql, MYSQL_DEFAULT_AUTH, opt_default_auth);
-
- if (!opt_secure_auth)
- mysql_options(mysql, MYSQL_SECURE_AUTH, (char*)&opt_secure_auth);
 
  if (!(mysql_real_connect(mysql, opt_host, opt_user,
  opt_password, opt_db ? opt_db:"test", opt_port,
@@ -596,11 +566,11 @@ static int my_process_stmt_result(MYSQL_STMT *stmt)
    return row_count;
  }
 
- field_count= MY_MIN(mysql_num_fields(result), MAX_RES_FIELDS);
+ field_count= min(mysql_num_fields(result), MAX_RES_FIELDS);
 
- memset(buffer, 0, sizeof(buffer));
- memset(length, 0, sizeof(length));
- memset(is_null, 0, sizeof(is_null));
+ bzero((char*) buffer, sizeof(buffer));
+ bzero((char*) length, sizeof(length));
+ bzero((char*) is_null, sizeof(is_null));
 
  for(i= 0; i < field_count; i++)
  {
@@ -1178,12 +1148,19 @@ static my_bool thread_query(const char *query)
 }
 
 
+/*
+Read and parse arguments and MySQL options from my.cnf
+*/
+
+static const char *client_test_load_default_groups[]= { "client", 0 };
+static char **defaults_argv;
+
 static struct my_option client_test_long_options[] =
 {
 {"basedir", 'b', "Basedir for tests.", &opt_basedir,
  &opt_basedir, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-{"count", 't', "Number of times test to be executed", &opt_count_read,
- &opt_count_read, 0, GET_UINT, REQUIRED_ARG, 1, 0, 0, 0, 0, 0},
+{"count", 't', "Number of times test to be executed", &opt_count,
+ &opt_count, 0, GET_UINT, REQUIRED_ARG, 1, 0, 0, 0, 0, 0},
 {"database", 'D', "Database to use", &opt_db, &opt_db,
  0, GET_STR_ALLOC, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
 {"do-not-drop-database", 'd', "Do not drop database while disconnecting",
@@ -1236,9 +1213,6 @@ static struct my_option client_test_long_options[] =
 {"default_auth", 0, "Default authentication client-side plugin to use.",
  &opt_default_auth, &opt_default_auth, 0,
  GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-{"secure-auth", 0, "Refuse client connecting to server if it"
-  " uses old (pre-4.1.1) protocol.", &opt_secure_auth,
-  &opt_secure_auth, 0, GET_BOOL, NO_ARG, 1, 0, 0, 0, 0, 0},
 { 0, 0, 0, 0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0}
 };
 
@@ -1265,7 +1239,7 @@ static struct my_tests_st *get_my_tests();  /* To be defined in main .c file */
 static struct my_tests_st *my_testlist= 0;
 
 static my_bool
-get_one_option(int optid, const struct my_option *opt MY_ATTRIBUTE((unused)),
+get_one_option(int optid, const struct my_option *opt __attribute__((unused)),
 char *argument)
 {
  switch (optid) {
@@ -1339,11 +1313,6 @@ static void get_options(int *argc, char ***argv)
 {
  int ho_error;
 
- /* Copy argv from load_defaults, so we can free it when done. */
- defaults_argv= *argv;
- /* reset --silent option */
- opt_silent= 0;
-
  if ((ho_error= handle_options(argc, argv, client_test_long_options,
  get_one_option)))
  exit(ho_error);
@@ -1364,12 +1333,9 @@ static void print_test_output()
    fprintf(stdout, "\n\n");
    fprintf(stdout, "All '%d' tests were successful (in '%d' iterations)",
    test_count-1, opt_count);
-   if (!opt_silent)
-   {
-     fprintf(stdout, "\n  Total execution time: %g SECS", total_time);
-     if (opt_count > 1)
-     fprintf(stdout, " (Avg: %g SECS)", total_time/opt_count);
-   }
+   fprintf(stdout, "\n  Total execution time: %g SECS", total_time);
+   if (opt_count > 1)
+   fprintf(stdout, " (Avg: %g SECS)", total_time/opt_count);
 
    fprintf(stdout, "\n\n!!! SUCCESS !!!\n");
  }
@@ -1382,39 +1348,16 @@ main routine
 
 int main(int argc, char **argv)
 {
- int i;
- char **tests_to_run= NULL, **curr_test;
  struct my_tests_st *fptr;
  my_testlist= get_my_tests();
- 
- MY_INIT(argv[0]);
 
- /* Copy the original arguments, so it can be reused for restarting. */
- original_argc= argc;
- original_argv= malloc(argc * sizeof(char*));
- if (argc && !original_argv)
- exit(1);
- for (i= 0; i < argc; i++)
- original_argv[i]= strdup(argv[i]);
+ MY_INIT(argv[0]);
 
  if (load_defaults("my", client_test_load_default_groups, &argc, &argv))
  exit(1);
 
+ defaults_argv= argv;
  get_options(&argc, &argv);
-
- /* Set main opt_count. */
- opt_count= opt_count_read;
-
- /* If there are any arguments left (named tests), save them. */
- if (argc)
- {
-   tests_to_run= malloc((argc + 1) * sizeof(char*));
-   if (!tests_to_run)
-   exit(1);
-   for (i= 0; i < argc; i++)
-   tests_to_run[i]= strdup(argv[i]);
-   tests_to_run[i]= NULL;
- }
 
  if (mysql_server_init(embedded_server_arg_count,
  embedded_server_args,
@@ -1430,18 +1373,18 @@ int main(int argc, char **argv)
    /* Start of tests */
    test_count= 1;
    start_time= time((time_t *)0);
-   if (!tests_to_run)
+   if (!argc)
    {
      for (fptr= my_testlist; fptr->name; fptr++)
      (*fptr->function)();	
    }
    else
    {
-     for (curr_test= tests_to_run ; *curr_test ; curr_test++)
+     for ( ; *argv ; argv++)
      {
        for (fptr= my_testlist; fptr->name; fptr++)
        {
-	 if (!strcmp(fptr->name, *curr_test))
+	 if (!strcmp(fptr->name, *argv))
 	 {
 	   (*fptr->function)();
 	   break;
@@ -1454,7 +1397,6 @@ int main(int argc, char **argv)
 	 my_progname);
 	 client_disconnect(mysql);
 	 free_defaults(defaults_argv);
-	 mysql_server_end();
 	 exit(1);
        }
      }
@@ -1478,17 +1420,5 @@ int main(int argc, char **argv)
 
  my_end(0);
 
- for (i= 0; i < original_argc; i++)
- free(original_argv[i]);
- if (original_argc)
- free(original_argv);
- if (tests_to_run)
- {
-   for (curr_test= tests_to_run ; *curr_test ; curr_test++)
-   free(*curr_test);
-   free(tests_to_run);
- }
- my_free(opt_password);
- my_free(opt_host);
  exit(0);
 }

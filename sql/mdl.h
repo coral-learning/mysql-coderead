@@ -1,6 +1,6 @@
 #ifndef MDL_H
 #define MDL_H
-/* Copyright (c) 2009, 2012, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2009, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #if defined(__IBMC__) || defined(__IBMCPP__)
 /* Further down, "next_in_lock" and "next_in_context" have the same type,
@@ -29,92 +29,11 @@
 #include <m_string.h>
 #include <mysql_com.h>
 
-#include <algorithm>
-
 class THD;
 
 class MDL_context;
 class MDL_lock;
 class MDL_ticket;
-
-/**
-  @def ENTER_COND(C, M, S, O)
-  Start a wait on a condition.
-  @param C the condition to wait on
-  @param M the associated mutex
-  @param S the new stage to enter
-  @param O the previous stage
-  @sa EXIT_COND().
-*/
-#define ENTER_COND(C, M, S, O) enter_cond(C, M, S, O, __func__, __FILE__, __LINE__)
-
-/**
-  @def EXIT_COND(S)
-  End a wait on a condition
-  @param S the new stage to enter
-*/
-#define EXIT_COND(S) exit_cond(S, __func__, __FILE__, __LINE__)
-
-/**
-   An interface to separate the MDL module from the THD, and the rest of the
-   server code.
- */
-
-class MDL_context_owner
-{
-public:
-  virtual ~MDL_context_owner() {}
-
-  /**
-    Enter a condition wait.
-    For @c enter_cond() / @c exit_cond() to work the mutex must be held before
-    @c enter_cond(); this mutex is then released by @c exit_cond().
-    Usage must be: lock mutex; enter_cond(); your code; exit_cond().
-    @param cond the condition to wait on
-    @param mutex the associated mutex
-    @param [in] stage the stage to enter, or NULL
-    @param [out] old_stage the previous stage, or NULL
-    @param src_function function name of the caller
-    @param src_file file name of the caller
-    @param src_line line number of the caller
-    @sa ENTER_COND(), THD::enter_cond()
-    @sa EXIT_COND(), THD::exit_cond()
-  */
-  virtual void enter_cond(mysql_cond_t *cond, mysql_mutex_t *mutex,
-                          const PSI_stage_info *stage, PSI_stage_info *old_stage,
-                          const char *src_function, const char *src_file,
-                          int src_line) = 0;
-
-  /**
-    @def EXIT_COND(S)
-    End a wait on a condition
-    @param [in] stage the new stage to enter
-    @param src_function function name of the caller
-    @param src_file file name of the caller
-    @param src_line line number of the caller
-    @sa ENTER_COND(), THD::enter_cond()
-    @sa EXIT_COND(), THD::exit_cond()
-  */
-  virtual void exit_cond(const PSI_stage_info *stage,
-                         const char *src_function, const char *src_file,
-                         int src_line) = 0;
-  /**
-     Has the owner thread been killed?
-   */
-  virtual int  is_killed() = 0;
-
-  /**
-     This one is only used for DEBUG_SYNC.
-     (Do not use it to peek/poke into other parts of THD.)
-   */
-  virtual THD* get_thd() = 0;
-
-  /**
-     @see THD::notify_shared_lock()
-   */
-  virtual bool notify_shared_lock(MDL_context_owner *in_use,
-                                  bool needs_thr_lock_abort) = 0;
-};
 
 /**
   Type of metadata lock request.
@@ -194,15 +113,6 @@ enum enum_mdl_type {
   */
   MDL_SHARED_WRITE,
   /*
-    An upgradable shared metadata lock for cases when there is an intention
-    to modify (and not just read) data in the table.
-    Can be upgraded to MDL_SHARED_NO_WRITE and MDL_EXCLUSIVE.
-    A connection holding SU lock can read table metadata and modify or read
-    table data (after acquiring appropriate table and row-level locks).
-    To be used for the first phase of ALTER TABLE.
-  */
-  MDL_SHARED_UPGRADABLE,
-  /*
     An upgradable shared metadata lock which blocks all attempts to update
     table data, allowing reads.
     A connection holding this kind of lock can read table metadata and read
@@ -278,10 +188,6 @@ enum enum_mdl_duration {
 class MDL_key
 {
 public:
-#ifdef HAVE_PSI_INTERFACE
-  static void init_psi_keys();
-#endif
-
   /**
     Object namespaces.
     Sic: when adding a new member to this enum make sure to
@@ -340,11 +246,9 @@ public:
       are not longer than NAME_LEN. Still we play safe and try to avoid
       buffer overruns.
     */
-    DBUG_ASSERT(strlen(db) <= NAME_LEN && strlen(name) <= NAME_LEN);
-    m_db_name_length= static_cast<uint16>(strmake(m_ptr + 1, db, NAME_LEN) -
-                                          m_ptr - 1);
-    m_length= static_cast<uint16>(strmake(m_ptr + m_db_name_length + 2, name,
-                                          NAME_LEN) - m_ptr + 1);
+    m_db_name_length= (uint16) (strmake(m_ptr + 1, db, NAME_LEN) - m_ptr - 1);
+    m_length= (uint16) (strmake(m_ptr + m_db_name_length + 2, name, NAME_LEN) -
+                        m_ptr + 1);
   }
   void mdl_key_init(const MDL_key *rhs)
   {
@@ -367,7 +271,6 @@ public:
       character set is utf-8, we can safely assume that no
       character starts with a zero byte.
     */
-    using std::min;
     return memcmp(m_ptr, rhs->m_ptr, min(m_length, rhs->m_length));
   }
 
@@ -386,16 +289,16 @@ public:
     Get thread state name to be used in case when we have to
     wait on resource identified by key.
   */
-  const PSI_stage_info * get_wait_state_name() const
+  const char * get_wait_state_name() const
   {
-    return & m_namespace_to_wait_state_name[(int)mdl_namespace()];
+    return m_namespace_to_wait_state_name[(int)mdl_namespace()];
   }
 
 private:
   uint16 m_length;
   uint16 m_db_name_length;
   char m_ptr[MAX_MDLKEY_LENGTH];
-  static PSI_stage_info m_namespace_to_wait_state_name[NAMESPACE_END];
+  static const char * m_namespace_to_wait_state_name[NAMESPACE_END];
 private:
   MDL_key(const MDL_key &);                     /* not implemented */
   MDL_key &operator=(const MDL_key &);          /* not implemented */
@@ -582,14 +485,13 @@ public:
   MDL_context *get_ctx() const { return m_ctx; }
   bool is_upgradable_or_exclusive() const
   {
-    return m_type == MDL_SHARED_UPGRADABLE ||
-           m_type == MDL_SHARED_NO_WRITE ||
+    return m_type == MDL_SHARED_NO_WRITE ||
            m_type == MDL_SHARED_NO_READ_WRITE ||
            m_type == MDL_EXCLUSIVE;
   }
   enum_mdl_type get_type() const { return m_type; }
   MDL_lock *get_lock() const { return m_lock; }
-  void downgrade_lock(enum_mdl_type type);
+  void downgrade_exclusive_lock(enum_mdl_type type);
 
   bool has_stronger_or_equal_type(enum_mdl_type type) const;
 
@@ -695,10 +597,8 @@ public:
   bool set_status(enum_wait_status result_arg);
   enum_wait_status get_status();
   void reset_status();
-  enum_wait_status timed_wait(MDL_context_owner *owner,
-                              struct timespec *abs_timeout,
-                              bool signal_timeout,
-                              const PSI_stage_info *wait_state_name);
+  enum_wait_status timed_wait(THD *thd, struct timespec *abs_timeout,
+                              bool signal_timeout, const char *wait_state_name);
 private:
   /**
     Condvar which is used for waiting until this context's pending
@@ -741,9 +641,8 @@ public:
   bool try_acquire_lock(MDL_request *mdl_request);
   bool acquire_lock(MDL_request *mdl_request, ulong lock_wait_timeout);
   bool acquire_locks(MDL_request_list *requests, ulong lock_wait_timeout);
-  bool upgrade_shared_lock(MDL_ticket *mdl_ticket,
-                           enum_mdl_type new_type,
-                           ulong lock_wait_timeout);
+  bool upgrade_shared_lock_to_exclusive(MDL_ticket *mdl_ticket,
+                                        ulong lock_wait_timeout);
 
   bool clone_ticket(MDL_request *mdl_request);
 
@@ -777,7 +676,7 @@ public:
   void release_transactional_locks();
   void rollback_to_savepoint(const MDL_savepoint &mdl_savepoint);
 
-  MDL_context_owner *get_owner() { return m_owner; }
+  inline THD *get_thd() const { return m_thd; }
 
   /** @pre Only valid if we started waiting for lock. */
   inline uint get_deadlock_weight() const
@@ -790,7 +689,7 @@ public:
                     already has received some signal or closed
                     signal slot.
   */
-  void init(MDL_context_owner *arg) { m_owner= arg; }
+  void init(THD *thd_arg) { m_thd= thd_arg; }
 
   void set_needs_thr_lock_abort(bool needs_thr_lock_abort)
   {
@@ -870,7 +769,7 @@ private:
       involved schemas and global intention exclusive lock.
   */
   Ticket_list m_tickets[MDL_DURATION_END];
-  MDL_context_owner *m_owner;
+  THD *m_thd;
   /**
     TRUE -  if for this context we will break protocol and try to
             acquire table-level locks while having only S lock on
@@ -899,7 +798,6 @@ private:
    */
   MDL_wait_for_subgraph *m_waiting_for;
 private:
-  THD *get_thd() const { return m_owner->get_thd(); }
   MDL_ticket *find_ticket(MDL_request *mdl_req,
                           enum_mdl_duration *duration);
   void release_locks_stored_before(enum_mdl_duration duration, MDL_ticket *sentinel);
@@ -945,6 +843,16 @@ void mdl_init();
 void mdl_destroy();
 
 
+/*
+  Functions in the server's kernel used by metadata locking subsystem.
+*/
+
+extern bool mysql_notify_thread_having_shared_lock(THD *thd, THD *in_use,
+                                                   bool needs_thr_lock_abort);
+extern "C" const char* thd_enter_cond(MYSQL_THD thd, mysql_cond_t *cond,
+                                      mysql_mutex_t *mutex, const char *msg);
+extern "C" void thd_exit_cond(MYSQL_THD thd, const char *old_msg);
+
 #ifndef DBUG_OFF
 extern mysql_mutex_t LOCK_open;
 #endif
@@ -956,14 +864,6 @@ extern mysql_mutex_t LOCK_open;
 */
 extern ulong mdl_locks_cache_size;
 static const ulong MDL_LOCKS_CACHE_SIZE_DEFAULT = 1024;
-
-/*
-  Start-up parameter for the number of partitions of the hash
-  containing all the MDL_lock objects and a constant for
-  its default value.
-*/
-extern ulong mdl_locks_hash_partitions;
-static const ulong MDL_LOCKS_HASH_PARTITIONS_DEFAULT = 8;
 
 /*
   Metadata locking subsystem tries not to grant more than

@@ -1,5 +1,3 @@
-#Want to skip this test from daily Valgrind execution
---source include/no_valgrind_without_big.inc
 --disable_warnings
 DROP TABLE IF EXISTS t1,t2,t3,t4,t5,t6;
 --enable_warnings
@@ -14,7 +12,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 < t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -28,7 +25,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 < t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -42,7 +38,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 < t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -56,7 +51,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 < t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -70,7 +64,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 < t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -84,7 +77,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 < t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -98,7 +90,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 < t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -112,7 +103,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 < t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -126,7 +116,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 < t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -140,7 +129,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 < t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -154,7 +142,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 < t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -168,7 +155,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 < t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -182,7 +168,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 < t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -196,7 +181,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 < t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -210,7 +194,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 < t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -224,7 +207,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 < t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -238,7 +220,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 < t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -252,7 +233,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 < t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -266,7 +246,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 < t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -280,7 +259,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 < t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -294,7 +272,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 < t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -308,7 +285,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 < t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -322,7 +298,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 < t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -336,7 +311,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 < t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -350,7 +324,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 < t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -364,7 +337,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 < t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -378,7 +350,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 < t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -392,7 +363,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 < t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -406,7 +376,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 < t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -420,7 +389,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 < t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -434,7 +402,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <= t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -448,7 +415,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <= t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -462,7 +428,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <= t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -476,7 +441,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <= t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -490,7 +454,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <= t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -504,7 +467,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <= t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -518,7 +480,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <= t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -532,7 +493,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <= t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -546,7 +506,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <= t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -560,7 +519,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <= t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -574,7 +532,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <= t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -588,7 +545,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <= t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -602,7 +558,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <= t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -616,7 +571,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <= t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -630,7 +584,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <= t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -644,7 +597,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <= t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -658,7 +610,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <= t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -672,7 +623,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <= t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -686,7 +636,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <= t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -700,7 +649,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <= t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -714,7 +662,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <= t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -728,7 +675,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <= t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -742,7 +688,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <= t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -756,7 +701,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <= t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -770,7 +714,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <= t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -784,7 +727,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <= t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -798,7 +740,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <= t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -812,7 +753,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <= t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -826,7 +766,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <= t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -840,7 +779,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <= t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -854,7 +792,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 = t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -868,7 +805,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 = t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -882,7 +818,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 = t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -896,7 +831,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 = t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -910,7 +844,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 = t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -924,7 +857,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 = t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -938,7 +870,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 = t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -952,7 +883,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 = t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -966,7 +896,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 = t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -980,7 +909,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 = t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -994,7 +922,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 = t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -1008,7 +935,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 = t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -1022,7 +948,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 = t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -1036,7 +961,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 = t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -1050,7 +974,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 = t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -1064,7 +987,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 = t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -1078,7 +1000,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 = t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -1092,7 +1013,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 = t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -1106,7 +1026,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 = t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -1120,7 +1039,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 = t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -1134,7 +1052,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 = t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -1148,7 +1065,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 = t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -1162,7 +1078,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 = t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -1176,7 +1091,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 = t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -1190,7 +1104,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 = t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -1204,7 +1117,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 = t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -1218,7 +1130,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 = t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -1232,7 +1143,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 = t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -1246,7 +1156,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 = t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -1260,7 +1169,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 = t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -1274,7 +1182,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 >= t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -1288,7 +1195,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 >= t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -1302,7 +1208,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 >= t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -1316,7 +1221,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 >= t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -1330,7 +1234,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 >= t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -1344,7 +1247,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 >= t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -1358,7 +1260,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 >= t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -1372,7 +1273,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 >= t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -1386,7 +1286,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 >= t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -1400,7 +1299,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 >= t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -1414,7 +1312,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 >= t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -1428,7 +1325,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 >= t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -1442,7 +1338,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 >= t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -1456,7 +1351,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 >= t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -1470,7 +1364,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 >= t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -1484,7 +1377,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 >= t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -1498,7 +1390,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 >= t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -1512,7 +1403,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 >= t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -1526,7 +1416,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 >= t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -1540,7 +1429,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 >= t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -1554,7 +1442,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 >= t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -1568,7 +1455,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 >= t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -1582,7 +1468,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 >= t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -1596,7 +1481,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 >= t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -1610,7 +1494,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 >= t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -1624,7 +1507,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 >= t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -1638,7 +1520,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 >= t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -1652,7 +1533,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 >= t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -1666,7 +1546,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 >= t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -1680,7 +1559,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 >= t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -1694,7 +1572,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 != t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -1708,7 +1585,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 != t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -1722,7 +1598,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 != t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -1736,7 +1611,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 != t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -1750,7 +1624,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 != t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -1764,7 +1637,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 != t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -1778,7 +1650,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 != t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -1792,7 +1663,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 != t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -1806,7 +1676,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 != t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -1820,7 +1689,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 != t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -1834,7 +1702,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 != t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -1848,7 +1715,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 != t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -1862,7 +1728,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 != t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -1876,7 +1741,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 != t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -1890,7 +1754,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 != t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -1904,7 +1767,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 != t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -1918,7 +1780,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 != t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -1932,7 +1793,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 != t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -1946,7 +1806,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 != t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -1960,7 +1819,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 != t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -1974,7 +1832,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 != t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -1988,7 +1845,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 != t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -2002,7 +1858,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 != t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -2016,7 +1871,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 != t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -2030,7 +1884,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 != t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -2044,7 +1897,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 != t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -2058,7 +1910,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 != t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -2072,7 +1923,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 != t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -2086,7 +1936,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 != t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -2100,7 +1949,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 != t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -2114,7 +1962,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <> t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -2128,7 +1975,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <> t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -2142,7 +1988,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <> t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -2156,7 +2001,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <> t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -2170,7 +2014,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <> t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -2184,7 +2027,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <> t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -2198,7 +2040,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <> t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -2212,7 +2053,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <> t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -2226,7 +2066,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <> t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -2240,7 +2079,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <> t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -2254,7 +2092,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <> t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -2268,7 +2105,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <> t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -2282,7 +2118,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <> t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -2296,7 +2131,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <> t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -2310,7 +2144,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <> t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -2324,7 +2157,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <> t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -2338,7 +2170,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <> t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -2352,7 +2183,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <> t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -2366,7 +2196,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <> t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -2380,7 +2209,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <> t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -2394,7 +2222,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <> t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -2408,7 +2235,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <> t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -2422,7 +2248,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <> t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -2436,7 +2261,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <> t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -2450,7 +2274,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <> t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -2464,7 +2287,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <> t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -2478,7 +2300,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <> t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -2492,7 +2313,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <> t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -2506,7 +2326,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <> t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -2520,7 +2339,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <> t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -2534,7 +2352,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <=> t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -2548,7 +2365,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <=> t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -2562,7 +2378,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <=> t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -2576,7 +2391,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <=> t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -2590,7 +2404,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <=> t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -2604,7 +2417,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t2.c1 FROM t1,t2 WHERE t1.c1 <=> t2.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -2618,7 +2430,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <=> t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -2632,7 +2443,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <=> t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -2646,7 +2456,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <=> t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -2660,7 +2469,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <=> t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -2674,7 +2482,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <=> t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -2688,7 +2495,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t3.c1 FROM t1,t3 WHERE t1.c1 <=> t3.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -2702,7 +2508,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <=> t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -2716,7 +2521,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <=> t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -2730,7 +2534,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <=> t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -2744,7 +2547,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <=> t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -2758,7 +2560,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <=> t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -2772,7 +2573,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t4.c1 FROM t1,t4 WHERE t1.c1 <=> t4.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -2786,7 +2586,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <=> t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -2800,7 +2599,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <=> t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -2814,7 +2612,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <=> t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -2828,7 +2625,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <=> t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -2842,7 +2638,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <=> t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -2856,7 +2651,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t5.c1 FROM t1,t5 WHERE t1.c1 <=> t5.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 TINYINT NOT NULL);
@@ -2870,7 +2664,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <=> t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 SMALLINT NOT NULL);
@@ -2884,7 +2677,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <=> t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 MEDIUMINT NOT NULL);
@@ -2898,7 +2690,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <=> t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INT NOT NULL);
@@ -2912,7 +2703,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <=> t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 INTEGER NOT NULL);
@@ -2926,7 +2716,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <=> t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 CREATE TABLE t1 (c1 BIGINT NOT NULL);
@@ -2940,7 +2729,6 @@ INSERT INTO t2 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 INSERT INTO t3 (c1) VALUES(1),(3),(5),(7),(9);
 INSERT INTO t4 (c1) VALUES(10);
 INSERT INTO t5 (c1) VALUES(10),(11),(12),(13),(14);
--- sorted_result
 SELECT t1.c1,t6.c1 FROM t1,t6 WHERE t1.c1 <=> t6.c1;
 DROP TABLE t1,t2,t3,t4,t5,t6;
 

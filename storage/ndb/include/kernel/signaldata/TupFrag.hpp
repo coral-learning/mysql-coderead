@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef TUP_FRAG_HPP
 #define TUP_FRAG_HPP
@@ -31,19 +30,26 @@ class TupFragReq {
   friend class Dblqh;
   friend class Dbtup;
 public:
-  STATIC_CONST( SignalLength = 11 );
+  STATIC_CONST( SignalLength = 18 );
 private:
   Uint32 userPtr;
   Uint32 userRef;
   Uint32 reqInfo;
   Uint32 tableId;
+  Uint32 noOfAttr;
   Uint32 fragId;
   Uint32 maxRowsLow;
   Uint32 maxRowsHigh;
   Uint32 minRowsLow;
   Uint32 minRowsHigh;
+  Uint32 noOfNullAttr;
+  Uint32 schemaVersion;
+  Uint32 noOfKeyAttr;
+  Uint32 noOfCharsets;
+  Uint32 checksumIndicator;
+  Uint32 globalCheckpointIdIndicator;
   Uint32 tablespaceid;
-  Uint32 changeMask;
+  Uint32 forceVarPartFlag;
 };
 
 class TupFragConf {
@@ -74,17 +80,20 @@ class TuxFragReq {
   friend class Dblqh;
   friend class Dbtux;
 public:
-  STATIC_CONST( SignalLength = 9 );
+  STATIC_CONST( SignalLength = 14 );
 private:
   Uint32 userPtr;
   Uint32 userRef;
   Uint32 reqInfo;
   Uint32 tableId;
+  Uint32 noOfAttr;
   Uint32 fragId;
+  Uint32 fragOff;
+  Uint32 tableType;
   Uint32 primaryTableId;
   Uint32 tupIndexFragPtrI;
-  Uint32 tupTableFragPtrI;
-  Uint32 accTableFragPtrI;
+  Uint32 tupTableFragPtrI[2];
+  Uint32 accTableFragPtrI[2];
 };
 
 class TuxFragConf {
@@ -122,7 +131,6 @@ class TupAddAttrReq {
   friend class Dbtux;
 public:
   STATIC_CONST( SignalLength = 5 );
-  STATIC_CONST( DEFAULT_VALUE_SECTION_NUM = 0 );
 private:
   Uint32 tupConnectPtr;
   Uint32 notused1;

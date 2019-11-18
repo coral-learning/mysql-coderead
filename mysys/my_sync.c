@@ -1,4 +1,4 @@
-/* Copyright (c) 2003, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -90,21 +90,13 @@ int my_sync(File fd, myf my_flags)
     if (after_sync_wait)
       (*after_sync_wait)();
     if ((my_flags & MY_IGNORE_BADFD) &&
-        (er == EBADF || er == EINVAL || er == EROFS
-#ifdef __APPLE__
-        || er == ENOTSUP
-#endif
-        ))
+        (er == EBADF || er == EINVAL || er == EROFS))
     {
       DBUG_PRINT("info", ("ignoring errno %d", er));
       res= 0;
     }
     else if (my_flags & MY_WME)
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      my_error(EE_SYNC, MYF(ME_BELL+ME_WAITTANG), my_filename(fd),
-               my_errno, my_strerror(errbuf, sizeof(errbuf), my_errno));
-    }
+      my_error(EE_SYNC, MYF(ME_BELL+ME_WAITTANG), my_filename(fd), my_errno);
   }
   else
   {
@@ -114,8 +106,6 @@ int my_sync(File fd, myf my_flags)
   DBUG_RETURN(res);
 } /* my_sync */
 
-
-#ifdef NEED_EXPLICIT_SYNC_DIR
 
 static const char cur_dir_name[]= {FN_CURLIB, 0};
 
@@ -131,6 +121,8 @@ static const char cur_dir_name[]= {FN_CURLIB, 0};
   RETURN
     0 if ok, !=0 if error
 */
+
+#ifdef NEED_EXPLICIT_SYNC_DIR
 
 int my_sync_dir(const char *dir_name, myf my_flags)
 {
@@ -159,8 +151,8 @@ int my_sync_dir(const char *dir_name, myf my_flags)
 
 #else /* NEED_EXPLICIT_SYNC_DIR */
 
-int my_sync_dir(const char *dir_name MY_ATTRIBUTE((unused)),
-                myf my_flags MY_ATTRIBUTE((unused)))
+int my_sync_dir(const char *dir_name __attribute__((unused)),
+                myf my_flags __attribute__((unused)))
 {
   return 0;
 }
@@ -192,8 +184,8 @@ int my_sync_dir_by_file(const char *file_name, myf my_flags)
 
 #else /* NEED_EXPLICIT_SYNC_DIR */
 
-int my_sync_dir_by_file(const char *file_name MY_ATTRIBUTE((unused)),
-                        myf my_flags MY_ATTRIBUTE((unused)))
+int my_sync_dir_by_file(const char *file_name __attribute__((unused)),
+                        myf my_flags __attribute__((unused)))
 {
   return 0;
 }

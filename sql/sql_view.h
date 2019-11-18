@@ -14,8 +14,9 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
+*/
 
 #include "sql_class.h"     /* Required by sql_lex.h */
 #include "sql_lex.h"       /* enum_view_create_mode, enum_drop_mode */
@@ -33,8 +34,8 @@ bool create_view_precheck(THD *thd, TABLE_LIST *tables, TABLE_LIST *view,
 bool mysql_create_view(THD *thd, TABLE_LIST *view,
                        enum_view_create_mode mode);
 
-bool mysql_make_view(THD *thd, TABLE_SHARE *share, TABLE_LIST *table,
-                     bool open_view_no_parse);
+bool mysql_make_view(THD *thd, File_parser *parser, TABLE_LIST *table,
+                     uint flags);
 
 bool mysql_drop_view(THD *thd, TABLE_LIST *view, enum_drop_mode drop_mode);
 

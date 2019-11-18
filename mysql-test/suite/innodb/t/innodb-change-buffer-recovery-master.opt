@@ -1,1 +1,1 @@
---no-console --log-error=$MYSQLTEST_VARDIR/tmp/my_restart.err
+--log-error=$MYSQLTEST_VARDIR/tmp/my_restart.err

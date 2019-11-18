@@ -1,5 +1,4 @@
-/* Copyright (c) 2007, 2015, Oracle and/or its affiliates. All rights
-   reserved.
+/* Copyright (c) 2007, 2014, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,12 +10,16 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 /*
   Implementation for the thread scheduler
 */
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma implementation
+#endif
 
 #include <sql_priv.h>
 #include "unireg.h"                    // REQUIRED: for other includes
@@ -24,8 +27,6 @@
 #include "sql_connect.h"         // init_new_connection_handler_thread
 #include "scheduler.h"
 #include "sql_callback.h"
-#include "global_threads.h"
-#include "mysql/thread_pool_priv.h"
 
 /*
   End connection, in case when we are using 'no-threads'
@@ -33,12 +34,9 @@
 
 static bool no_threads_end(THD *thd, bool put_in_cache)
 {
-  thd_release_resources(thd);
-  remove_global_thread(thd);
-  dec_connection_count();
-  // THD is an incomplete type here, so use destroy_thd() to delete it.
-  destroy_thd(thd);
-
+  unlink_thd(thd);
+  mysql_mutex_unlock(&LOCK_thread_count);
+  mysql_mutex_unlock(&LOCK_thd_remove);
   return 1;                                     // Abort handle_one_connection
 }
 

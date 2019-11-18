@@ -409,7 +409,7 @@ SET(INSTALL_MYSQLTESTDIR_DEB            "mysql-test")
 SET(INSTALL_SQLBENCHDIR_DEB             ".")
 SET(INSTALL_SUPPORTFILESDIR_DEB         "support-files")
 #
-SET(INSTALL_MYSQLDATADIR_DEB            "data")
+SET(INSTALL_MYSQLDATADIR_DEB            "/var/lib/mysql")
 SET(INSTALL_PLUGINTESTDIR_DEB           ${plugin_tests})
 SET(INSTALL_SECURE_FILE_PRIVDIR_DEB     ${secure_file_priv_path})
 SET(INSTALL_SECURE_FILE_PRIV_EMBEDDEDDIR_DEB     ${secure_file_priv_embedded_path})
@@ -441,7 +441,6 @@ SET(INSTALL_MYSQLDATADIR_SVR4           "/var/lib/mysql")
 SET(INSTALL_PLUGINTESTDIR_SVR4          ${plugin_tests})
 SET(INSTALL_SECURE_FILE_PRIVDIR_SVR4    ${secure_file_priv_path})
 SET(INSTALL_SECURE_FILE_PRIV_EMBEDDEDDIR_SVR4    ${secure_file_priv_embedded_path})
-
 
 # Clear cached variables if install layout was changed
 IF(OLD_INSTALL_LAYOUT)

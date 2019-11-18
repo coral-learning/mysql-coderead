@@ -1,6 +1,12 @@
 /***************************************************************************//**
 
-Copyright (c) 2007, 2010, Oracle and/or its affiliates. All Rights Reserved.
+Copyright (c) 2007, 2010, Innobase Oy. All Rights Reserved.
+
+Portions of this file contain modifications contributed and copyrighted by
+Sun Microsystems, Inc. Those modifications are gratefully acknowledged and
+are described briefly in the InnoDB documentation. The contributions by
+Sun Microsystems are incorporated with their permission, and subject to the
+conditions contained in the file COPYING.Sun_Microsystems.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -11,8 +17,8 @@ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
 FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
-this program; if not, write to the Free Software Foundation, Inc.,
-51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA
+this program; if not, write to the Free Software Foundation, Inc., 
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
 
 *****************************************************************************/
 /******************************************************************//**
@@ -44,19 +50,24 @@ Created 2007-03-20 Sunny Bains
 #define	FALSE		0
 #endif
 
-struct ib_rbt_node_t;
+/* Red black tree typedefs */
+typedef struct ib_rbt_struct ib_rbt_t;
+typedef struct ib_rbt_node_struct ib_rbt_node_t;
+/* FIXME: Iterator is a better name than _bound_ */
+typedef struct ib_rbt_bound_struct ib_rbt_bound_t;
 typedef void (*ib_rbt_print_node)(const ib_rbt_node_t* node);
 typedef int (*ib_rbt_compare)(const void* p1, const void* p2);
-typedef int (*ib_rbt_arg_compare)(const void*, const void* p1, const void* p2);
 
 /** Red black tree color types */
-enum ib_rbt_color_t {
+enum ib_rbt_color_enum {
 	IB_RBT_RED,
 	IB_RBT_BLACK
 };
 
+typedef enum ib_rbt_color_enum ib_rbt_color_t;
+
 /** Red black tree node */
-struct ib_rbt_node_t {
+struct ib_rbt_node_struct {
 	ib_rbt_color_t	color;			/* color of this node */
 
 	ib_rbt_node_t*	left;			/* points left child */
@@ -67,7 +78,7 @@ struct ib_rbt_node_t {
 };
 
 /** Red black tree instance.*/
-struct	ib_rbt_t {
+struct	ib_rbt_struct {
 	ib_rbt_node_t*	nil;			/* Black colored node that is
 						used as a sentinel. This is
 						pre-allocated too.*/
@@ -79,16 +90,12 @@ struct	ib_rbt_t {
 	ulint		n_nodes;		/* Total number of data nodes */
 
 	ib_rbt_compare	compare;		/* Fn. to use for comparison */
-	ib_rbt_arg_compare
-			compare_with_arg;	/* Fn. to use for comparison
-						with argument */
 	ulint		sizeof_value;		/* Sizeof the item in bytes */
-	void*		cmp_arg;		/* Compare func argument */
 };
 
 /** The result of searching for a key in the tree, this is useful for
 a speedy lookup and insert if key doesn't exist.*/
-struct ib_rbt_bound_t {
+struct ib_rbt_bound_struct {
 	const ib_rbt_node_t*
 			last;			/* Last node visited */
 
@@ -125,18 +132,6 @@ rbt_create(
 /*=======*/
 	size_t		sizeof_value,		/*!< in: size in bytes */
 	ib_rbt_compare	compare);		/*!< in: comparator */
-/**********************************************************************//**
-Create an instance of a red black tree, whose comparison function takes
-an argument
-@return	rb tree instance */
-UNIV_INTERN
-ib_rbt_t*
-rbt_create_arg_cmp(
-/*===============*/
-	size_t		sizeof_value,		/*!< in: size in bytes */
-	ib_rbt_arg_compare
-			compare,		/*!< in: comparator */
-	void*		cmp_arg);		/*!< in: compare fn arg */
 /**********************************************************************//**
 Delete a node from the red black tree, identified by key */
 UNIV_INTERN
@@ -270,10 +265,7 @@ rbt_search_cmp(
 	const ib_rbt_t*	tree,			/*!< in: rb tree */
 	ib_rbt_bound_t*	parent,			/*!< in: search bounds */
 	const void*	key,			/*!< in: key to search */
-	ib_rbt_compare	compare,		/*!< in: comparator */
-	ib_rbt_arg_compare
-			arg_compare);		/*!< in: fn to compare items
-						with argument */
+	ib_rbt_compare	compare);		/*!< in: comparator */
 /**********************************************************************//**
 Clear the tree, deletes (and free's) all the nodes. */
 UNIV_INTERN

@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2012, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -126,11 +126,11 @@ int _create_index_by_sort(MI_SORT_PARAM *info,my_bool no_messages,
 
   my_b_clear(&tempfile);
   my_b_clear(&tempfile_for_exceptions);
-  memset(&buffpek, 0, sizeof(buffpek));
+  bzero((char*) &buffpek,sizeof(buffpek));
   sort_keys= (uchar **) NULL; error= 1;
   maxbuffer=1;
 
-  memavl= MY_MAX(sortbuff_size, MIN_SORT_BUFFER);
+  memavl= max(sortbuff_size, MIN_SORT_BUFFER);
   records=	info->sort_info->max_records;
   sort_length=	info->key_length;
   LINT_INIT(keys);
@@ -345,11 +345,11 @@ pthread_handler_t thr_find_all_keys(void *arg)
 
     my_b_clear(&sort_param->tempfile);
     my_b_clear(&sort_param->tempfile_for_exceptions);
-    memset(&sort_param->buffpek, 0, sizeof(sort_param->buffpek));
-    memset(&sort_param->unique, 0, sizeof(sort_param->unique));
+    bzero((char*) &sort_param->buffpek, sizeof(sort_param->buffpek));
+    bzero((char*) &sort_param->unique,  sizeof(sort_param->unique));
     sort_keys= (uchar **) NULL;
 
-    memavl=       MY_MAX(sort_param->sortbuff_size, MIN_SORT_BUFFER);
+    memavl=       max(sort_param->sortbuff_size, MIN_SORT_BUFFER);
     idx=          (uint)sort_param->sort_info->max_records;
     sort_length=  sort_param->key_length;
     maxbuffer=    1;
@@ -822,7 +822,7 @@ static uint read_to_buffer(IO_CACHE *fromfile, BUFFPEK *buffpek,
   register uint count;
   uint length;
 
-  if ((count=(uint) MY_MIN((ha_rows) buffpek->max_keys,buffpek->count)))
+  if ((count=(uint) min((ha_rows) buffpek->max_keys,buffpek->count)))
   {
     if (mysql_file_pread(fromfile->file, (uchar*) buffpek->base,
                          (length= sort_length*count),
@@ -844,7 +844,7 @@ static uint read_to_buffer_varlen(IO_CACHE *fromfile, BUFFPEK *buffpek,
   uint idx;
   uchar *buffp;
 
-  if ((count=(uint) MY_MIN((ha_rows) buffpek->max_keys, buffpek->count)))
+  if ((count=(uint) min((ha_rows) buffpek->max_keys,buffpek->count)))
   {
     buffp = buffpek->base;
 
@@ -886,7 +886,7 @@ static int write_merge_key_varlen(MI_SORT_PARAM *info,
 }
 
 
-static int write_merge_key(MI_SORT_PARAM *info MY_ATTRIBUTE((unused)),
+static int write_merge_key(MI_SORT_PARAM *info __attribute__((unused)),
                            IO_CACHE *to_file, uchar *key,
                            uint sort_length, uint count)
 {

@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2001, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2001, 2017, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -49,7 +49,7 @@ enum options_client
   OPT_PROMPT, OPT_IGN_LINES,OPT_TRANSACTION,OPT_MYSQL_PROTOCOL,
   OPT_SHARED_MEMORY_BASE_NAME, OPT_FRM, OPT_SKIP_OPTIMIZATION,
   OPT_COMPATIBLE, OPT_RECONNECT, OPT_DELIMITER, OPT_SECURE_AUTH,
-  OPT_OPEN_FILES_LIMIT, OPT_SET_CHARSET, OPT_SET_GTID_PURGED, OPT_SERVER_ARG,
+  OPT_OPEN_FILES_LIMIT, OPT_SET_CHARSET, OPT_SERVER_ARG,
   OPT_STOP_POSITION, OPT_START_DATETIME, OPT_STOP_DATETIME,
   OPT_SIGINT_IGNORE, OPT_HEXBLOB, OPT_ORDER_BY_PRIMARY, OPT_COUNT,
   OPT_TRIGGERS,
@@ -87,19 +87,7 @@ enum options_client
   OPT_PLUGIN_DIR,
   OPT_DEFAULT_AUTH,
   OPT_DEFAULT_PLUGIN,
-  OPT_RAW_OUTPUT, OPT_WAIT_SERVER_ID, OPT_STOP_NEVER,
-  OPT_BINLOG_ROWS_EVENT_MAX_SIZE,
-  OPT_HISTIGNORE,
-  OPT_BINARY_MODE,
-  OPT_SSL_CRL, OPT_SSL_CRLPATH,
-  OPT_MYSQLBINLOG_SKIP_GTIDS,
-  OPT_MYSQLBINLOG_INCLUDE_GTIDS,
-  OPT_MYSQLBINLOG_EXCLUDE_GTIDS,
-  OPT_REMOTE_PROTO,
-  OPT_CONFIG_ALL,
-  OPT_SERVER_PUBLIC_KEY,
   OPT_ENABLE_CLEARTEXT_PLUGIN,
-  OPT_CONNECTION_SERVER_ID,
   OPT_SSL_MODE,
   OPT_MAX_CLIENT_OPTION
 };
@@ -127,22 +115,38 @@ enum options_client
 /**
   Wrapper for mysql_real_connect() that checks if SSL connection is establised.
 
-  The function calls mysql_real_connect() first, then if given ssl_required==TRUE
-  argument (i.e. --ssl-mode=REQUIRED option used) checks current SSL chiper to
-  ensure that SSL is used for current connection.
-  Otherwise it returns NULL and sets errno to CR_SSL_CONNECTION_ERROR.
+  The function calls mysql_real_connect() first. Then, if the ssl_required
+  argument is TRUE (i.e., the --ssl-mode=REQUIRED option was specified), it
+  checks the current SSL cipher to ensure that SSL is used for the current
+  connection. Otherwise, it returns NULL and sets errno to
+  CR_SSL_CONNECTION_ERROR.
 
-  All clients (except mysqlbinlog which disregards SSL options) use this function
-  instead of mysql_real_connect() to handle --ssl-mode=REQUIRED option.
+  All clients (except mysqlbinlog, which disregards SSL options) use this
+  function instead of mysql_real_connect() to handle the --ssl-mode=REQUIRED
+  option.
 */
 MYSQL *mysql_connect_ssl_check(MYSQL *mysql_arg, const char *host,
                                const char *user, const char *passwd,
                                const char *db, uint port,
                                const char *unix_socket, ulong client_flag,
-                               my_bool ssl_required MY_ATTRIBUTE((unused)))
+                               my_bool ssl_required __attribute__((unused)))
 {
-  MYSQL *mysql= mysql_real_connect(mysql_arg, host, user, passwd, db, port,
-                                   unix_socket, client_flag);
+  MYSQL *mysql;
+
+#if defined(HAVE_OPENSSL) && !defined(EMBEDDED_LIBRARY)
+  enum mysql_ssl_mode opt_ssl_mode= SSL_MODE_REQUIRED;
+  if (ssl_required &&
+      mysql_options(mysql_arg, MYSQL_OPT_SSL_MODE, (char *) &opt_ssl_mode))
+  {
+    NET *net= &mysql_arg->net;
+    net->last_errno= CR_SSL_CONNECTION_ERROR;
+    strmov(net->last_error, "Client library doesn't support MYSQL_SSL_REQUIRED option");
+    strmov(net->sqlstate, "HY000");
+    return NULL;
+  }
+#endif
+  mysql= mysql_real_connect(mysql_arg, host, user, passwd, db, port,
+                            unix_socket, client_flag);
 #if defined(HAVE_OPENSSL) && !defined(EMBEDDED_LIBRARY)
   if (mysql &&                                   /* connection established. */
       ssl_required &&                            /* --ssl-mode=REQUIRED. */

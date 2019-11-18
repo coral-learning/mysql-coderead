@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -87,6 +87,8 @@ int mi_delete(MI_INFO *info,const uchar *record)
                 _mi_make_key(info,i,old_key,record,info->lastpos)))
           goto err;
       }
+      /* The above changed info->lastkey2. Inform mi_rnext_same(). */
+      info->update&= ~HA_STATE_RNEXT_SAME;
     }
   }
 
@@ -350,8 +352,8 @@ static int d_search(register MI_INFO *info, register MI_KEYDEF *keyinfo,
 	DBUG_RETURN(-1);
       }
       /* Page will be update later if we return 1 */
-      DBUG_RETURN(MY_TEST(length <= (info->quick_mode ? MI_MIN_KEYBLOCK_LENGTH :
-                                     (uint) keyinfo->underflow_block_length)));
+      DBUG_RETURN(test(length <= (info->quick_mode ? MI_MIN_KEYBLOCK_LENGTH :
+				  (uint) keyinfo->underflow_block_length)));
     }
     save_flag=1;
     ret_value=del(info,keyinfo,key,anc_buff,leaf_page,leaf_buff,keypos,

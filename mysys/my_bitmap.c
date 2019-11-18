@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2001, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2001, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,7 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 /*
   Handling of uchar arrays as large bitmaps.
@@ -81,14 +81,14 @@ void create_last_word_mask(MY_BITMAP *map)
 }
 
 
-static inline void bitmap_lock(MY_BITMAP *map MY_ATTRIBUTE((unused)))
+static inline void bitmap_lock(MY_BITMAP *map __attribute__((unused)))
 {
   if (map->mutex)
     mysql_mutex_lock(map->mutex);
 }
 
 
-static inline void bitmap_unlock(MY_BITMAP *map MY_ATTRIBUTE((unused)))
+static inline void bitmap_unlock(MY_BITMAP *map __attribute__((unused)))
 {
   if (map->mutex)
     mysql_mutex_unlock(map->mutex);
@@ -136,7 +136,7 @@ static inline uint get_first_not_set(uint32 value, uint word_pos)
 
 
 my_bool bitmap_init(MY_BITMAP *map, my_bitmap_map *buf, uint n_bits,
-		    my_bool thread_safe MY_ATTRIBUTE((unused)))
+		    my_bool thread_safe __attribute__((unused)))
 {
   DBUG_ENTER("bitmap_init");
   if (!buf)
@@ -165,7 +165,6 @@ my_bool bitmap_init(MY_BITMAP *map, my_bitmap_map *buf, uint n_bits,
   else
   {
     DBUG_ASSERT(thread_safe == 0);
-    map->mutex= NULL;
   }
 
 
@@ -296,7 +295,7 @@ void bitmap_set_prefix(MY_BITMAP *map, uint prefix_size)
   if ((prefix_bits= prefix_size & 7))
     *(m++)= (1 << prefix_bits)-1;
   if ((d= no_bytes_in_map(map)-prefix_bytes))
-    memset(m, 0, d);
+    bzero(m, d);
 }
 
 
@@ -417,7 +416,7 @@ void bitmap_intersect(MY_BITMAP *map, const MY_BITMAP *map2)
 
   DBUG_ASSERT(map->bitmap && map2->bitmap);
 
-  end= to + MY_MIN(len, len2);
+  end= to+min(len,len2);
   for (; to < end; to++, from++)
     *to &= *from;
 
@@ -552,52 +551,6 @@ uint bitmap_get_first_set(const MY_BITMAP *map)
       return get_first_set(*data_ptr, word_pos);
 
   return get_first_set(*map->last_word_ptr & ~map->last_word_mask, word_pos);
-}
-
-
-/**
-  Get the next set bit.
-
-  @param  map         Bitmap
-  @param  bitmap_bit  Bit to start search from
-
-  @return Index to first bit set after bitmap_bit
-*/
-
-uint bitmap_get_next_set(const MY_BITMAP *map, uint bitmap_bit)
-{
-  uint word_pos, byte_to_mask, i;
-  my_bitmap_map first_word;
-  unsigned char *ptr= (unsigned char*) &first_word;
-  my_bitmap_map *data_ptr, *end= map->last_word_ptr;
-
-  DBUG_ASSERT(map->bitmap);
-
-  /* Look for the next bit */
-  bitmap_bit++;
-  if (bitmap_bit >= map->n_bits)
-    return MY_BIT_NONE;
-  word_pos= bitmap_bit / 32;
-  data_ptr= map->bitmap + word_pos;
-  first_word= *data_ptr;
-
-  /* Mask out previous bits */
-  byte_to_mask= (bitmap_bit % 32) / 8;
-  for (i= 0; i < byte_to_mask; i++)
-    ptr[i]= 0;
-  ptr[byte_to_mask]&= 0xFFU << (bitmap_bit & 7);
-
-  if (data_ptr == end)
-    return get_first_set(first_word & ~map->last_word_mask, word_pos);
-   
-  if (first_word)
-    return get_first_set(first_word, word_pos);
-
-  for (data_ptr++, word_pos++; data_ptr < end; data_ptr++, word_pos++)
-    if (*data_ptr)
-      return get_first_set(*data_ptr, word_pos);
-
-  return get_first_set(*end & ~map->last_word_mask, word_pos);
 }
 
 

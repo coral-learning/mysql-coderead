@@ -14,10 +14,14 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 
 /* compare and test functions */
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface			/* gcc class implementation */
+#endif
 
 #include "thr_malloc.h"                         /* sql_calloc */
 #include "item_func.h"             /* Item_int_func, Item_bool_func */
@@ -45,13 +49,13 @@ class Arg_comparator: public Sql_alloc
   bool is_nulls_eq;                // TRUE <=> compare for the EQUAL_FUNC
   bool set_null;                   // TRUE <=> set owner->null_value
                                    //   when one of arguments is NULL.
+  enum enum_date_cmp_type { CMP_DATE_DFLT= 0, CMP_DATE_WITH_DATE,
+                            CMP_DATE_WITH_STR, CMP_STR_WITH_DATE };
   longlong (*get_value_a_func)(THD *thd, Item ***item_arg, Item **cache_arg,
                                Item *warn_item, bool *is_null);
   longlong (*get_value_b_func)(THD *thd, Item ***item_arg, Item **cache_arg,
                                Item *warn_item, bool *is_null);
   bool try_year_cmp_func(Item_result type);
-  static bool get_date_from_const(Item *date_arg, Item *str_arg,
-                                  ulonglong *value);
 public:
   DTCollation cmp_collation;
   /* Allow owner function to use string buffers. */
@@ -91,8 +95,6 @@ public:
   int compare_int_signed_unsigned();
   int compare_int_unsigned_signed();
   int compare_int_unsigned();
-  int compare_time_packed();
-  int compare_e_time_packed();
   int compare_row();             // compare args[0] & args[1]
   int compare_e_string();	 // compare args[0] & args[1]
   int compare_e_binary_string(); // compare args[0] & args[1]
@@ -105,7 +107,8 @@ public:
   int compare_e_real_fixed();
   int compare_datetime();        // compare args[0] & args[1] as DATETIMEs
 
-  static bool can_compare_as_dates(Item *a, Item *b, ulonglong *const_val_arg);
+  static enum enum_date_cmp_type can_compare_as_dates(Item *a, Item *b,
+                                                      ulonglong *const_val_arg);
 
   Item** cache_converted_constant(THD *thd, Item **value, Item **cache,
                                   Item_result type);
@@ -127,9 +130,9 @@ public:
   inline void set_cmp_context_for_datetime()
   {
     DBUG_ASSERT(func == &Arg_comparator::compare_datetime);
-    if ((*a)->is_temporal())
+    if ((*a)->result_as_longlong())
       (*a)->cmp_context= INT_RESULT;
-    if ((*b)->is_temporal())
+    if ((*b)->result_as_longlong())
       (*b)->cmp_context= INT_RESULT;
   }
   friend class Item_func;
@@ -138,24 +141,13 @@ public:
 class Item_bool_func :public Item_int_func
 {
 public:
-  Item_bool_func() : Item_int_func(), m_created_by_in2exists(false) {}
-  Item_bool_func(Item *a) : Item_int_func(a),
-    m_created_by_in2exists(false)  {}
-  Item_bool_func(Item *a,Item *b) : Item_int_func(a,b),
-    m_created_by_in2exists(false)  {}
-  Item_bool_func(THD *thd, Item_bool_func *item) : Item_int_func(thd, item),
-    m_created_by_in2exists(item->m_created_by_in2exists) {}
+  Item_bool_func() :Item_int_func() {}
+  Item_bool_func(Item *a) :Item_int_func(a) {}
+  Item_bool_func(Item *a,Item *b) :Item_int_func(a,b) {}
+  Item_bool_func(THD *thd, Item_bool_func *item) :Item_int_func(thd, item) {}
   bool is_bool_func() { return 1; }
   void fix_length_and_dec() { decimals=0; max_length=1; }
   uint decimal_precision() const { return 1; }
-  virtual bool created_by_in2exists() const { return m_created_by_in2exists; }
-  void set_created_by_in2exists() { m_created_by_in2exists= true; }
-private:
-  /**
-    True <=> this item was added by IN->EXISTS subquery transformation, and
-    should thus be deleted if we switch to materialization.
-  */
-  bool m_created_by_in2exists;
 };
 
 
@@ -258,11 +250,6 @@ class Item_cache;
    - Shortcut the evaluation of "NULL IN (...)" to NULL in the cases where we
      don't care if the result is NULL or FALSE.
 
-   args[1] keeps a reference to the Item_in_subselect object.
-
-   args[0] is a copy of Item_in_subselect's left expression and should be
-   kept equal also after resolving.
-
   NOTE
     It is not quite clear why the above listed functionality should be
     placed into a separate class called 'Item_in_optimizer'.
@@ -270,7 +257,7 @@ class Item_cache;
 
 class Item_in_optimizer: public Item_bool_func
 {
-private:
+protected:
   Item_cache *cache;
   bool save_cache;
   /* 
@@ -284,18 +271,15 @@ public:
   Item_in_optimizer(Item *a, Item_in_subselect *b):
     Item_bool_func(a, reinterpret_cast<Item *>(b)), cache(0),
     save_cache(0), result_for_null_param(UNKNOWN)
-  { with_subselect= TRUE; }
+  { with_subselect= true; }
   bool fix_fields(THD *, Item **);
   bool fix_left(THD *thd, Item **ref);
-  void fix_after_pullout(st_select_lex *parent_select,
-                         st_select_lex *removed_select);
   bool is_null();
   longlong val_int();
   void cleanup();
   const char *func_name() const { return "<in_optimizer>"; }
   Item_cache **get_cache() { return &cache; }
   void keep_top_level_cache();
-  Item *transform(Item_transformer transformer, uchar *arg);
 };
 
 class Comp_creator
@@ -375,21 +359,19 @@ public:
   virtual bool l_op() const { return 1; }
 };
 
-class Item_bool_func2 :public Item_bool_func
+class Item_bool_func2 :public Item_int_func
 {						/* Bool with 2 string args */
-private:
-  bool convert_constant_arg(THD *thd, Item *field, Item **item);
 protected:
   Arg_comparator cmp;
   bool abort_on_null;
 
 public:
   Item_bool_func2(Item *a,Item *b)
-    :Item_bool_func(a,b), cmp(tmp_arg, tmp_arg+1), abort_on_null(FALSE) {}
+    :Item_int_func(a,b), cmp(tmp_arg, tmp_arg+1), abort_on_null(FALSE) {}
   void fix_length_and_dec();
-  int set_cmp_func()
+  void set_cmp_func()
   {
-    return cmp.set_cmp_func(this, tmp_arg, tmp_arg+1, TRUE);
+    cmp.set_cmp_func(this, tmp_arg, tmp_arg+1, TRUE);
   }
   optimize_type select_optimize() const { return OPTIMIZE_OP; }
   virtual enum Functype rev_functype() const { return UNKNOWN_FUNC; }
@@ -400,13 +382,14 @@ public:
     Item_func::print_op(str, query_type);
   }
 
-  bool is_null() { return MY_TEST(args[0]->is_null() || args[1]->is_null()); }
-  const CHARSET_INFO *compare_collation()
-  { return cmp.cmp_collation.collation; }
+  bool is_null() { return test(args[0]->is_null() || args[1]->is_null()); }
+  bool is_bool_func() { return 1; }
+  CHARSET_INFO *compare_collation() { return cmp.cmp_collation.collation; }
+  uint decimal_precision() const { return 1; }
   void top_level_item() { abort_on_null= TRUE; }
   void cleanup()
   {
-    Item_bool_func::cleanup();
+    Item_int_func::cleanup();
     cmp.cleanup();
   }
 
@@ -425,22 +408,6 @@ public:
   bool subst_argument_checker(uchar **arg) { return TRUE; }
 };
 
-/**
-  XOR inherits from Item_bool_func2 because it is not optimized yet.
-  Later, when XOR is optimized, it needs to inherit from
-  Item_cond instead. See WL#5800. 
-*/
-class Item_func_xor :public Item_bool_func2
-{
-public:
-  Item_func_xor(Item *i1, Item *i2) :Item_bool_func2(i1, i2) {}
-  enum Functype functype() const { return XOR_FUNC; }
-  const char *func_name() const { return "xor"; }
-  longlong val_int();
-  void top_level_item() {}
-  Item *neg_transformer(THD *thd);
-};
-
 class Item_func_not :public Item_bool_func
 {
 public:
@@ -453,7 +420,7 @@ public:
 };
 
 class Item_maxmin_subselect;
-struct st_join_table;
+
 /*
   trigcond<param>(arg) ::= param? arg : TRUE
 
@@ -485,73 +452,29 @@ struct st_join_table;
 
 class Item_func_trig_cond: public Item_bool_func
 {
-public:
-  enum enum_trig_type
-  {
-    /**
-       In t1 LEFT JOIN t2, ON can be tested on t2's row only if that row is
-       not NULL-complemented
-    */
-    IS_NOT_NULL_COMPL,
-    /**
-       In t1 LEFT JOIN t2, the WHERE pushed to t2 can be tested only after at
-       least one t2's row has been found
-    */
-    FOUND_MATCH,
-    /**
-       In IN->EXISTS subquery transformation, new predicates are added:
-       WHERE inner_field=outer_field OR inner_field IS NULL,
-       as well as
-       HAVING inner_field IS NOT NULL,
-       are disabled if outer_field is a NULL value
-    */
-    OUTER_FIELD_IS_NOT_NULL
-  };
-private:
-  /** Pointer to trigger variable */
   bool *trig_var;
-  /** Optional table(s) which are the source of trig_var; for printing */
-  const struct st_join_table *trig_tab;
-  /** Type of trig_var; for printing */
-  enum_trig_type trig_type;
 public:
-  /**
-     @param a             the item for <condition>
-     @param f             pointer to trigger variable
-     @param tab           optional table which is source of 'f',
-                          NULL if not applicable
-     @param trig_type_arg type of 'f'
-  */
-  Item_func_trig_cond(Item *a, bool *f, struct st_join_table *tab,
-                      enum_trig_type trig_type_arg)
-    : Item_bool_func(a), trig_var(f), trig_tab(tab), trig_type(trig_type_arg)
-  {}
+  Item_func_trig_cond(Item *a, bool *f) : Item_bool_func(a) { trig_var= f; }
   longlong val_int() { return *trig_var ? args[0]->val_int() : 1; }
   enum Functype functype() const { return TRIG_COND_FUNC; };
-  /// '<if>', to distinguish from the if() SQL function
-  const char *func_name() const { return "<if>"; };
+  const char *func_name() const { return "trigcond"; };
   bool const_item() const { return FALSE; }
   bool *get_trig_var() { return trig_var; }
-  /* The following is needed for ICP: */
-  table_map used_tables() const { return args[0]->used_tables(); }
-  void print(String *str, enum_query_type query_type);
 };
-
 
 class Item_func_not_all :public Item_func_not
 {
   /* allow to check presence of values in max/min optimization */
   Item_sum_hybrid *test_sum_item;
   Item_maxmin_subselect *test_sub_item;
-  Item_subselect *subselect;
 
   bool abort_on_null;
 public:
   bool show;
 
   Item_func_not_all(Item *a)
-    :Item_func_not(a), test_sum_item(0), test_sub_item(0), subselect(0),
-     abort_on_null(0), show(0)
+    :Item_func_not(a), test_sum_item(0), test_sub_item(0), abort_on_null(0),
+     show(0)
     {}
   virtual void top_level_item() { abort_on_null= 1; }
   bool top_level() { return abort_on_null; }
@@ -561,31 +484,6 @@ public:
   virtual void print(String *str, enum_query_type query_type);
   void set_sum_test(Item_sum_hybrid *item) { test_sum_item= item; };
   void set_sub_test(Item_maxmin_subselect *item) { test_sub_item= item; };
-  void set_subselect(Item_subselect *item) { subselect= item; }
-  table_map not_null_tables() const
-  {
-    /*
-      See handling of not_null_tables_cache in
-      Item_in_optimizer::fix_fields().
-
-      This item is the result of a transformation from an ALL clause
-      such as
-          left-expr < ALL(subquery)
-      into
-          <not>(left-expr >= (subquery)
-
-      An inequality usually rejects NULLs from both operands, so the
-      not_null_tables() of the inequality is the union of the
-      null-rejecting tables of both operands. However, since this is a
-      transformed ALL clause that should return true if the subquery
-      is empty (even if left-expr is NULL), it is not null rejecting
-      for left-expr. The not null tables mask for left-expr should be
-      removed, leaving only the null-rejecting tables of the
-      subquery. Item_subselect::not_null_tables() always returns 0 (no
-      null-rejecting tables). Therefore, always return 0.
-    */
-    return 0;
-  }
   bool empty_underlying_subquery();
   Item *neg_transformer(THD *thd);
 };
@@ -598,7 +496,6 @@ public:
   Item_func_nop_all(Item *a) :Item_func_not_all(a) {}
   longlong val_int();
   const char *func_name() const { return "<nop>"; }
-  table_map not_null_tables() const { return not_null_tables_cache; }
   Item *neg_transformer(THD *thd);
 };
 
@@ -606,17 +503,13 @@ public:
 class Item_func_eq :public Item_bool_rowready_func2
 {
 public:
-  Item_func_eq(Item *a,Item *b) :
-    Item_bool_rowready_func2(a,b)
-  {}
+  Item_func_eq(Item *a,Item *b) :Item_bool_rowready_func2(a,b) {}
   longlong val_int();
   enum Functype functype() const { return EQ_FUNC; }
   enum Functype rev_functype() const { return EQ_FUNC; }
   cond_result eq_cmp_result() const { return COND_TRUE; }
   const char *func_name() const { return "="; }
   Item *negated_item();
-  virtual bool equality_substitution_analyzer(uchar **arg) { return true; }
-  virtual Item* equality_substitution_transformer(uchar *arg);
 };
 
 class Item_func_equal :public Item_bool_rowready_func2
@@ -738,27 +631,20 @@ public:
   Item_result cmp_type;
   String value0,value1,value2;
   /* TRUE <=> arguments will be compared as dates. */
-  bool compare_as_dates_with_strings;
-  bool compare_as_temporal_dates;
-  bool compare_as_temporal_times;
-  
+  bool compare_as_dates;
   /* Comparators used for DATE/DATETIME comparison. */
   Arg_comparator ge_cmp, le_cmp;
   Item_func_between(Item *a, Item *b, Item *c)
-    :Item_func_opt_neg(a, b, c), compare_as_dates_with_strings(FALSE),
-    compare_as_temporal_dates(FALSE),
-    compare_as_temporal_times(FALSE) {}
+    :Item_func_opt_neg(a, b, c), compare_as_dates(FALSE) {}
   longlong val_int();
   optimize_type select_optimize() const { return OPTIMIZE_KEY; }
   enum Functype functype() const   { return BETWEEN; }
   const char *func_name() const { return "between"; }
   bool fix_fields(THD *, Item **);
-  void fix_after_pullout(st_select_lex *parent_select,
-                         st_select_lex *removed_select);
   void fix_length_and_dec();
   virtual void print(String *str, enum_query_type query_type);
   bool is_bool_func() { return 1; }
-  const CHARSET_INFO *compare_collation() { return cmp_collation.collation; }
+  CHARSET_INFO *compare_collation() { return cmp_collation.collation; }
   uint decimal_precision() const { return 1; }
 };
 
@@ -818,8 +704,6 @@ public:
   double real_op();
   longlong int_op();
   String *str_op(String *);
-  bool date_op(MYSQL_TIME *ltime, uint fuzzydate);
-  bool time_op(MYSQL_TIME *ltime);
   my_decimal *decimal_op(my_decimal *);
   void fix_length_and_dec();
   void find_num_type() {}
@@ -839,9 +723,8 @@ public:
   double real_op();
   longlong int_op();
   String *str_op(String *str);
-  bool date_op(MYSQL_TIME *ltime, uint fuzzydate);
-  bool time_op(MYSQL_TIME *ltime);
   my_decimal *decimal_op(my_decimal *);
+  enum_field_types field_type() const;
   void fix_length_and_dec();
   const char *func_name() const { return "ifnull"; }
   Field *tmp_table_field(TABLE *table);
@@ -861,14 +744,10 @@ public:
   longlong val_int();
   String *val_str(String *str);
   my_decimal *val_decimal(my_decimal *);
-  bool get_date(MYSQL_TIME *ltime, uint fuzzydate);
-  bool get_time(MYSQL_TIME *ltime);
   enum Item_result result_type () const { return cached_result_type; }
   enum_field_types field_type() const { return cached_field_type; }
   bool fix_fields(THD *, Item **);
   void fix_length_and_dec();
-  void fix_after_pullout(st_select_lex *parent_select,
-                         st_select_lex *removed_select);
   uint decimal_precision() const;
   const char *func_name() const { return "if"; }
 private:
@@ -913,12 +792,12 @@ public:
   char *base;
   uint size;
   qsort2_cmp compare;
-  const CHARSET_INFO *collation;
+  CHARSET_INFO *collation;
   uint count;
   uint used_count;
   in_vector() {}
   in_vector(uint elements,uint element_length,qsort2_cmp cmp_func, 
-  	    const CHARSET_INFO *cmp_coll)
+  	    CHARSET_INFO *cmp_coll)
     :base((char*) sql_calloc(elements*element_length)),
      size(element_length), compare(cmp_func), collation(cmp_coll),
      count(elements), used_count(elements) {}
@@ -954,7 +833,7 @@ public:
   /* Compare values number pos1 and pos2 for equality */
   bool compare_elems(uint pos1, uint pos2)
   {
-    return MY_TEST(compare(collation, base + pos1*size, base + pos2*size));
+    return test(compare(collation, base + pos1*size, base + pos2*size));
   }
   virtual Item_result result_type()= 0;
 };
@@ -964,7 +843,7 @@ class in_string :public in_vector
   char buff[STRING_BUFFER_USUAL_SIZE];
   String tmp;
 public:
-  in_string(uint elements,qsort2_cmp cmp_func, const CHARSET_INFO *cs);
+  in_string(uint elements,qsort2_cmp cmp_func, CHARSET_INFO *cs);
   ~in_string();
   void set(uint pos,Item *item);
   uchar *get_value(Item *item);
@@ -1019,34 +898,6 @@ public:
 };
 
 
-class in_datetime_as_longlong :public in_longlong
-{
-public:
-  in_datetime_as_longlong(uint elements)
-    :in_longlong(elements) {};
-  Item *create_item()
-  {
-    return new Item_temporal(MYSQL_TYPE_DATETIME, 0LL);
-  }
-  void set(uint pos, Item *item);
-  uchar *get_value(Item *item);
-};
-
-
-class in_time_as_longlong :public in_longlong
-{
-public:
-  in_time_as_longlong(uint elements)
-    :in_longlong(elements) {};
-  Item *create_item()
-  {
-    return new Item_temporal(MYSQL_TYPE_TIME, 0LL);
-  }
-  void set(uint pos, Item *item);
-  uchar *get_value(Item *item);
-};
-
-
 /*
   Class to represent a vector of constant DATE/DATETIME values.
   Values are obtained with help of the get_datetime_value() function.
@@ -1068,10 +919,6 @@ public:
   void set(uint pos,Item *item);
   uchar *get_value(Item *item);
   friend int cmp_longlong(void *cmp_arg, packed_longlong *a,packed_longlong *b);
-  Item* create_item()
-  { 
-    return new Item_temporal(MYSQL_TYPE_DATETIME, (longlong) 0);
-  }
 };
 
 
@@ -1123,14 +970,14 @@ public:
 class cmp_item :public Sql_alloc
 {
 public:
-  const CHARSET_INFO *cmp_charset;
+  CHARSET_INFO *cmp_charset;
   cmp_item() { cmp_charset= &my_charset_bin; }
   virtual ~cmp_item() {}
   virtual void store_value(Item *item)= 0;
   virtual int cmp(Item *item)= 0;
   // for optimized IN with row
   virtual int compare(cmp_item *item)= 0;
-  static cmp_item* get_comparator(Item_result type, const CHARSET_INFO *cs);
+  static cmp_item* get_comparator(Item_result type, CHARSET_INFO *cs);
   virtual cmp_item *make_same()= 0;
   virtual void store_value_by_template(cmp_item *tmpl, Item *item)
   {
@@ -1144,8 +991,8 @@ protected:
   String *value_res;
 public:
   cmp_item_string () {}
-  cmp_item_string (const CHARSET_INFO *cs) { cmp_charset= cs; }
-  void set_charset(const CHARSET_INFO *cs) { cmp_charset= cs; }
+  cmp_item_string (CHARSET_INFO *cs) { cmp_charset= cs; }
+  void set_charset(CHARSET_INFO *cs) { cmp_charset= cs; }
   friend class cmp_item_sort_string;
   friend class cmp_item_sort_string_in_static;
 };
@@ -1158,18 +1005,12 @@ protected:
 public:
   cmp_item_sort_string():
     cmp_item_string() {}
-  cmp_item_sort_string(const CHARSET_INFO *cs):
+  cmp_item_sort_string(CHARSET_INFO *cs):
     cmp_item_string(cs),
     value(value_buff, sizeof(value_buff), cs) {}
   void store_value(Item *item)
   {
-    String *res= item->val_str(&value);
-    if(res && (res != &value))
-    {
-      // 'res' may point in item's temporary internal data, so make a copy
-      value.copy(*res);
-    }
-    value_res= &value;
+    value_res= item->val_str(&value);
   }
   int cmp(Item *arg)
   {
@@ -1185,7 +1026,7 @@ public:
     return sortcmp(value_res, l_cmp->value_res, cmp_charset);
   } 
   cmp_item *make_same();
-  void set_charset(const CHARSET_INFO *cs)
+  void set_charset(CHARSET_INFO *cs)
   {
     cmp_charset= cs;
     value.set_quick(value_buff, sizeof(value_buff), cs);
@@ -1281,7 +1122,7 @@ class cmp_item_sort_string_in_static :public cmp_item_string
  protected:
   String value;
 public:
-  cmp_item_sort_string_in_static(const CHARSET_INFO *cs):
+  cmp_item_sort_string_in_static(CHARSET_INFO *cs):
     cmp_item_string(cs) {}
   void store_value(Item *item)
   {
@@ -1351,14 +1192,12 @@ public:
       list.push_back(else_expr_arg);
     }
     set_arguments(list);
-    memset(&cmp_items, 0, sizeof(cmp_items));
+    bzero(&cmp_items, sizeof(cmp_items));
   }
   double val_real();
   longlong val_int();
   String *val_str(String *);
   my_decimal *val_decimal(my_decimal *);
-  bool get_date(MYSQL_TIME *ltime, uint fuzzydate);
-  bool get_time(MYSQL_TIME *ltime);
   bool fix_fields(THD *thd, Item **ref);
   void fix_length_and_dec();
   uint decimal_precision() const;
@@ -1368,8 +1207,9 @@ public:
   const char *func_name() const { return "case"; }
   virtual void print(String *str, enum_query_type query_type);
   Item *find_item(String *str);
-  const CHARSET_INFO *compare_collation() { return cmp_collation.collation; }
+  CHARSET_INFO *compare_collation() { return cmp_collation.collation; }
   void cleanup();
+  void agg_str_lengths(Item *arg);
   void agg_num_lengths(Item *arg);
 };
 
@@ -1409,13 +1249,11 @@ public:
     :Item_func_opt_neg(list), array(0), have_null(0),
     arg_types_compatible(FALSE)
   {
-    memset(&cmp_items, 0, sizeof(cmp_items));
+    bzero(&cmp_items, sizeof(cmp_items));
     allowed_arg_cols= 0;  // Fetch this value from first argument
   }
   longlong val_int();
   bool fix_fields(THD *, Item **);
-  void fix_after_pullout(st_select_lex *parent_select,
-                         st_select_lex *removed_select);
   void fix_length_and_dec();
   uint decimal_precision() const { return 1; }
   void cleanup()
@@ -1439,7 +1277,7 @@ public:
   const char *func_name() const { return " IN "; }
   bool nulls_in_row();
   bool is_bool_func() { return 1; }
-  const CHARSET_INFO *compare_collation() { return cmp_collation.collation; }
+  CHARSET_INFO *compare_collation() { return cmp_collation.collation; }
 };
 
 class cmp_item_row :public cmp_item
@@ -1499,11 +1337,8 @@ public:
     else
     {
       args[0]->update_used_tables();
-      with_subselect= args[0]->has_subquery();
-      with_stored_program= args[0]->has_stored_program();
-
       if ((const_item_cache= !(used_tables_cache= args[0]->used_tables()) &&
-           !with_subselect && !with_stored_program))
+          !with_subselect))
       {
 	/* Remember if the value is always NULL or never NULL */
 	cached_value= (longlong) args[0]->is_null();
@@ -1513,8 +1348,7 @@ public:
   table_map not_null_tables() const { return 0; }
   optimize_type select_optimize() const { return OPTIMIZE_NULL; }
   Item *neg_transformer(THD *thd);
-  const CHARSET_INFO *compare_collation()
-  { return args[0]->collation.collation; }
+  CHARSET_INFO *compare_collation() { return args[0]->collation.collation; }
 };
 
 /* Functions used by HAVING for rewriting IN subquery */
@@ -1523,8 +1357,7 @@ class Item_in_subselect;
 
 /* 
   This is like IS NOT NULL but it also remembers if it ever has
-  encountered a NULL; it remembers this in the "was_null" property of the
-  "owner" item.
+  encountered a NULL.
 */
 class Item_is_not_null_test :public Item_func_isnull
 {
@@ -1537,12 +1370,11 @@ public:
   longlong val_int();
   const char *func_name() const { return "<is_not_null_test>"; }
   void update_used_tables();
-  /**
-    We add RAND_TABLE_BIT to prevent moving this item from HAVING to WHERE.
-     
-    @retval Always RAND_TABLE_BIT
+  /*
+    we add RAND_TABLE_BIT to prevent moving this item from HAVING to WHERE
   */
-  table_map get_initial_pseudo_tables() const { return RAND_TABLE_BIT; }
+  table_map used_tables() const
+    { return used_tables_cache | RAND_TABLE_BIT; }
 };
 
 
@@ -1563,8 +1395,7 @@ public:
   { return abort_on_null ? not_null_tables_cache : 0; }
   Item *neg_transformer(THD *thd);
   virtual void print(String *str, enum_query_type query_type);
-  const CHARSET_INFO *compare_collation()
-  { return args[0]->collation.collation; }
+  CHARSET_INFO *compare_collation() { return args[0]->collation.collation; }
   void top_level_item() { abort_on_null=1; }
 };
 
@@ -1604,11 +1435,6 @@ public:
   const char *func_name() const { return "like"; }
   bool fix_fields(THD *thd, Item **ref);
   void cleanup();
-  /**
-    @retval true non default escape char specified
-                 using "expr LIKE pat ESCAPE 'escape_char'" syntax
-  */
-  bool escape_was_used_in_parsing() const { return escape_used_in_parsing; }
 };
 
 
@@ -1619,7 +1445,7 @@ class Item_func_regex :public Item_bool_func
   bool regex_is_const;
   String prev_regexp;
   DTCollation cmp_collation;
-  const CHARSET_INFO *regex_lib_charset;
+  CHARSET_INFO *regex_lib_charset;
   int regex_lib_flags;
   String conv;
   int regcomp(bool send_error);
@@ -1636,15 +1462,18 @@ public:
     print_op(str, query_type);
   }
 
-  const CHARSET_INFO *compare_collation() { return cmp_collation.collation; }
+  CHARSET_INFO *compare_collation() { return cmp_collation.collation; }
 };
 
+
+typedef class Item COND;
 
 class Item_cond :public Item_bool_func
 {
 protected:
   List<Item> list;
   bool abort_on_null;
+  table_map and_tables_cache;
 
 public:
   /* Item_cond() is only used to create top level items */
@@ -1675,18 +1504,15 @@ public:
     list.prepand(nlist);
   }
   bool fix_fields(THD *, Item **ref);
-  void fix_after_pullout(st_select_lex *parent_select,
-                         st_select_lex *removed_select);
 
   enum Type type() const { return COND_ITEM; }
   List<Item>* argument_list() { return &list; }
-  table_map used_tables() const { return used_tables_cache; }
+  table_map used_tables() const;
   void update_used_tables();
   virtual void print(String *str, enum_query_type query_type);
-  void split_sum_func(THD *thd, Ref_ptr_array ref_pointer_array,
-                      List<Item> &fields);
+  void split_sum_func(THD *thd, Item **ref_pointer_array, List<Item> &fields);
   friend int setup_conds(THD *thd, TABLE_LIST *tables, TABLE_LIST *leaves,
-                         Item **conds);
+                         COND **conds);
   void top_level_item() { abort_on_null=1; }
   void copy_andor_arguments(THD *thd, Item_cond *item, bool real_items= false);
   bool walk(Item_processor processor, bool walk_subquery, uchar *arg);
@@ -1697,8 +1523,6 @@ public:
   bool subst_argument_checker(uchar **arg) { return TRUE; }
   Item *compile(Item_analyzer analyzer, uchar **arg_p,
                 Item_transformer transformer, uchar *arg_t);
-
-  virtual bool equality_substitution_analyzer(uchar **arg) { return true; }
 };
 
 
@@ -1776,7 +1600,6 @@ public:
   for them. We have to take care of restricting the predicate such an
   object represents f1=f2= ...=fn to the projection of known fields fi1=...=fik.
 */
-struct st_join_table;
 
 class Item_equal: public Item_bool_func
 {
@@ -1793,11 +1616,6 @@ public:
   Item_equal(Item_field *f1, Item_field *f2);
   Item_equal(Item *c, Item_field *f);
   Item_equal(Item_equal *item_equal);
-  virtual ~Item_equal()
-  {
-    delete eval_item;
-  }
-
   inline Item* get_const() { return const_item; }
   void compare_const(Item *c);
   void add(Item *c, Item_field *f);
@@ -1805,13 +1623,7 @@ public:
   void add(Item_field *f);
   uint members();
   bool contains(Field *field);
-  /**
-    Get the first field of multiple equality, use for semantic checking.
-
-    @retval First field in the multiple equality.
-  */
   Item_field* get_first() { return fields.head(); }
-  Item_field* get_subst_item(const Item_field *field);
   void merge(Item_equal *item);
   void update_const();
   enum Functype functype() const { return MULT_EQUAL_FUNC; }
@@ -1826,12 +1638,8 @@ public:
   bool walk(Item_processor processor, bool walk_subquery, uchar *arg);
   Item *transform(Item_transformer transformer, uchar *arg);
   virtual void print(String *str, enum_query_type query_type);
-  const CHARSET_INFO *compare_collation() 
+  CHARSET_INFO *compare_collation() 
   { return fields.head()->collation.collation; }
-
-  virtual bool equality_substitution_analyzer(uchar **arg) { return true; }
-
-  virtual Item* equality_substitution_transformer(uchar *arg);
 }; 
 
 class COND_EQUAL: public Sql_alloc
@@ -1879,11 +1687,13 @@ public:
   enum Functype functype() const { return COND_AND_FUNC; }
   longlong val_int();
   const char *func_name() const { return "and"; }
+  table_map not_null_tables() const
+  { return abort_on_null ? not_null_tables_cache: and_tables_cache; }
   Item* copy_andor_structure(THD *thd, bool real_items)
   {
     Item_cond_and *item;
     if ((item= new Item_cond_and(thd, this)))
-      item->copy_andor_arguments(thd, this, real_items);
+       item->copy_andor_arguments(thd, this, real_items);
     return item;
   }
   Item *neg_transformer(THD *thd);
@@ -1908,6 +1718,7 @@ public:
   enum Functype functype() const { return COND_OR_FUNC; }
   longlong val_int();
   const char *func_name() const { return "or"; }
+  table_map not_null_tables() const { return and_tables_cache; }
   Item* copy_andor_structure(THD *thd, bool real_items)
   {
     Item_cond_or *item;
@@ -1926,6 +1737,25 @@ inline bool is_cond_or(Item *item)
   Item_cond *cond_item= (Item_cond*) item;
   return (cond_item->functype() == Item_func::COND_OR_FUNC);
 }
+
+/*
+  XOR is Item_cond, not an Item_int_func because we could like to
+  optimize (a XOR b) later on. It's low prio, though
+*/
+
+class Item_cond_xor :public Item_cond
+{
+public:
+  Item_cond_xor() :Item_cond() {}
+  Item_cond_xor(Item *i1,Item *i2) :Item_cond(i1,i2) {}
+  enum Functype functype() const { return COND_XOR_FUNC; }
+  /* TODO: remove the next line when implementing XOR optimization */
+  enum Type type() const { return FUNC_ITEM; }
+  longlong val_int();
+  const char *func_name() const { return "xor"; }
+  void top_level_item() {}
+};
+
 
 /* Some useful inline functions */
 

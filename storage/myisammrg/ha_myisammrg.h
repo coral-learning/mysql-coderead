@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -14,6 +14,10 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface			/* gcc class implementation */
+#endif
 
 /* class for the the myisam merge handler */
 
@@ -30,7 +34,7 @@ class Mrg_child_def: public Sql_alloc
 {
   /* Remembered MERGE child def version.  See top comment in ha_myisammrg.cc */
   enum_table_ref_type m_child_table_ref_type;
-  ulonglong m_child_def_version;
+  ulong m_child_def_version;
 public:
   LEX_STRING db;
   LEX_STRING name;
@@ -40,12 +44,12 @@ public:
   {
     return m_child_table_ref_type;
   }
-  inline ulonglong get_child_def_version()
+  inline ulong get_child_def_version()
   {
     return m_child_def_version;
   }
   inline void set_child_def_version(enum_table_ref_type child_table_ref_type,
-                                    ulonglong version)
+                                    ulong version)
   {
     m_child_table_ref_type= child_table_ref_type;
     m_child_def_version= version;
@@ -58,7 +62,7 @@ public:
     db.length= db_len_arg;
     name.str= table_name_arg;
     name.length= table_name_len_arg;
-    m_child_def_version= ~0ULL;
+    m_child_def_version= ~0UL;
     m_child_table_ref_type= TABLE_REF_NULL;
   }
 };

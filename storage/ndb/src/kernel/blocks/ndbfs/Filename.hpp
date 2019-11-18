@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003-2006 MySQL AB, 2009 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef Filename_H
 #define Filename_H
@@ -65,10 +63,19 @@ public:
   Filename();
   ~Filename();
 
-  void set(class Ndbfs*, BlockReference, const Uint32 fileno[4], bool directory,
-           SegmentedSectionPtr ptr);
+  struct NameSpec {
+    NameSpec(BaseString& f, BaseString&b) :
+      fs_path(f), backup_path(b) {}
+    BaseString& fs_path;
+    BaseString& backup_path;
+  };
   
-  const char* c_str() const;         // Complete name including dirname
+  void set(NameSpec& spec, 
+	   BlockReference, const Uint32 fileno[4], bool = false);
+  void set(NameSpec& spec, 
+	   SegmentedSectionPtr ptr, class SectionSegmentPool&);
+  
+  const char* c_str() const;     // Complete name including dirname
   const char* get_base_name() const; // Exclude fs (or backup) path
 private:
   char theName[PATH_MAX];

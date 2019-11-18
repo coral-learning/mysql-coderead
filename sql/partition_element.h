@@ -1,7 +1,7 @@
 #ifndef PARTITION_ELEMENT_INCLUDED
 #define PARTITION_ELEMENT_INCLUDED
 
-/* Copyright (c) 2005, 2013, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -92,7 +92,7 @@ struct st_ddl_log_memory_entry;
 class partition_element :public Sql_alloc {
 public:
   List<partition_element> subpartitions;
-  List<part_elem_value> list_val_list;  // list of LIST values/column arrays
+  List<part_elem_value> list_val_list;
   ha_rows part_max_rows;
   ha_rows part_min_rows;
   longlong range_value;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2002, 2014, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@
 #ifdef USE_MB
 
 
-size_t my_caseup_str_mb(const CHARSET_INFO *cs, char *str)
+size_t my_caseup_str_mb(CHARSET_INFO * cs, char *str)
 {
   register uint32 l;
   register uchar *map= cs->to_upper;
@@ -41,7 +41,7 @@ size_t my_caseup_str_mb(const CHARSET_INFO *cs, char *str)
 }
 
 
-size_t my_casedn_str_mb(const CHARSET_INFO *cs, char *str)
+size_t my_casedn_str_mb(CHARSET_INFO * cs, char *str)
 {
   register uint32 l;
   register uchar *map= cs->to_lower;
@@ -62,20 +62,20 @@ size_t my_casedn_str_mb(const CHARSET_INFO *cs, char *str)
 }
 
 
-static inline MY_UNICASE_CHARACTER*
-get_case_info_for_ch(const CHARSET_INFO *cs, uint page, uint offs)
+static inline MY_UNICASE_INFO*
+get_case_info_for_ch(CHARSET_INFO *cs, uint page, uint offs)
 {
-  MY_UNICASE_CHARACTER *p;
-  return cs->caseinfo ? ((p= cs->caseinfo->page[page]) ? &p[offs] : NULL) :  NULL;
+  MY_UNICASE_INFO *p;
+  return cs->caseinfo ? ((p= cs->caseinfo[page]) ? &p[offs] : NULL) :  NULL;
 }
 
 
 /*
   For character sets which don't change octet length in case conversion.
 */
-size_t my_caseup_mb(const CHARSET_INFO *cs, char *src, size_t srclen,
-                    char *dst MY_ATTRIBUTE((unused)),
-                    size_t dstlen MY_ATTRIBUTE((unused)))
+size_t my_caseup_mb(CHARSET_INFO * cs, char *src, size_t srclen,
+                    char *dst __attribute__((unused)),
+                    size_t dstlen __attribute__((unused)))
 {
   register uint32 l;
   register char *srcend= src + srclen;
@@ -89,7 +89,7 @@ size_t my_caseup_mb(const CHARSET_INFO *cs, char *src, size_t srclen,
   {
     if ((l=my_ismbchar(cs, src, srcend)))
     {
-      MY_UNICASE_CHARACTER *ch;
+      MY_UNICASE_INFO *ch;
       if ((ch= get_case_info_for_ch(cs, (uchar) src[0], (uchar) src[1])))
       {
         *src++= ch->toupper >> 8;
@@ -108,9 +108,9 @@ size_t my_caseup_mb(const CHARSET_INFO *cs, char *src, size_t srclen,
 }
 
 
-size_t my_casedn_mb(const CHARSET_INFO *cs, char *src, size_t srclen,
-                    char *dst MY_ATTRIBUTE((unused)),
-                    size_t dstlen MY_ATTRIBUTE((unused)))
+size_t my_casedn_mb(CHARSET_INFO * cs, char *src, size_t srclen,
+                    char *dst __attribute__((unused)),
+                    size_t dstlen __attribute__((unused)))
 {
   register uint32 l;
   register char *srcend= src + srclen;
@@ -124,7 +124,7 @@ size_t my_casedn_mb(const CHARSET_INFO *cs, char *src, size_t srclen,
   {
     if ((l= my_ismbchar(cs, src, srcend)))
     {
-      MY_UNICASE_CHARACTER *ch;
+      MY_UNICASE_INFO *ch;
       if ((ch= get_case_info_for_ch(cs, (uchar) src[0], (uchar) src[1])))
       {
         *src++= ch->tolower >> 8;
@@ -153,9 +153,9 @@ size_t my_casedn_mb(const CHARSET_INFO *cs, char *src, size_t srclen,
   Length is reduced in this example from two bytes to one byte.
 */
 static size_t
-my_casefold_mb_varlen(const CHARSET_INFO *cs,
+my_casefold_mb_varlen(CHARSET_INFO *cs,
                       char *src, size_t srclen,
-                      char *dst, size_t dstlen MY_ATTRIBUTE((unused)),
+                      char *dst, size_t dstlen __attribute__((unused)),
                       uchar *map,
                       size_t is_upper)
 {
@@ -168,7 +168,7 @@ my_casefold_mb_varlen(const CHARSET_INFO *cs,
     size_t mblen= my_ismbchar(cs, src, srcend);
     if (mblen)
     {
-      MY_UNICASE_CHARACTER *ch;
+      MY_UNICASE_INFO *ch;
       if ((ch= get_case_info_for_ch(cs, (uchar) src[0], (uchar) src[1])))
       {
         int code= is_upper ? ch->toupper : ch->tolower;
@@ -193,7 +193,7 @@ my_casefold_mb_varlen(const CHARSET_INFO *cs,
 
 
 size_t
-my_casedn_mb_varlen(const CHARSET_INFO *cs, char *src, size_t srclen,
+my_casedn_mb_varlen(CHARSET_INFO * cs, char *src, size_t srclen,
                     char *dst, size_t dstlen)
 {
   DBUG_ASSERT(dstlen >= srclen * cs->casedn_multiply); 
@@ -203,7 +203,7 @@ my_casedn_mb_varlen(const CHARSET_INFO *cs, char *src, size_t srclen,
 
 
 size_t
-my_caseup_mb_varlen(const CHARSET_INFO *cs, char *src, size_t srclen,
+my_caseup_mb_varlen(CHARSET_INFO * cs, char *src, size_t srclen,
                     char *dst, size_t dstlen)
 {
   DBUG_ASSERT(dstlen >= srclen * cs->caseup_multiply);
@@ -216,7 +216,7 @@ my_caseup_mb_varlen(const CHARSET_INFO *cs, char *src, size_t srclen,
   my_strcasecmp_mb() returns 0 if strings are equal, non-zero otherwise.
  */
 
-int my_strcasecmp_mb(const CHARSET_INFO *cs,const char *s, const char *t)
+int my_strcasecmp_mb(CHARSET_INFO * cs,const char *s, const char *t)
 {
   register uint32 l;
   register uchar *map=cs->to_upper;
@@ -252,7 +252,7 @@ int my_strcasecmp_mb(const CHARSET_INFO *cs,const char *s, const char *t)
 #define likeconv(s,A) (uchar) (s)->sort_order[(uchar) (A)]
 
 static
-int my_wildcmp_mb_impl(const CHARSET_INFO *cs,
+int my_wildcmp_mb_impl(CHARSET_INFO *cs,
                        const char *str,const char *str_end,
                        const char *wildstr,const char *wildend,
                        int escape, int w_one, int w_many, int recurse_level)
@@ -260,7 +260,7 @@ int my_wildcmp_mb_impl(const CHARSET_INFO *cs,
   int result= -1;				/* Not found, using wildcards */
 
   if (my_string_stack_guard && my_string_stack_guard(recurse_level))
-     return 1;
+    return 1;
   while (wildstr != wildend)
   {
     while (*wildstr != w_many && *wildstr != w_one)
@@ -349,8 +349,7 @@ int my_wildcmp_mb_impl(const CHARSET_INFO *cs,
           INC_PTR(cs,str, str_end);
         }
 	{
-	  int tmp=my_wildcmp_mb_impl(cs,str,str_end,
-                                     wildstr,wildend,escape,w_one,
+	  int tmp=my_wildcmp_mb_impl(cs,str,str_end,wildstr,wildend,escape,w_one,
                                      w_many, recurse_level + 1);
 	  if (tmp <= 0)
 	    return (tmp);
@@ -362,7 +361,7 @@ int my_wildcmp_mb_impl(const CHARSET_INFO *cs,
   return (str != str_end ? 1 : 0);
 }
 
-int my_wildcmp_mb(const CHARSET_INFO *cs,
+int my_wildcmp_mb(CHARSET_INFO *cs,
                   const char *str,const char *str_end,
                   const char *wildstr,const char *wildend,
                   int escape, int w_one, int w_many)
@@ -373,7 +372,7 @@ int my_wildcmp_mb(const CHARSET_INFO *cs,
 }
 
 
-size_t my_numchars_mb(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+size_t my_numchars_mb(CHARSET_INFO *cs __attribute__((unused)),
 		      const char *pos, const char *end)
 {
   register size_t count= 0;
@@ -387,7 +386,7 @@ size_t my_numchars_mb(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
 }
 
 
-size_t my_charpos_mb(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+size_t my_charpos_mb(CHARSET_INFO *cs __attribute__((unused)),
 		     const char *pos, const char *end, size_t length)
 {
   const char *start= pos;
@@ -402,8 +401,8 @@ size_t my_charpos_mb(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
 }
 
 
-size_t my_well_formed_len_mb(const CHARSET_INFO *cs, const char *b,
-                             const char *e, size_t pos, int *error)
+size_t my_well_formed_len_mb(CHARSET_INFO *cs, const char *b, const char *e,
+                             size_t pos, int *error)
 {
   const char *b_start= b;
   *error= 0;
@@ -424,7 +423,7 @@ size_t my_well_formed_len_mb(const CHARSET_INFO *cs, const char *b,
 }
 
 
-uint my_instr_mb(const CHARSET_INFO *cs,
+uint my_instr_mb(CHARSET_INFO *cs,
                  const char *b, size_t b_length, 
                  const char *s, size_t s_length,
                  my_match_t *match, uint nmatch)
@@ -482,12 +481,12 @@ uint my_instr_mb(const CHARSET_INFO *cs,
 /* BINARY collations handlers for MB charsets */
 
 int
-my_strnncoll_mb_bin(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+my_strnncoll_mb_bin(CHARSET_INFO * cs __attribute__((unused)),
                     const uchar *s, size_t slen,
                     const uchar *t, size_t tlen,
                     my_bool t_is_prefix)
 {
-  size_t len= MY_MIN(slen,tlen);
+  size_t len=min(slen,tlen);
   int cmp= memcmp(s,t,len);
   return cmp ? cmp : (int) ((t_is_prefix ? len : slen) - tlen);
 }
@@ -519,7 +518,7 @@ my_strnncoll_mb_bin(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
 */
 
 int
-my_strnncollsp_mb_bin(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+my_strnncollsp_mb_bin(CHARSET_INFO * cs __attribute__((unused)),
                       const uchar *a, size_t a_length, 
                       const uchar *b, size_t b_length,
                       my_bool diff_if_only_endspace_difference)
@@ -532,7 +531,7 @@ my_strnncollsp_mb_bin(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
   diff_if_only_endspace_difference= 0;
 #endif
   
-  end= a + (length= MY_MIN(a_length, b_length));
+  end= a + (length= min(a_length, b_length));
   while (a < end)
   {
     if (*a++ != *b++)
@@ -566,111 +565,20 @@ my_strnncollsp_mb_bin(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
 }
 
 
-/*
-  Copy one non-ascii character.
-  "dst" must have enough room for the character.
-  Note, we don't use sort_order[] in this macros.
-  This is correct even for case insensitive collations:
-  - basic Latin letters are processed outside this macros;
-  - for other characters sort_order[x] is equal to x.
-*/
-#define my_strnxfrm_mb_non_ascii_char(cs, dst, src, se)                  \
-{                                                                        \
-  switch (cs->cset->ismbchar(cs, (const char*) src, (const char*) se)) { \
-  case 4:                                                                \
-    *dst++= *src++;                                                      \
-    /* fall through */                                                   \
-  case 3:                                                                \
-    *dst++= *src++;                                                      \
-    /* fall through */                                                   \
-  case 2:                                                                \
-    *dst++= *src++;                                                      \
-    /* fall through */                                                   \
-  case 0:                                                                \
-    *dst++= *src++; /* byte in range 0x80..0xFF which is not MB head */  \
-  }                                                                      \
-}
-
-
-/*
-  For character sets with two or three byte multi-byte
-  characters having multibyte weights *equal* to their codes:
-  cp932, euckr, gb2312, sjis, eucjpms, ujis.
-*/
-size_t
-my_strnxfrm_mb(const CHARSET_INFO *cs,
-               uchar *dst, size_t dstlen, uint nweights,
-               const uchar *src, size_t srclen, uint flags)
+static size_t my_strnxfrm_mb_bin(CHARSET_INFO *cs __attribute__((unused)),
+                                 uchar *dest, size_t dstlen,
+                                 const uchar *src, size_t srclen)
 {
-  uchar *d0= dst;
-  uchar *de= dst + dstlen;
-  const uchar *se= src + srclen;
-  const uchar *sort_order= cs->sort_order;
-
-  DBUG_ASSERT(cs->mbmaxlen <= 4);
-
-  /*
-    If "srclen" is smaller than both "dstlen" and "nweights"
-    then we can run a simplified loop -
-    without checking "nweights" and "de".
-  */
-  if (dstlen >= srclen && nweights >= srclen)
-  {
-    if (sort_order)
-    {
-      /* Optimized version for a case insensitive collation */
-      for (; src < se; nweights--)
-      {
-        if (*src < 128) /* quickly catch ASCII characters */
-          *dst++= sort_order[*src++];
-        else
-          my_strnxfrm_mb_non_ascii_char(cs, dst, src, se);
-      }
-    }
-    else
-    {
-      /* Optimized version for a case sensitive collation (no sort_order) */
-      for (; src < se; nweights--)
-      {
-        if (*src < 128) /* quickly catch ASCII characters */
-          *dst++= *src++;
-        else
-          my_strnxfrm_mb_non_ascii_char(cs, dst, src, se);
-      }
-    }
-    goto pad;
-  }
-
-  /*
-    A thourough loop, checking all possible limits:
-    "se", "nweights" and "de".
-  */
-  for (; src < se && nweights && dst < de; nweights--)
-  {
-    int chlen;
-    if (*src < 128 ||
-        !(chlen= cs->cset->ismbchar(cs, (const char*) src, (const char*) se)))
-    {
-      /* Single byte character */
-      *dst++= sort_order ? sort_order[*src++] : *src++;
-    }
-    else
-    {
-      /* Multi-byte character */
-      int len= (dst + chlen <= de) ? chlen : de - dst;
-      memcpy(dst, src, len);
-      dst+= len;
-      src+= len;
-    }
-  }
-
-pad:
-  return my_strxfrm_pad_desc_and_reverse(cs, d0, dst, de, nweights, flags, 0);
+  if (dest != src)
+    memcpy(dest, src, min(dstlen, srclen));
+  if (dstlen > srclen)
+    bfill(dest + srclen, dstlen - srclen, ' ');
+  return dstlen;
 }
 
 
 int
-my_strcasecmp_mb_bin(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+my_strcasecmp_mb_bin(CHARSET_INFO * cs __attribute__((unused)),
                      const char *s, const char *t)
 {
   return strcmp(s,t);
@@ -678,7 +586,7 @@ my_strcasecmp_mb_bin(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
 
 
 void
-my_hash_sort_mb_bin(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+my_hash_sort_mb_bin(CHARSET_INFO *cs __attribute__((unused)),
                     const uchar *key, size_t len,ulong *nr1, ulong *nr2)
 {
   const uchar *pos = key;
@@ -709,14 +617,14 @@ my_hash_sort_mb_bin(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
   DESCRIPTION
       Write max key:
       - for non-Unicode character sets:
-        just memset using max_sort_char if max_sort_char is one byte.
+        just bfill using max_sort_char if max_sort_char is one byte.
         In case when max_sort_char is two bytes, fill with double-byte pairs
         and optionally pad with a single space character.
       - for Unicode character set (utf-8):
         create a buffer with multibyte representation of the max_sort_char
         character, and copy it into max_str in a loop. 
 */
-static void pad_max_char(const CHARSET_INFO *cs, char *str, char *end)
+static void pad_max_char(CHARSET_INFO *cs, char *str, char *end)
 {
   char buf[10];
   char buflen;
@@ -725,7 +633,7 @@ static void pad_max_char(const CHARSET_INFO *cs, char *str, char *end)
   {
     if (cs->max_sort_char <= 255)
     {
-      memset(str, cs->max_sort_char, end - str);
+      bfill(str, end - str, cs->max_sort_char);
       return;
     }
     buf[0]= cs->max_sort_char >> 8;
@@ -775,7 +683,7 @@ static void pad_max_char(const CHARSET_INFO *cs, char *str, char *end)
 ** optimized !
 */
 
-my_bool my_like_range_mb(const CHARSET_INFO *cs,
+my_bool my_like_range_mb(CHARSET_INFO *cs,
 			 const char *ptr,size_t ptr_length,
 			 pbool escape, pbool w_one, pbool w_many,
 			 size_t res_length,
@@ -788,7 +696,8 @@ my_bool my_like_range_mb(const CHARSET_INFO *cs,
   char *min_end= min_str + res_length;
   char *max_end= max_str + res_length;
   size_t maxcharlen= res_length / cs->mbmaxlen;
-  const MY_CONTRACTIONS *contractions= my_charset_get_contractions(cs, 0);
+  const char *contraction_flags= cs->contractions ? 
+              (const char *) (cs->contractions + 0x40*0x40) : NULL;
 
   for (; ptr != end && min_str != min_end && maxcharlen ; maxcharlen--)
   {
@@ -856,8 +765,8 @@ fill_max_and_min:
         'ab\min\min\min\min' and 'ab\max\max\max\max'.
 
       */
-      if (contractions && ptr + 1 < end &&
-          my_uca_can_be_contraction_head(contractions, (uchar) *ptr))
+      if (contraction_flags && ptr + 1 < end &&
+          contraction_flags[(uchar) *ptr])
       {
         /* Ptr[0] is a contraction head. */
         
@@ -879,8 +788,8 @@ fill_max_and_min:
           is not a contraction, then we put only ptr[0],
           and continue with ptr[1] on the next loop.
         */
-        if (my_uca_can_be_contraction_tail(contractions, (uchar) ptr[1]) &&
-            my_uca_contraction2_weight(contractions, (uchar) ptr[0], ptr[1]))
+        if (contraction_flags[(uchar) ptr[1]] &&
+            cs->contractions[(*ptr-0x40)*0x40 + ptr[1] - 0x40])
         {
           /* Contraction found */
           if (maxcharlen == 1 || min_str + 1 >= min_end)
@@ -931,7 +840,7 @@ fill_max_and_min:
    @rerval TRUE if LIKE can't be optimized.
 */
 my_bool
-my_like_range_generic(const CHARSET_INFO *cs,
+my_like_range_generic(CHARSET_INFO *cs,
                       const char *ptr, size_t ptr_length,
                       pbool escape, pbool w_one, pbool w_many,
                       size_t res_length,
@@ -945,7 +854,7 @@ my_like_range_generic(const CHARSET_INFO *cs,
   char *max_end= max_str + res_length;
   size_t charlen= res_length / cs->mbmaxlen;
   size_t res_length_diff;
-  const MY_CONTRACTIONS *contractions= my_charset_get_contractions(cs, 0);
+  my_bool have_contractions= my_cs_have_contractions(cs);
 
   for ( ; charlen > 0; charlen--)
   {
@@ -1013,8 +922,8 @@ my_like_range_generic(const CHARSET_INFO *cs,
       goto pad_min_max;
     }
 
-    if (contractions &&
-        my_uca_can_be_contraction_head(contractions, wc) &&
+    if (have_contractions &&
+        my_cs_can_be_contraction_head(cs, wc) &&
         (res= cs->cset->mb_wc(cs, &wc2, (uchar*) ptr, (uchar*) end)) > 0)
     {
       uint16 *weight;
@@ -1025,8 +934,8 @@ my_like_range_generic(const CHARSET_INFO *cs,
         goto pad_min_max;
       }
 
-      if (my_uca_can_be_contraction_tail(contractions, wc2) &&
-          (weight= my_uca_contraction2_weight(contractions, wc, wc2)) && weight[0])
+      if (my_cs_can_be_contraction_tail(cs, wc2) &&
+          (weight= my_cs_contraction2_weight(cs, wc, wc2)) && weight[0])
       {
         /* Contraction found */
         if (charlen == 1)
@@ -1092,12 +1001,10 @@ pad_min_max:
 }
 
 
-static
-int
-my_wildcmp_mb_bin_impl(const CHARSET_INFO *cs,
-                       const char *str,const char *str_end,
-                       const char *wildstr,const char *wildend,
-                       int escape, int w_one, int w_many, int recurse_level)
+static int my_wildcmp_mb_bin_impl(CHARSET_INFO *cs,
+                                  const char *str,const char *str_end,
+                                  const char *wildstr,const char *wildend,
+                                  int escape, int w_one, int w_many, int recurse_level)
 {
   int result= -1;				/* Not found, using wildcards */
 
@@ -1191,7 +1098,7 @@ my_wildcmp_mb_bin_impl(const CHARSET_INFO *cs,
 	{
 	  int tmp=my_wildcmp_mb_bin_impl(cs,str,str_end,
                                          wildstr,wildend,escape,
-                                         w_one,w_many, recurse_level + 1);
+                                         w_one,w_many, recurse_level+1);
 	  if (tmp <= 0)
 	    return (tmp);
 	}
@@ -1203,7 +1110,7 @@ my_wildcmp_mb_bin_impl(const CHARSET_INFO *cs,
 }
 
 int
-my_wildcmp_mb_bin(const CHARSET_INFO *cs,
+my_wildcmp_mb_bin(CHARSET_INFO *cs,
                   const char *str,const char *str_end,
                   const char *wildstr,const char *wildend,
                   int escape, int w_one, int w_many)
@@ -1423,7 +1330,7 @@ static struct {int page; char *p;} utr11_data[256]=
 };
 
 
-size_t my_numcells_mb(const CHARSET_INFO *cs, const char *b, const char *e)
+size_t my_numcells_mb(CHARSET_INFO *cs, const char *b, const char *e)
 {
   my_wc_t wc;
   size_t clen= 0;
@@ -1432,14 +1339,9 @@ size_t my_numcells_mb(const CHARSET_INFO *cs, const char *b, const char *e)
   {
     int mb_len;
     uint pg;
-    if ((mb_len= cs->cset->mb_wc(cs, &wc, (uchar*) b, (uchar*) e)) <= 0 ||
-        wc > 0xFFFF)
+    if ((mb_len= cs->cset->mb_wc(cs, &wc, (uchar*) b, (uchar*) e)) <= 0)
     {
-      /*
-        Let's think a wrong sequence takes 1 dysplay cell.
-        Also, consider supplementary characters as taking one cell.
-      */
-      mb_len= 1;
+      mb_len= 1; /* Let's think a wrong sequence takes 1 dysplay cell */
       b++;
       continue;
     }
@@ -1460,7 +1362,7 @@ size_t my_numcells_mb(const CHARSET_INFO *cs, const char *b, const char *e)
 }
 
 
-int my_mb_ctype_mb(const CHARSET_INFO *cs, int *ctype,
+int my_mb_ctype_mb(CHARSET_INFO *cs, int *ctype,
                    const uchar *s, const uchar *e)
 {
   my_wc_t wc;
@@ -1480,7 +1382,7 @@ MY_COLLATION_HANDLER my_collation_mb_bin_handler =
     NULL,		/* init */
     my_strnncoll_mb_bin,
     my_strnncollsp_mb_bin,
-    my_strnxfrm_mb,
+    my_strnxfrm_mb_bin,
     my_strnxfrmlen_simple,
     my_like_range_mb,
     my_wildcmp_mb_bin,

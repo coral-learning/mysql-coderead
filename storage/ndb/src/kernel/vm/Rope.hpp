@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003, 2005, 2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef NDB_ROPE_HPP
 #define NDB_ROPE_HPP
@@ -43,15 +42,14 @@ public:
   ~ConstRope(){
   }
 
-  Uint32 size() const;
+  size_t size() const;
   bool empty() const;
 
   void copy(char* buf) const;
   
-  int compare(const char * s) const { return compare(s, (Uint32)strlen(s) + 1);}
-  int compare(const char *, Uint32 len) const; 
-
-  bool equal(const ConstRope& r2) const;
+  int compare(const char * s) const { return compare(s, strlen(s) + 1); }
+  int compare(const char *, size_t len) const; 
+  
 private:
   const RopeHandle & src;
 };
@@ -70,30 +68,29 @@ public:
     src.m_hash = m_hash;
   }
 
-  Uint32 size() const;
+  size_t size() const;
   bool empty() const;
 
   void copy(char* buf) const;
   
-  int compare(const char * s) const { return compare(s, Uint32(strlen(s) + 1));}
-  int compare(const char *, Uint32 len) const; 
+  int compare(const char * s) const { return compare(s, strlen(s) + 1); }
+  int compare(const char *, size_t len) const; 
   
-  bool assign(const char * s) { return assign(s, Uint32(strlen(s) + 1));}
-  bool assign(const char * s, Uint32 l) { return assign(s, l, hash(s, l));}
-  bool assign(const char *, Uint32 len, Uint32 hash);
+  bool assign(const char * s) { return assign(s, strlen(s) + 1);}
+  bool assign(const char * s, size_t l) { return assign(s, l, hash(s, l));}
+  bool assign(const char *, size_t len, Uint32 hash);
 
   void erase();
   
   static Uint32 hash(const char * str, Uint32 len);
 
-  static Uint32 getSegmentSize() { return RopeBase::getSegmentSize();}
 private:
   Uint32 m_hash;
   RopeHandle & src;
 };
 
 inline
-Uint32
+size_t
 Rope::size() const {
   return head.used;
 }
@@ -105,7 +102,7 @@ Rope::empty() const {
 }
 
 inline
-Uint32
+size_t
 ConstRope::size() const {
   return head.used;
 }

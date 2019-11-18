@@ -1,6 +1,4 @@
-/*
-   Copyright (C) 2005, 2006, 2008 MySQL AB
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include <ndb_global.h>
 #include <ndb_opts.h>
@@ -76,7 +73,7 @@ static int copy_events(Ndb *ndb)
     }
     int error= 0;
     NdbEventOperation *pOp;
-    while ((pOp= ndb->nextEvent()))
+    while ((pOp= ndb->nextEvent(&error)))
     {
       char buf[1024];
       sprintf(buf, "%s_SHADOW", pOp->getTable()->getName());
@@ -254,12 +251,14 @@ static int verify_copy(Ndb *ndb,
   return 0;
 }
 
+NDB_STD_OPTS_VARS;
+
 static const char* _dbname = "TEST_DB";
-struct my_option my_long_options[] =
+static struct my_option my_long_options[] =
 {
   NDB_STD_OPTS(""),
   { "database", 'd', "Name of database table is in",
-    (uchar**) &_dbname, (uchar**) &_dbname, 0,
+    &_dbname, &_dbname, 0,
     GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0 },
   { 0, 0, 0, 0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0}
 };

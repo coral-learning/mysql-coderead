@@ -1,5 +1,6 @@
 /*
-   Copyright (c) 2007, 2010, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2007 MySQL AB
+   Use is subject to license terms.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -20,11 +21,23 @@
 #include <ndb_opts.h>
 #include <NDBT.hpp>
 
+NDB_STD_OPTS_VARS;
+
 static struct my_option my_long_options[] =
 {
-  NDB_STD_OPTS("eventlog"),
+  NDB_STD_OPTS("ndb_logevent_listen"),
   { 0, 0, 0, 0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0}
 };
+static void usage()
+{
+  char desc[] = 
+    "tabname\n"\
+    "This program list all properties of table(s) in NDB Cluster.\n"\
+    "  ex: desc T1 T2 T4\n";
+  ndb_std_print_version();
+  my_print_help(my_long_options);
+  my_print_variables(my_long_options);
+}
 
 int filter[] = { 15, NDB_MGM_EVENT_CATEGORY_BACKUP,
 		 15, NDB_MGM_EVENT_CATEGORY_CONNECTION,
@@ -37,11 +50,6 @@ int filter[] = { 15, NDB_MGM_EVENT_CATEGORY_BACKUP,
 		 15, NDB_MGM_EVENT_CATEGORY_CONGESTION,
 		 0 };
 
-extern "C"
-void catch_signal(int signum)
-{
-}
-
 int 
 main(int argc, char** argv)
 {
@@ -50,21 +58,14 @@ main(int argc, char** argv)
   load_defaults("my",load_default_groups,&argc,&argv);
   int ho_error;
 #ifndef DBUG_OFF
-  opt_debug= "d:t:O,/tmp/eventlog.trace";
+  opt_debug= "d:t:O,/tmp/ndb_desc.trace";
 #endif
-
-#ifndef _WIN32
-  // Catching signal to allow testing of EINTR safeness
-  // with "while killall -USR1 eventlog; do true; done"
-  signal(SIGUSR1, catch_signal);
-#endif
-
   if ((ho_error=handle_options(&argc, &argv, my_long_options, 
 			       ndb_std_get_one_option)))
     return NDBT_ProgramExit(NDBT_WRONGARGS);
 
   NdbMgmHandle handle= ndb_mgm_create_handle();
-  ndb_mgm_set_connectstring(handle, opt_ndb_connectstring);
+  ndb_mgm_set_connectstring(handle, opt_connect_str);
   
   while (true)
   {

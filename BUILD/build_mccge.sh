@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Copyright (c) 2008, 2012, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2008, 2011, Oracle and/or its affiliates. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Library General Public
@@ -431,7 +431,7 @@ extended_usage()
 
     In all cases it is possible to override the definition of CC and CXX
     by calling the script as follows:
-    CC="/usr/local/bin/gcc" CXX="/usr/local/bin/g++" BUILD/build_mccge.sh
+    CC="/usr/local/bin/gcc" CXX="/usr/local/bin/gcc" BUILD/build_mccge.sh
 
   Feedback profiler on gcc
   ------------------------
@@ -1179,7 +1179,7 @@ set_with_debug_flags()
 {
   if test "x$with_debug_flag" = "xyes" ; then
     if test "x$developer_flag" = "xyes" ; then
-      loc_debug_flags="-DEXTRA_DEBUG -DFORCE_INIT_OF_VARS "
+      loc_debug_flags="-DUNIV_MUST_NOT_INLINE -DEXTRA_DEBUG -DFORCE_INIT_OF_VARS "
       compiler_flags="$compiler_flags $loc_debug_flags"
     fi
     compiler_flags="$compiler_flags $extra_debug_flags"
@@ -1333,7 +1333,9 @@ set_classic_package()
 #
 set_readline_package()
 {
-   if test -d "$path/../cmd-line-utils/libedit" ; then
+  if test -d "$path/../cmd-line-utils/readline" && test "x$gpl" = "xyes" ; then
+    base_configs="$base_configs --with-readline"
+  elif test -d "$path/../cmd-line-utils/libedit" ; then
     base_configs="$base_configs --with-libedit"
   fi
 }
@@ -1366,10 +1368,10 @@ set_icc_special_options()
 set_cc_and_cxx_for_gcc()
 {
   if test "x$CC" = "x" ; then
-    CC="gcc -static-libgcc"
+    CC="gcc -static-libgcc -fno-exceptions"
   fi
   if test "x$CXX" = "x" ; then
-    CXX="g++ -static-libgcc"
+    CXX="gcc -static-libgcc -fno-exceptions"
   fi
 }
 
@@ -1386,10 +1388,10 @@ set_cc_and_cxx_for_icc()
 set_cc_and_cxx_for_open64()
 {
   if test "x$CC" = "x" ; then
-    CC="opencc -static-libgcc"
+    CC="opencc -static-libgcc -fno-exceptions"
   fi
   if test "x$CXX" = "x" ; then
-    CXX="openCC -static-libgcc"
+    CXX="openCC -static-libgcc -fno-exceptions"
   fi
 }
 
@@ -1687,6 +1689,7 @@ set_solaris_configs()
     fi
     if test "x$cpu_base_type" = "xx86" ; then
       compiler_flags="$compiler_flags -nofstore"
+      base_cxx_flags="$base_cxx_flags -features=no%except"
       if test "x$fast_flag" = "xyes" ; then
         compiler_flags="$compiler_flags -xregs=frameptr"
         compiler_flags="$compiler_flags -xO4"
@@ -1702,6 +1705,7 @@ set_solaris_configs()
 #Using SPARC cpu with SunStudio (Forte) compiler
       ASFLAGS="$ASFLAGS -xarch=sparc"
       LDFLAGS="$LDFLAGS -xarch=sparc"
+      base_cxxflags="$base_cxxflags -noex"
       base_cflags="$base_cflags -xstrconst"
       compiler_flags="$compiler_flags -xarch=sparc"
       if test "x$fast_flag" = "xyes" ; then

@@ -165,7 +165,6 @@ our $exe_mysqldump;
 our $exe_mysqlslap;
 our $exe_mysqlimport;
 our $exe_mysqlshow;
-our $exe_mysql_config_editor;
 our $file_mysql_fix_privilege_tables;
 our $exe_mysqltest;
 our $exe_ndbd;
@@ -1658,8 +1657,6 @@ sub executable_setup () {
   $exe_mysqlbinlog=    mtr_exe_exists("$path_client_bindir/mysqlbinlog");
   $exe_mysqladmin=     mtr_exe_exists("$path_client_bindir/mysqladmin");
   $exe_mysql=          mtr_exe_exists("$path_client_bindir/mysql");
-  $exe_mysql_config_editor=
-                       mtr_exe_exists("$path_client_bindir/mysql_config_editor");
 
   if (!$opt_extern)
   {
@@ -2098,20 +2095,6 @@ sub environment_setup () {
       " --debug=d:t:A,$path_vardir_trace/log/mysqlshow.trace";
   }
   $ENV{'MYSQL_SHOW'}= $cmdline_mysqlshow;
-
-  # ----------------------------------------------------
-  # Setup env so childs can execute mysql_config_editor
-  # ----------------------------------------------------
-  my $cmdline_mysql_config_editor=
-    mtr_native_path($exe_mysql_config_editor) . " ";
-
-  if ( $opt_debug )
-  {
-    $cmdline_mysql_config_editor .=
-      " --debug=d:t:A,$path_vardir_trace/log/mysql_config_editor.trace";
-  }
-  $ENV{'MYSQL_CONFIG_EDITOR'}= $cmdline_mysql_config_editor;
-
 
   # ----------------------------------------------------
   # Setup env so childs can execute mysqlbinlog
@@ -2910,7 +2893,7 @@ sub run_benchmarks ($) {
 
   if ( ! $benchmark )
   {
-    mtr_add_arg($args, "--general-log");
+    mtr_add_arg($args, "--log");
     mtr_run("$glob_mysql_bench_dir/run-all-tests", $args, "", "", "", "");
     # FIXME check result code?!
   }
@@ -3181,7 +3164,7 @@ sub install_db ($$) {
   my $bootstrap_sql_file= "$opt_vardir/tmp/bootstrap.sql";
 
   # Use the mysql database for system tables
-  mtr_tofile($bootstrap_sql_file, "use mysql;\n");
+  mtr_tofile($bootstrap_sql_file, "use mysql");
 
   # Add the offical mysql system tables
   # for a production system
@@ -3940,12 +3923,10 @@ sub mysqld_arguments ($$$$) {
   }
 
   my $log_base_path= "$opt_vardir/log/$mysqld->{'type'}$sidx";
-
-  mtr_add_arg($args, "%s--general-log", $prefix);
-  mtr_add_arg($args, "%s--general-log-file=%s.log", $prefix, $log_base_path);
-  mtr_add_arg($args, "%s--slow-query-log", $prefix);
+  mtr_add_arg($args, "%s--log=%s.log", $prefix, $log_base_path);
   mtr_add_arg($args,
-              "%s--slow-query-log-file=%s-slow.log", $prefix, $log_base_path);
+	      "%s--log-slow-queries=%s-slow.log", $prefix, $log_base_path);
+
   # Check if "extra_opt" contains --skip-log-bin
   my $skip_binlog= grep(/^--skip-log-bin/, @$extra_opt, @opt_extra_mysqld_opt);
   if ( $mysqld->{'type'} eq 'master' )
@@ -3986,6 +3967,7 @@ sub mysqld_arguments ($$$$) {
     mtr_error("unknown mysqld type")
       unless $mysqld->{'type'} eq 'slave';
 
+    mtr_add_arg($args, "%s--init-rpl-role=slave", $prefix);
     if (! ( $opt_skip_slave_binlog || $skip_binlog ))
     {
       mtr_add_arg($args, "%s--log-bin=%s/log/slave%s-bin", $prefix,
@@ -4042,7 +4024,9 @@ sub mysqld_arguments ($$$$) {
 #    	            $master->[0]->{'port'}); # First master
 #      }
       my $slave_server_id=  2 + $idx;
+      my $slave_rpl_rank= $slave_server_id;
       mtr_add_arg($args, "%s--server-id=%d", $prefix, $slave_server_id);
+      mtr_add_arg($args, "%s--rpl-recovery-rank=%d", $prefix, $slave_rpl_rank);
     }
 
     my $cluster= $clusters->[$mysqld->{'cluster'}];
@@ -4118,7 +4102,12 @@ sub mysqld_arguments ($$$$) {
     mtr_add_arg($args, "%s%s", $prefix, "--core-file");
   }
 
-  if ( !$opt_bench and $mysqld->{'type'} eq 'master' )
+  if ( $opt_bench )
+  {
+    mtr_add_arg($args, "%s--rpl-recovery-rank=1", $prefix);
+    mtr_add_arg($args, "%s--init-rpl-role=master", $prefix);
+  }
+  elsif ( $mysqld->{'type'} eq 'master' )
   {
     mtr_add_arg($args, "%s--open-files-limit=1024", $prefix);
   }

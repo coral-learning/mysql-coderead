@@ -1,4 +1,5 @@
-/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2001, 2003, 2005-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 /*
   Advanced symlink handling.
@@ -56,18 +57,14 @@ File my_create_with_symlink(const char *linkname, const char *filename,
   {
     if (!access(filename,F_OK))
     {
-      char errbuf[MYSYS_STRERROR_SIZE];
       my_errno= errno= EEXIST;
-      my_error(EE_CANTCREATEFILE, MYF(0), filename,
-               EEXIST, my_strerror(errbuf, sizeof(errbuf), EEXIST));
+      my_error(EE_CANTCREATEFILE, MYF(0), filename, EEXIST);
       DBUG_RETURN(-1);
     }
     if (create_link && !access(linkname,F_OK))
     {
-      char errbuf[MYSYS_STRERROR_SIZE];
       my_errno= errno= EEXIST;
-      my_error(EE_CANTCREATEFILE, MYF(0), linkname,
-               EEXIST, my_strerror(errbuf, sizeof(errbuf), EEXIST));
+      my_error(EE_CANTCREATEFILE, MYF(0), linkname, EEXIST);
       DBUG_RETURN(-1);
     }
   }
@@ -148,11 +145,7 @@ int my_rename_with_symlink(const char *from, const char *to, myf MyFlags)
   {
     my_errno= EEXIST;
     if (MyFlags & MY_WME)
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      my_error(EE_CANTCREATEFILE, MYF(0), tmp_name,
-               EEXIST, my_strerror(errbuf, sizeof(errbuf), EEXIST));
-    }
+      my_error(EE_CANTCREATEFILE, MYF(0), tmp_name, EEXIST);
     DBUG_RETURN(1);
   }
 

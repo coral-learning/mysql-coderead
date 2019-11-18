@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2006, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2006, 2017, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,12 +11,11 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
 */
 
 #include "client_priv.h"
-#include "my_default.h"
 #include <sslopt-vars.h>
 #include "../scripts/mysql_fix_privilege_tables_sql.c"
 
@@ -106,7 +105,7 @@ static struct my_option my_long_options[]=
   {"password", 'p',
    "Password to use when connecting to server. If password is not given,"
    " it's solicited on the tty.", &opt_password,&opt_password,
-   0, GET_PASSWORD, OPT_ARG, 0, 0, 0, 0, 0, 0},
+   0, GET_STR, OPT_ARG, 0, 0, 0, 0, 0, 0},
 #ifdef __WIN__
   {"pipe", 'W', "Use named pipes to connect to server.", 0, 0, 0,
    GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0},
@@ -150,10 +149,10 @@ static struct my_option my_long_options[]=
    &opt_verbose, &opt_verbose, 0,
    GET_BOOL, NO_ARG, 1, 0, 0, 0, 0, 0},
   {"write-binlog", OPT_WRITE_BINLOG,
-   "All commands including mysqlcheck are binlogged. Disabled by default; "
-   "use when commands should be sent to replication slaves.",
+   "All commands including mysqlcheck are binlogged. Enabled by default;"
+   "use --skip-write-binlog when commands should not be sent to replication slaves.",
    &opt_write_binlog, &opt_write_binlog, 0, GET_BOOL, NO_ARG,
-   0, 0, 0, 0, 0, 0},
+   1, 0, 0, 0, 0, 0},
   {0, 0, 0, 0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0}
 };
 
@@ -184,7 +183,6 @@ static void die(const char *fmt, ...)
   }
   va_end(args);
 
-  DBUG_LEAVE;
   free_used_memory();
   my_end(my_end_arg);
   exit(1);
@@ -228,7 +226,6 @@ static void add_one_option(DYNAMIC_STRING* ds,
     eq= "=";
     switch (opt->var_type & GET_TYPE_MASK) {
     case GET_STR:
-    case GET_PASSWORD:
       arg= argument;
       break;
     case GET_BOOL:
@@ -337,11 +334,6 @@ static int run_command(char* cmd,
   FILE *res_file;
   int error;
 
-  if (! ds_res)
-  {
-    fflush(stdout);
-    fflush(stderr);
-  }
   if (!(res_file= popen(cmd, "r")))
     die("popen(\"%s\", \"r\") failed", cmd);
 
@@ -358,12 +350,6 @@ static int run_command(char* cmd,
       /* Print it directly on screen */
       fprintf(stdout, "%s", buf);
     }
-  }
-
-  if (! ds_res)
-  {
-    fflush(stdout);
-    fflush(stderr);
   }
 
   error= pclose(res_file);
@@ -401,9 +387,11 @@ static int run_tool(char *tool_path, DYNAMIC_STRING *ds_res, ...)
 
   va_end(args);
 
+#if defined(HAVE_OPENSSL) && !defined(EMBEDDED_LIBRARY)
   /* If given --ssl-mode=REQUIRED propagate it to the tool. */
-  if (opt_ssl_required)
+  if (opt_ssl_mode == SSL_MODE_REQUIRED)
     dynstr_append(&ds_cmdline, "--ssl-mode=REQUIRED");
+#endif
 
 #ifdef __WIN__
   dynstr_append(&ds_cmdline, "\"");
@@ -579,7 +567,7 @@ static int extract_variable_from_show(DYNAMIC_STRING* ds, char* value)
   if ((value_end= strchr(value_start, '\n')) == NULL)
     return 1; /* Unexpected result */
 
-  len= (size_t) MY_MIN(FN_REFLEN, value_end-value_start);
+  len= (size_t) min(FN_REFLEN, value_end-value_start);
   strncpy(value, value_start, len);
   value[len]= '\0';
   return 0;
@@ -643,7 +631,7 @@ static int upgrade_already_done(void)
     Read from file, don't care if it fails since it
     will be detected by the strncmp
   */
-  memset(buf, 0, sizeof(buf));
+  bzero(buf, sizeof(buf));
   res= fgets(buf, sizeof(buf), in);
 
   my_fclose(in, MYF(0));
@@ -729,7 +717,6 @@ static int run_mysqlcheck_upgrade(void)
                   ds_args.str,
                   "--check-upgrade",
                   "--all-databases",
-                  "--skip-database=mysql",
                   "--auto-repair",
                   opt_write_binlog ? "--write-binlog" : "--skip-write-binlog",
                   NULL);
@@ -744,45 +731,13 @@ static int run_mysqlcheck_fixnames(void)
                   "--no-defaults",
                   ds_args.str,
                   "--all-databases",
-                  "--skip-database=mysql",
                   "--fix-db-names",
                   "--fix-table-names",
                   opt_write_binlog ? "--write-binlog" : "--skip-write-binlog",
                   NULL);
 }
 
-/** performs the same operation as mysqlcheck_upgrade, but on the mysql db */
-static int run_mysqlcheck_mysql_db_upgrade(void)
-{
-  print_conn_args("mysqlcheck");
-  return run_tool(mysqlcheck_path,
-                  NULL, /* Send output from mysqlcheck directly to screen */
-                  "--no-defaults",
-                  ds_args.str,
-                  "--check-upgrade",
-                  "--databases",
-                  "--auto-repair",
-                  opt_write_binlog ? "--write-binlog" : "--skip-write-binlog",
-                  "mysql",
-                  NULL);
-}
 
-
-/** performs the same operation as mysqlcheck_fixnames, but on the mysql db */
-static int run_mysqlcheck_mysql_db_fixnames(void)
-{
-  print_conn_args("mysqlcheck");
-  return run_tool(mysqlcheck_path,
-                  NULL, /* Send output from mysqlcheck directly to screen */
-                  "--no-defaults",
-                  ds_args.str,
-                  "--databases",
-                  "--fix-db-names",
-                  "--fix-table-names",
-                  opt_write_binlog ? "--write-binlog" : "--skip-write-binlog",
-                  "mysql",
-                  NULL);
-}
 static const char *expected_errors[]=
 {
   "ERROR 1060", /* Duplicate column name */
@@ -841,35 +796,17 @@ static void print_line(char* line)
 static int run_sql_fix_privilege_tables(void)
 {
   int found_real_errors= 0;
-  const char **query_ptr;
-  DYNAMIC_STRING ds_script;
   DYNAMIC_STRING ds_result;
   DBUG_ENTER("run_sql_fix_privilege_tables");
-
-  if (init_dynamic_string(&ds_script, "", 65536, 1024))
-    die("Out of memory");
 
   if (init_dynamic_string(&ds_result, "", 512, 512))
     die("Out of memory");
 
   verbose("Running 'mysql_fix_privilege_tables'...");
-
-  /*
-    Individual queries can not be executed independently by invoking
-    a forked mysql client, because the script uses session variables
-    and prepared statements.
-  */
-  for ( query_ptr= &mysql_fix_privilege_tables[0];
-        *query_ptr != NULL;
-        query_ptr++
-      )
-  {
-    dynstr_append(&ds_script, *query_ptr);
-  }
-
-  run_query(ds_script.str,
+  run_query(mysql_fix_privilege_tables,
             &ds_result, /* Collect result */
             TRUE);
+
   {
     /*
       Scan each line of the result for real errors
@@ -886,8 +823,7 @@ static int run_sql_fix_privilege_tables(void)
         found_real_errors++;
         print_line(line);
       }
-      else if ((strncmp(line, "WARNING", 7) == 0) ||
-               (strncmp(line, "Warning", 7) == 0))
+      else if (strncmp(line, "WARNING", 7) == 0)
       {
         print_line(line);
       }
@@ -895,8 +831,7 @@ static int run_sql_fix_privilege_tables(void)
   }
 
   dynstr_free(&ds_result);
-  dynstr_free(&ds_script);
-  DBUG_RETURN(found_real_errors);
+  return found_real_errors;
 }
 
 
@@ -933,6 +868,7 @@ static int check_version_match(void)
 
   if (init_dynamic_string(&ds_version, NULL, NAME_CHAR_LEN, NAME_CHAR_LEN))
     die("Out of memory");
+
 
   if (run_query("show variables like 'version'", &ds_version, FALSE))
   {
@@ -980,10 +916,8 @@ int main(int argc, char **argv)
       init_dynamic_string(&conn_args, "", 512, 256))
     die("Out of memory");
 
-  my_getopt_use_args_separator= TRUE;
   if (load_defaults("my", load_default_groups, &argc, &argv))
     die(NULL);
-  my_getopt_use_args_separator= FALSE;
   defaults_argv= argv; /* Must be freed by 'free_defaults' */
 
   if (handle_options(&argc, &argv, my_long_options, get_one_option))
@@ -1034,41 +968,21 @@ int main(int argc, char **argv)
 
   /*
     Run "mysqlcheck" and "mysql_fix_privilege_tables.sql"
-    First run mysqlcheck on the system database.
-    Then do the upgrade.
-    And then run mysqlcheck on all tables.
   */
   if (!opt_systables_only)
   {
-    if (run_mysqlcheck_mysql_db_fixnames())
-    {
-      die("Error during call to mysql_check for fixing the db/tables names on "
-          "mysql db");
-    }
-    if (run_mysqlcheck_mysql_db_upgrade())
-    {
-      die("Error during call to mysql_check for upgrading the tables names on "
-          "mysql db");
-    }
+    if (run_mysqlcheck_fixnames())
+      die("Error during call to mysql_check for fixing the db/tables names.");
+
+    if (run_mysqlcheck_upgrade())
+      die("Error during call to mysql_check for upgrading the tables names.");
   }
+
   if (run_sql_fix_privilege_tables())
   {
     /* Specific error msg (if present) would be printed in the function call
      * above */
     die("Upgrade failed");
-  }
-  if (!opt_systables_only)
-  {
-    if (run_mysqlcheck_fixnames())
-    {
-      die("Error during call to mysql_check for fixing the db/tables names on "
-          "all db(s) except mysql");
-    }
-    if (run_mysqlcheck_upgrade())
-    {
-      die("Error during call to mysql_check for upgrading the tables names on "
-          "all db(s) except mysql");
-    }
   }
   verbose("OK");
 

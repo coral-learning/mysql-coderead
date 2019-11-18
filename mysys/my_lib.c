@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -20,10 +20,33 @@
 #include	<m_string.h>
 #include	<my_dir.h>	/* Structs used by my_dir,includes sys/types */
 #include	"mysys_err.h"
-#if !defined(_WIN32)
+#if defined(HAVE_DIRENT_H)
 # include <dirent.h>
+# define NAMLEN(dirent) strlen((dirent)->d_name)
+#else
+# define dirent direct
+# define NAMLEN(dirent) (dirent)->d_namlen
+# if defined(HAVE_SYS_NDIR_H)
+#  include <sys/ndir.h>
 # endif
+# if defined(HAVE_SYS_DIR_H)
+#  include <sys/dir.h>
+# endif
+# if defined(HAVE_NDIR_H)
+#  include <ndir.h>
+# endif
+# if defined(_WIN32)
+# ifdef __BORLANDC__
+# include <dir.h>
+# endif
+# endif
+#endif
 
+#if defined(HAVE_READDIR_R)
+#define READDIR(A,B,C) ((errno=readdir_r(A,B,&C)) != 0 || !C)
+#else
+#define READDIR(A,B,C) (!(C=readdir(A)))
+#endif
 
 /*
   We are assuming that directory we are reading is either has less than 
@@ -65,8 +88,6 @@ static int comp_names(struct fileinfo *a, struct fileinfo *b)
 
 #if !defined(_WIN32)
 
-static char* directory_file_name(char *dst, const char *src);
-
 MY_DIR	*my_dir(const char *path, myf MyFlags)
 {
   char          *buffer;
@@ -75,11 +96,16 @@ MY_DIR	*my_dir(const char *path, myf MyFlags)
   DYNAMIC_ARRAY *dir_entries_storage;
   MEM_ROOT      *names_storage;
   DIR		*dirp;
+  struct dirent *dp;
   char		tmp_path[FN_REFLEN + 2], *tmp_file;
-  const struct dirent *dp;
+  char	dirent_tmp[sizeof(struct dirent)+_POSIX_PATH_MAX+1];
 
   DBUG_ENTER("my_dir");
   DBUG_PRINT("my",("path: '%s' MyFlags: %d",path,MyFlags));
+
+#if !defined(HAVE_READDIR_R)
+  mysql_mutex_lock(&THR_LOCK_open);
+#endif
 
   dirp = opendir(directory_file_name(tmp_path,(char *) path));
 #if defined(__amiga__)
@@ -109,7 +135,9 @@ MY_DIR	*my_dir(const char *path, myf MyFlags)
 
   tmp_file=strend(tmp_path);
 
-  for (dp= readdir(dirp) ; dp; dp= readdir(dirp))
+  dp= (struct dirent*) dirent_tmp;
+  
+  while (!(READDIR(dirp,(struct dirent*) dirent_tmp,dp)))
   {
     if (!(finfo.name= strdup_root(names_storage, dp->d_name)))
       goto error;
@@ -120,7 +148,7 @@ MY_DIR	*my_dir(const char *path, myf MyFlags)
                                                sizeof(MY_STAT))))
         goto error;
       
-      memset(finfo.mystat, 0, sizeof(MY_STAT));
+      bzero(finfo.mystat, sizeof(MY_STAT));
       (void) strmov(tmp_file,dp->d_name);
       (void) my_stat(tmp_path, finfo.mystat, MyFlags);
       if (!(finfo.mystat->st_mode & MY_S_IREAD))
@@ -134,7 +162,9 @@ MY_DIR	*my_dir(const char *path, myf MyFlags)
   }
 
   (void) closedir(dirp);
-
+#if !defined(HAVE_READDIR_R)
+  mysql_mutex_unlock(&THR_LOCK_open);
+#endif
   result->dir_entry= (FILEINFO *)dir_entries_storage->buffer;
   result->number_off_files= dir_entries_storage->elements;
   
@@ -144,16 +174,15 @@ MY_DIR	*my_dir(const char *path, myf MyFlags)
   DBUG_RETURN(result);
 
  error:
+#if !defined(HAVE_READDIR_R)
+  mysql_mutex_unlock(&THR_LOCK_open);
+#endif
   my_errno=errno;
   if (dirp)
     (void) closedir(dirp);
   my_dirend(result);
   if (MyFlags & (MY_FAE | MY_WME))
-  {
-    char errbuf[MYSYS_STRERROR_SIZE];
-    my_error(EE_DIR, MYF(ME_BELL+ME_WAITTANG), path,
-             my_errno, my_strerror(errbuf, sizeof(errbuf), my_errno));
-  }
+    my_error(EE_DIR,MYF(ME_BELL+ME_WAITTANG),path,my_errno);
   DBUG_RETURN((MY_DIR *) NULL);
 } /* my_dir */
 
@@ -165,7 +194,7 @@ MY_DIR	*my_dir(const char *path, myf MyFlags)
  * Returns pointer to dst;
  */
 
-static char* directory_file_name(char *dst, const char *src)
+char * directory_file_name (char * dst, const char *src)
 {
   /* Process as Unix format: just remove test the final slash. */
   char *end;
@@ -291,7 +320,7 @@ MY_DIR	*my_dir(const char *path, myf MyFlags)
                                                  sizeof(MY_STAT))))
           goto error;
 
-        memset(finfo.mystat, 0, sizeof(MY_STAT));
+        bzero(finfo.mystat, sizeof(MY_STAT));
 #ifdef __BORLANDC__
         finfo.mystat->st_size=find.ff_fsize;
 #else
@@ -340,11 +369,7 @@ error:
 #endif
   my_dirend(result);
   if (MyFlags & MY_FAE+MY_WME)
-  {
-    char errbuf[MYSYS_STRERROR_SIZE];
-    my_error(EE_DIR, MYF(ME_BELL+ME_WAITTANG), path,
-             errno, my_strerror(errbuf, sizeof(errbuf), errno));
-  }
+    my_error(EE_DIR,MYF(ME_BELL+ME_WAITTANG),path,errno);
   DBUG_RETURN((MY_DIR *) NULL);
 } /* my_dir */
 
@@ -357,7 +382,7 @@ error:
 
 
 int my_fstat(File Filedes, MY_STAT *stat_area,
-             myf MyFlags MY_ATTRIBUTE((unused)))
+             myf MyFlags __attribute__((unused)))
 {
   DBUG_ENTER("my_fstat");
   DBUG_PRINT("my",("fd: %d  MyFlags: %d", Filedes, MyFlags));
@@ -371,12 +396,12 @@ int my_fstat(File Filedes, MY_STAT *stat_area,
 
 MY_STAT *my_stat(const char *path, MY_STAT *stat_area, myf my_flags)
 {
-  const int m_used= (stat_area == NULL);
+  int m_used;
   DBUG_ENTER("my_stat");
   DBUG_PRINT("my", ("path: '%s'  stat_area: 0x%lx  MyFlags: %d", path,
                     (long) stat_area, my_flags));
 
-  if (m_used)
+  if ((m_used= (stat_area == NULL)))
     if (!(stat_area= (MY_STAT *) my_malloc(sizeof(MY_STAT), my_flags)))
       goto error;
 #ifndef _WIN32
@@ -394,9 +419,7 @@ MY_STAT *my_stat(const char *path, MY_STAT *stat_area, myf my_flags)
 error:
   if (my_flags & (MY_FAE+MY_WME))
   {
-    char errbuf[MYSYS_STRERROR_SIZE];
-    my_error(EE_STAT, MYF(ME_BELL+ME_WAITTANG), path,
-             my_errno, my_strerror(errbuf, sizeof(errbuf), my_errno));
+    my_error(EE_STAT, MYF(ME_BELL+ME_WAITTANG),path,my_errno);
     DBUG_RETURN((MY_STAT *) NULL);
   }
   DBUG_RETURN((MY_STAT *) NULL);

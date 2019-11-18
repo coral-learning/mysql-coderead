@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2004-2006 MySQL AB, 2008-2010 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include <ndb_global.h>
 #include <NdbMain.h>
@@ -365,7 +363,7 @@ wl1822_tx2_scanXY(Thr& thr)
   assert(con != 0);
   NdbScanOperation* scanop;
   NdbIndexScanOperation* indexscanop;
-
+  NdbResultSet* rs;
   if (wl1822_scantx == 't') {
     CHN(con, (scanop = thr.m_scanop = con->getNdbScanOperation(g_opt.m_tname)) != 0);
     DBG("tx2 scan exclusive " << g_opt.m_tname);
@@ -458,7 +456,7 @@ wl1822_main(char scantx)
   static const unsigned thrcount = 2;
   // create threads for tx1 and tx2
   Thr* thrlist[2];
-  unsigned n;
+  int n;
   for (n = 0; n < thrcount; n++) {
     Thr& thr = *(thrlist[n] = new Thr(1 + n));
     CHK(thr.m_ret == 0);
@@ -513,9 +511,10 @@ NDB_COMMAND(testOdbcDriver, "testDeadlock", "testDeadlock", "testDeadlock", 6553
   }
   g_cluster_connection= &con;
   
-  if ((strchr(g_opt.m_scan, 't') != 0 && wl1822_main('t') == -1) ||
-      (strchr(g_opt.m_scan, 'x') != 0 && wl1822_main('x') == -1))
-  {
+  if (
+      strchr(g_opt.m_scan, 't') != 0 && wl1822_main('t') == -1 ||
+      strchr(g_opt.m_scan, 'x') != 0 && wl1822_main('x') == -1
+      ) {
     return NDBT_ProgramExit(NDBT_FAILED);
   }
   return NDBT_ProgramExit(NDBT_OK);

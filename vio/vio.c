@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -22,31 +22,29 @@
 
 #include "vio_priv.h"
 
-#ifdef _WIN32
+#if defined(__WIN__) || defined(HAVE_SMEM)
 
 /**
-  Stub io_wait method that defaults to indicate that
-  requested I/O event is ready.
+  Stub poll_read method that defaults to indicate that there
+  is data to read.
 
   Used for named pipe and shared memory VIO types.
 
   @param vio      Unused.
-  @param event    Unused.
   @param timeout  Unused.
 
-  @retval 1       The requested I/O event has occurred.
+  @retval FALSE   There is data to read.
 */
 
-static int no_io_wait(Vio *vio MY_ATTRIBUTE((unused)),
-                      enum enum_vio_io_event event MY_ATTRIBUTE((unused)),
-                      int timeout MY_ATTRIBUTE((unused)))
+static my_bool no_poll_read(Vio *vio __attribute__((unused)),
+                            uint timeout __attribute__((unused)))
 {
-  return 1;
+  return FALSE;
 }
 
 #endif
 
-static my_bool has_no_data(Vio *vio MY_ATTRIBUTE((unused)))
+static my_bool has_no_data(Vio *vio __attribute__((unused)))
 {
   return FALSE;
 }
@@ -55,8 +53,8 @@ static my_bool has_no_data(Vio *vio MY_ATTRIBUTE((unused)))
  * Helper to fill most of the Vio* with defaults.
  */
 
-static void vio_init(Vio *vio, enum enum_vio_type type,
-                     my_socket sd, uint flags)
+static void vio_init(Vio* vio, enum enum_vio_type type,
+                     my_socket sd, HANDLE hPipe, uint flags)
 {
   DBUG_ENTER("vio_init");
   DBUG_PRINT("enter", ("type: %d  sd: %d  flags: %d", type, sd, flags));
@@ -64,12 +62,11 @@ static void vio_init(Vio *vio, enum enum_vio_type type,
 #ifndef HAVE_VIO_READ_BUFF
   flags&= ~VIO_BUFFERED_READ;
 #endif
-  memset(vio, 0, sizeof(*vio));
-  vio->type= type;
-  vio->mysql_socket= MYSQL_INVALID_SOCKET;
-  mysql_socket_setfd(&vio->mysql_socket, sd);
+  bzero((char*) vio, sizeof(*vio));
+  vio->type	= type;
+  vio->sd	= sd;
+  vio->hPipe	= hPipe;
   vio->localhost= flags & VIO_LOCALHOST;
-  vio->read_timeout= vio->write_timeout= -1;
   if ((flags & VIO_BUFFERED_READ) &&
       !(vio->read_buffer= (char*)my_malloc(VIO_READ_BUFFER_SIZE, MYF(MY_WME))))
     flags&= ~VIO_BUFFERED_READ;
@@ -83,35 +80,53 @@ static void vio_init(Vio *vio, enum enum_vio_type type,
     vio->fastsend	=vio_fastsend;
     vio->viokeepalive	=vio_keepalive;
     vio->should_retry	=vio_should_retry;
-    vio->was_timeout    =vio_was_timeout;
-    vio->vioshutdown	=vio_shutdown_pipe;
+    vio->was_interrupted=vio_was_interrupted;
+    vio->vioclose	=vio_close_pipe;
     vio->peer_addr	=vio_peer_addr;
-    vio->io_wait        =no_io_wait;
+    vio->vioblocking	=vio_blocking;
+    vio->is_blocking	=vio_is_blocking;
+
+    vio->poll_read      =no_poll_read;
     vio->is_connected   =vio_is_connected_pipe;
     vio->has_data       =has_no_data;
+
+    vio->timeout=vio_win32_timeout;
+    /* Set default timeout */
+    vio->read_timeout_ms= INFINITE;
+    vio->write_timeout_ms= INFINITE;
+    vio->pipe_overlapped.hEvent= CreateEvent(NULL, TRUE, FALSE, NULL);
     DBUG_VOID_RETURN;
   }
 #endif
-#ifdef HAVE_SMEM
+#ifdef HAVE_SMEM 
   if (type == VIO_TYPE_SHARED_MEMORY)
   {
-    vio->viodelete	=vio_delete_shared_memory;
+    vio->viodelete	=vio_delete;
     vio->vioerrno	=vio_errno;
     vio->read           =vio_read_shared_memory;
     vio->write          =vio_write_shared_memory;
     vio->fastsend	=vio_fastsend;
     vio->viokeepalive	=vio_keepalive;
     vio->should_retry	=vio_should_retry;
-    vio->was_timeout    =vio_was_timeout;
-    vio->vioshutdown	=vio_shutdown_shared_memory;
+    vio->was_interrupted=vio_was_interrupted;
+    vio->vioclose	=vio_close_shared_memory;
     vio->peer_addr	=vio_peer_addr;
-    vio->io_wait        =no_io_wait;
+    vio->vioblocking	=vio_blocking;
+    vio->is_blocking	=vio_is_blocking;
+
+    vio->poll_read      =no_poll_read;
     vio->is_connected   =vio_is_connected_shared_memory;
     vio->has_data       =has_no_data;
+
+    /* Currently, shared memory is on Windows only, hence the below is ok*/
+    vio->timeout= vio_win32_timeout; 
+    /* Set default timeout */
+    vio->read_timeout_ms= INFINITE;
+    vio->write_timeout_ms= INFINITE;
     DBUG_VOID_RETURN;
   }
-#endif
-#ifdef HAVE_OPENSSL
+#endif   
+#ifdef HAVE_OPENSSL 
   if (type == VIO_TYPE_SSL)
   {
     vio->viodelete	=vio_ssl_delete;
@@ -121,13 +136,15 @@ static void vio_init(Vio *vio, enum enum_vio_type type,
     vio->fastsend	=vio_fastsend;
     vio->viokeepalive	=vio_keepalive;
     vio->should_retry	=vio_should_retry;
-    vio->was_timeout    =vio_was_timeout;
-    vio->vioshutdown	=vio_ssl_shutdown;
+    vio->was_interrupted=vio_was_interrupted;
+    vio->vioclose	=vio_ssl_close;
     vio->peer_addr	=vio_peer_addr;
-    vio->io_wait        =vio_io_wait;
+    vio->vioblocking	=vio_ssl_blocking;
+    vio->is_blocking	=vio_is_blocking;
+    vio->timeout	=vio_timeout;
+    vio->poll_read      =vio_poll_read;
     vio->is_connected   =vio_is_connected;
     vio->has_data       =vio_ssl_has_data;
-    vio->timeout        =vio_socket_timeout;
     DBUG_VOID_RETURN;
   }
 #endif /* HAVE_OPENSSL */
@@ -138,137 +155,76 @@ static void vio_init(Vio *vio, enum enum_vio_type type,
   vio->fastsend         =vio_fastsend;
   vio->viokeepalive     =vio_keepalive;
   vio->should_retry     =vio_should_retry;
-  vio->was_timeout      =vio_was_timeout;
-  vio->vioshutdown      =vio_shutdown;
+  vio->was_interrupted  =vio_was_interrupted;
+  vio->vioclose         =vio_close;
   vio->peer_addr        =vio_peer_addr;
-  vio->io_wait          =vio_io_wait;
+  vio->vioblocking      =vio_blocking;
+  vio->is_blocking      =vio_is_blocking;
+  vio->timeout          =vio_timeout;
+  vio->poll_read        =vio_poll_read;
   vio->is_connected     =vio_is_connected;
-  vio->timeout          =vio_socket_timeout;
   vio->has_data=        (flags & VIO_BUFFERED_READ) ?
                             vio_buff_has_data : has_no_data;
   DBUG_VOID_RETURN;
 }
 
 
-/**
-  Reinitialize an existing Vio object.
+/* Reset initialized VIO to use with another transport type */
 
-  @remark Used to rebind an initialized socket-based Vio object
-          to another socket-based transport type. For example,
-          rebind a TCP/IP transport to SSL.
-
-  @remark If new socket handle passed to vio_reset() is not equal
-          to the socket handle stored in Vio then socket handle will
-          be closed before storing new value. If handles are equal
-          then old socket is not closed. This is important for
-          vio_reset() usage in ssl_do().
-
-  @remark If any error occurs then Vio members won't be altered thus
-          preserving socket handle stored in Vio and not taking
-          ownership over socket handle passed as parameter.
-
-  @param vio    A VIO object.
-  @param type   A socket-based transport type.
-  @param sd     The socket.
-  @param ssl    An optional SSL structure.
-  @param flags  Flags passed to vio_init.
-
-  @return Return value is zero on success.
-*/
-
-my_bool vio_reset(Vio* vio, enum enum_vio_type type,
-                  my_socket sd, void *ssl MY_ATTRIBUTE((unused)), uint flags)
+void vio_reset(Vio* vio, enum enum_vio_type type,
+               my_socket sd, HANDLE hPipe, uint flags)
 {
-  int ret= FALSE;
-  Vio new_vio;
-  DBUG_ENTER("vio_reset");
-
-  /* The only supported rebind is from a socket-based transport type. */
-  DBUG_ASSERT(vio->type == VIO_TYPE_TCPIP || vio->type == VIO_TYPE_SOCKET);
-
-  vio_init(&new_vio, type, sd, flags);
-
-  /* Preserve perfschema info for this connection */
-  new_vio.mysql_socket.m_psi= vio->mysql_socket.m_psi;
-
-#ifdef HAVE_OPENSSL
-  new_vio.ssl_arg= ssl;
-#endif
-
-  /*
-    Propagate the timeout values. Necessary to also propagate
-    the underlying proprieties associated with the timeout,
-    such as the socket blocking mode.
-  */
-  if (vio->read_timeout >= 0)
-    ret|= vio_timeout(&new_vio, 0, vio->read_timeout / 1000);
-
-  if (vio->write_timeout >= 0)
-    ret|= vio_timeout(&new_vio, 1, vio->write_timeout / 1000);
-
-  if (ret)
-  {
-    /*
-      vio_reset() failed
-      free resources allocated by vio_init
-    */
-    my_free(new_vio.read_buffer);
-  }
-  else
-  {
-    /*
-      vio_reset() succeeded
-      free old resources and then overwrite VIO structure
-    */
-
-    /*
-      Close socket only when it is not equal to the new one.
-    */
-    if (sd != mysql_socket_getfd(vio->mysql_socket))
-      if (vio->inactive == FALSE)
-        vio->vioshutdown(vio);
-
-    my_free(vio->read_buffer);
-
-    *vio= new_vio;
-  }
-
-  DBUG_RETURN(MY_TEST(ret));
+  my_free(vio->read_buffer);
+  vio_init(vio, type, sd, hPipe, flags);
 }
 
-
-/* Create a new VIO for socket or TCP/IP connection. */
-
-Vio *mysql_socket_vio_new(MYSQL_SOCKET mysql_socket, enum enum_vio_type type, uint flags)
-{
-  Vio *vio;
-  my_socket sd= mysql_socket_getfd(mysql_socket);
-  DBUG_ENTER("mysql_socket_vio_new");
-  DBUG_PRINT("enter", ("sd: %d", sd));
-  if ((vio = (Vio*) my_malloc(sizeof(*vio),MYF(MY_WME))))
-  {
-    vio_init(vio, type, sd, flags);
-    vio->mysql_socket= mysql_socket;
-  }
-  DBUG_RETURN(vio);
-}
 
 /* Open the socket or TCP/IP connection and read the fnctl() status */
 
 Vio *vio_new(my_socket sd, enum enum_vio_type type, uint flags)
 {
   Vio *vio;
-  MYSQL_SOCKET mysql_socket= MYSQL_INVALID_SOCKET;
   DBUG_ENTER("vio_new");
   DBUG_PRINT("enter", ("sd: %d", sd));
+  if ((vio = (Vio*) my_malloc(sizeof(*vio),MYF(MY_WME))))
+  {
+    vio_init(vio, type, sd, 0, flags);
+    sprintf(vio->desc,
+	    (vio->type == VIO_TYPE_SOCKET ? "socket (%d)" : "TCP/IP (%d)"),
+	    vio->sd);
+#if !defined(__WIN__)
+#if !defined(NO_FCNTL_NONBLOCK)
+    /*
+      We call fcntl() to set the flags and then immediately read them back
+      to make sure that we and the system are in agreement on the state of
+      things.
 
-  mysql_socket_setfd(&mysql_socket, sd);
-  vio = mysql_socket_vio_new(mysql_socket, type, flags);
-
+      An example of why we need to do this is FreeBSD (and apparently some
+      other BSD-derived systems, like Mac OS X), where the system sometimes
+      reports that the socket is set for non-blocking when it really will
+      block.
+    */
+    fcntl(sd, F_SETFL, 0);
+    vio->fcntl_mode= fcntl(sd, F_GETFL);
+#elif defined(HAVE_SYS_IOCTL_H)			/* hpux */
+    /* Non blocking sockets doesn't work good on HPUX 11.0 */
+    (void) ioctl(sd,FIOSNBIO,0);
+    vio->fcntl_mode &= ~O_NONBLOCK;
+#endif
+#else /* !defined(__WIN__) */
+    {
+      /* set to blocking mode by default */
+      ulong arg=0, r;
+      r = ioctlsocket(sd,FIONBIO,(void*) &arg);
+      vio->fcntl_mode &= ~O_NONBLOCK;
+    }
+#endif
+  }
   DBUG_RETURN(vio);
 }
 
-#ifdef _WIN32
+
+#ifdef __WIN__
 
 Vio *vio_new_win32pipe(HANDLE hPipe)
 {
@@ -276,15 +232,7 @@ Vio *vio_new_win32pipe(HANDLE hPipe)
   DBUG_ENTER("vio_new_handle");
   if ((vio = (Vio*) my_malloc(sizeof(Vio),MYF(MY_WME))))
   {
-    vio_init(vio, VIO_TYPE_NAMEDPIPE, 0, VIO_LOCALHOST);
-    /* Create an object for event notification. */
-    vio->overlapped.hEvent= CreateEvent(NULL, FALSE, FALSE, NULL);
-    if (vio->overlapped.hEvent == NULL)
-    {
-      my_free(vio);
-      DBUG_RETURN(NULL);
-    }
-    vio->hPipe= hPipe;
+    vio_init(vio, VIO_TYPE_NAMEDPIPE, 0, hPipe, VIO_LOCALHOST);
     strmov(vio->desc, "named pipe");
   }
   DBUG_RETURN(vio);
@@ -300,7 +248,7 @@ Vio *vio_new_win32shared_memory(HANDLE handle_file_map, HANDLE handle_map,
   DBUG_ENTER("vio_new_win32shared_memory");
   if ((vio = (Vio*) my_malloc(sizeof(Vio),MYF(MY_WME))))
   {
-    vio_init(vio, VIO_TYPE_SHARED_MEMORY, 0, VIO_LOCALHOST);
+    vio_init(vio, VIO_TYPE_SHARED_MEMORY, 0, 0, VIO_LOCALHOST);
     vio->handle_file_map= handle_file_map;
     vio->handle_map= handle_map;
     vio->event_server_wrote= event_server_wrote;
@@ -318,56 +266,13 @@ Vio *vio_new_win32shared_memory(HANDLE handle_file_map, HANDLE handle_map,
 #endif
 
 
-/**
-  Set timeout for a network send or receive operation.
-
-  @remark A non-infinite timeout causes the socket to be
-          set to non-blocking mode. On infinite timeouts,
-          the socket is set to blocking mode.
-
-  @remark A negative timeout means an infinite timeout.
-
-  @param vio      A VIO object.
-  @param which    Whether timeout is for send (1) or receive (0).
-  @param timeout  Timeout interval in seconds.
-
-  @return FALSE on success, TRUE otherwise.
-*/
-
-int vio_timeout(Vio *vio, uint which, int timeout_sec)
-{
-  int timeout_ms;
-  my_bool old_mode;
-
-  /*
-    Vio timeouts are measured in milliseconds. Check for a possible
-    overflow. In case of overflow, set to infinite.
-  */
-  if (timeout_sec > INT_MAX/1000)
-    timeout_ms= -1;
-  else
-    timeout_ms= (int) (timeout_sec * 1000);
-
-  /* Deduce the current timeout status mode. */
-  old_mode= vio->write_timeout < 0 && vio->read_timeout < 0;
-
-  if (which)
-    vio->write_timeout= timeout_ms;
-  else
-    vio->read_timeout= timeout_ms;
-
-  /* VIO-specific timeout handling. Might change the blocking mode. */
-  return vio->timeout ? vio->timeout(vio, which, old_mode) : 0;
-}
-
-
 void vio_delete(Vio* vio)
 {
   if (!vio)
     return; /* It must be safe to delete null pointers. */
 
-  if (vio->inactive == FALSE)
-    vio->vioshutdown(vio);
+  if (vio->type != VIO_CLOSED)
+    vio->vioclose(vio);
   my_free(vio->read_buffer);
   my_free(vio);
 }
@@ -380,13 +285,7 @@ void vio_delete(Vio* vio)
 */
 void vio_end(void)
 {
-#if defined(HAVE_YASSL)
+#ifdef HAVE_YASSL
   yaSSL_CleanUp();
-#elif defined(HAVE_OPENSSL)
-  // This one is needed on the client side
-  ERR_remove_state(0);
-  ERR_free_strings();
-  EVP_cleanup();
-  CRYPTO_cleanup_all_ex_data();
 #endif
 }

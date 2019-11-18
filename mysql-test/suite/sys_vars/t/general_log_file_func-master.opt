@@ -1,3 +1,2 @@
---general-log
---general-log-file=mysql-test.log
+--log=mysql-test.log
 

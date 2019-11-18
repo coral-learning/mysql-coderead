@@ -1,7 +1,8 @@
 #ifndef ITEM_XMLFUNC_INCLUDED
 #define ITEM_XMLFUNC_INCLUDED
 
-/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000-2007 MySQL AB, 2009 Sun Microsystems, Inc.
+   Use is subject to license terms.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,11 +14,17 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 
 /* This file defines all XML functions */
+
+
+#ifdef __GNUC__
+#pragma interface			/* gcc class implementation */
+#endif
+
 
 class Item_xml_str_func: public Item_str_func
 {
@@ -37,18 +44,6 @@ public:
   }
   void fix_length_and_dec();
   String *parse_xml(String *raw_xml, String *parsed_xml_buf);
-
-protected:
-  /** 
-    Parse the specified XPATH expression and initialize @c nodeset_func.
-
-    @note This is normally called in resolve phase since we only support
-          constant XPATH expressions, but it may be called upon execution when
-          const value is not yet known at resolve time.
-
-    @param xpath_expr XPATH expression to be parsed
-   */
-  void parse_xpath(Item* xpath_expr);
 };
 
 

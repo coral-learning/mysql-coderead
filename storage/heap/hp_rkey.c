@@ -1,4 +1,5 @@
-/* Copyright (c) 2000, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2002-2007 MySQL AB, 2009 Sun Microsystems, Inc.
+   Use is subject to license terms.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -63,12 +64,7 @@ int heap_rkey(HP_INFO *info, uchar *record, int inx, const uchar *key,
       info->update= 0;
       DBUG_RETURN(my_errno);
     }
-    /*
-      If key is unique and can accept NULL values, we still
-      need to copy it to info->lastkey, which in turn is used
-      to search subsequent records.
-    */
-    if (!(keyinfo->flag & HA_NOSAME) || (keyinfo->flag & HA_NULL_PART_KEY))
+    if (!(keyinfo->flag & HA_NOSAME))
       memcpy(info->lastkey, key, (size_t) keyinfo->length);
   }
   memcpy(record, pos, (size_t) share->reclength);

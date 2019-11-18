@@ -6,9 +6,7 @@
 #
 # source include/have_log_bin.inc;
 
---let $_have_log_bin= query_get_value(SHOW VARIABLES LIKE 'log_bin', Value, 1)
-if ($_have_log_bin != ON)
-{
-  --skip Test requires --log-bin
-}
---let $show_rpl_debug_info= 1
+-- require r/have_log_bin.require
+disable_query_log;
+show variables like 'log_bin';
+enable_query_log;

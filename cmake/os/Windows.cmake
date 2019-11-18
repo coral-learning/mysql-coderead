@@ -1,4 +1,4 @@
-# Copyright (c) 2010, 2016, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2010, 2017, Oracle and/or its affiliates. All rights reserved.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -40,7 +40,6 @@ INCLUDE(${_SCRIPT_DIR}/WindowsCache.cmake)
 # Used by the test suite to ignore bugs on some platforms, 
 IF(CMAKE_SIZEOF_VOID_P MATCHES 8)
   SET(SYSTEM_TYPE "Win64")
-  SET(MYSQL_MACHINE_TYPE "x86_64")
 ELSE()
   SET(SYSTEM_TYPE "Win32")
 ENDIF()
@@ -65,6 +64,7 @@ IF(MINGW AND CMAKE_SIZEOF_VOID_P EQUAL 4)
 ENDIF()
 
 IF(MSVC)
+  OPTION(LINK_STATIC_RUNTIME_LIBRARIES "Link with /MT" OFF)
   # Enable debug info also in Release build,
   # and create PDB to be able to analyze crashes.
   FOREACH(type EXE SHARED MODULE)
@@ -72,14 +72,7 @@ IF(MSVC)
      "${CMAKE_${type}_LINKER_FLAGS_RELEASE} /debug")
   ENDFOREACH()
   
-  # For release types Debug Release RelWithDebInfo (but not MinSizeRel):
-  # - Force static runtime libraries
-  # - Choose C++ exception handling:
-  #     If /EH is not specified, the compiler will catch structured and
-  #     C++ exceptions, but will not destroy C++ objects that will go out of
-  #     scope as a result of the exception.
-  #     /EHsc catches C++ exceptions only and tells the compiler to assume that
-  #     extern C functions never throw a C++ exception.
+  # Force static runtime libraries
   # - Choose debugging information:
   #     /Z7
   #     Produces an .obj file containing full symbolic debugging
@@ -94,11 +87,17 @@ IF(MSVC)
    CMAKE_C_FLAGS_DEBUG      CMAKE_C_FLAGS_DEBUG_INIT 
    CMAKE_CXX_FLAGS_RELEASE  CMAKE_CXX_FLAGS_RELWITHDEBINFO
    CMAKE_CXX_FLAGS_DEBUG    CMAKE_CXX_FLAGS_DEBUG_INIT)
-   STRING(REPLACE "/MD"  "/MT" "${flag}" "${${flag}}")
+   IF(LINK_STATIC_RUNTIME_LIBRARIES)
+     STRING(REPLACE "/MD"  "/MT" "${flag}" "${${flag}}")
+   ENDIF()
    STRING(REPLACE "/Zi"  "/Z7" "${flag}" "${${flag}}")
-   SET("${flag}" "${${flag}} /EHsc")
   ENDFOREACH()
   
+  # Remove support for exceptions
+  FOREACH(flag CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_INIT)
+   STRING(REPLACE "/EHsc" ""   "${flag}" "${${flag}}") 
+  ENDFOREACH()
+ 
   # Fix CMake's predefined huge stack size
   FOREACH(type EXE SHARED MODULE)
    STRING(REGEX REPLACE "/STACK:([^ ]+)" "" CMAKE_${type}_LINKER_FLAGS "${CMAKE_${type}_LINKER_FLAGS}")
@@ -134,6 +133,9 @@ ENDIF()
 LINK_LIBRARIES(ws2_32)
 # ..also for tests
 SET(CMAKE_REQUIRED_LIBRARIES ws2_32)
+
+# System checks
+SET(SIGNAL_WITH_VIO_CLOSE 1) # Something that runtime team needs
 
 # IPv6 constants appeared in Vista SDK first. We need to define them in any case if they are 
 # not in headers, to handle dual mode sockets correctly.
@@ -193,6 +195,7 @@ CHECK_FUNCTION_REPLACEMENT(pclose _pclose)
 CHECK_FUNCTION_REPLACEMENT(access _access)
 CHECK_FUNCTION_REPLACEMENT(strcasecmp _stricmp)
 CHECK_FUNCTION_REPLACEMENT(strncasecmp _strnicmp)
+CHECK_FUNCTION_REPLACEMENT(snprintf _snprintf)
 CHECK_FUNCTION_REPLACEMENT(strtok_r strtok_s)
 CHECK_FUNCTION_REPLACEMENT(strtoll _strtoi64)
 CHECK_FUNCTION_REPLACEMENT(strtoull _strtoui64)

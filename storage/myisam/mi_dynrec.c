@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -414,7 +414,7 @@ static int _mi_find_writepos(MI_INFO *info,
   {
     /* No deleted blocks;  Allocate a new block */
     *filepos=info->state->data_file_length;
-    if ((tmp=reclength+3 + MY_TEST(reclength >= (65520-3))) <
+    if ((tmp=reclength+3 + test(reclength >= (65520-3))) <
 	info->s->base.min_block_length)
       tmp= info->s->base.min_block_length;
     else
@@ -577,7 +577,7 @@ static int delete_dynamic_record(MI_INFO *info, my_off_t filepos,
     mi_int3store(block_info.header+1,length);
     mi_sizestore(block_info.header+4,info->s->state.dellink);
     if (b_type & BLOCK_LAST)
-      memset(block_info.header + 12, 255, 8);
+      bfill(block_info.header+12,8,255);
     else
       mi_sizestore(block_info.header+12,block_info.next_filepos);
     if (info->s->file_write(info,(uchar*) block_info.header,20,filepos,
@@ -712,7 +712,7 @@ int _mi_write_part_record(MI_INFO *info,
   del_length=(res_length ? MI_DYN_DELETE_BLOCK_HEADER : 0);
   bmove((uchar*) (*record-head_length),(uchar*) temp,head_length);
   memcpy(temp,record_end,(size_t) (extra_length+del_length));
-  memset(record_end, 0, extra_length);
+  bzero((uchar*) record_end,extra_length);
 
   if (res_length)
   {
@@ -739,7 +739,7 @@ int _mi_write_part_record(MI_INFO *info,
     pos[0]= '\0';
     mi_int3store(pos+1,res_length);
     mi_sizestore(pos+4,info->s->state.dellink);
-    memset(pos + 12, 255, 8);			/* End link */
+    bfill(pos+12,8,255);			/* End link */
     next_delete_block=info->s->state.dellink;
     info->s->state.dellink= filepos+length+extra_length;
     info->state->del++;
@@ -862,9 +862,9 @@ static int update_dynamic_record(MI_INFO *info, my_off_t filepos, uchar *record,
       if (length < reclength)
       {
 	uint tmp=MY_ALIGN(reclength - length + 3 +
-			  MY_TEST(reclength >= 65520L),MI_DYN_ALIGN_SIZE);
+			  test(reclength >= 65520L),MI_DYN_ALIGN_SIZE);
 	/* Don't create a block bigger than MI_MAX_BLOCK_LENGTH */
-	tmp= MY_MIN(length+tmp, MI_MAX_BLOCK_LENGTH)-length;
+	tmp= min(length+tmp, MI_MAX_BLOCK_LENGTH)-length;
 	/* Check if we can extend this block */
 	if (block_info.filepos + block_info.block_len ==
 	    info->state->data_file_length &&
@@ -917,7 +917,7 @@ static int update_dynamic_record(MI_INFO *info, my_off_t filepos, uchar *record,
 	      del_block.header[0]=0;
 	      mi_int3store(del_block.header+1, rest_length);
 	      mi_sizestore(del_block.header+4,info->s->state.dellink);
-	      memset(del_block.header + 12, 255, 8);
+	      bfill(del_block.header+12,8,255);
 	      if (info->s->file_write(info,(uchar*) del_block.header,20, next_pos,
 			    MYF(MY_NABP)))
 		DBUG_RETURN(1);
@@ -1023,7 +1023,7 @@ uint _mi_rec_pack(MI_INFO *info, register uchar *to,
 	    pos++;
 	}
 	new_length=(uint) (end-pos);
-	if (new_length +1 + MY_TEST(rec->length > 255 && new_length > 127)
+	if (new_length +1 + test(rec->length > 255 && new_length > 127)
 	    < length)
 	{
 	  if (rec->length > 255 && new_length > 127)
@@ -1143,7 +1143,7 @@ my_bool _mi_rec_check(MI_INFO *info,const uchar *record, uchar *rec_buff,
 	    pos++;
 	}
 	new_length=(uint) (end-pos);
-	if (new_length +1 + MY_TEST(rec->length > 255 && new_length > 127)
+	if (new_length +1 + test(rec->length > 255 && new_length > 127)
 	    < length)
 	{
 	  if (!(flag & bit))
@@ -1195,7 +1195,7 @@ my_bool _mi_rec_check(MI_INFO *info,const uchar *record, uchar *rec_buff,
     else
       to+= length;
   }
-  if (packed_length != (uint) (to - rec_buff) + MY_TEST(info->s->calc_checksum) ||
+  if (packed_length != (uint) (to - rec_buff) + test(info->s->calc_checksum) ||
       (bit != 1 && (flag & ~(bit - 1))))
     goto err;
   if (with_checksum && ((uchar) info->checksum != (uchar) *to))
@@ -1266,7 +1266,7 @@ ulong _mi_rec_unpack(register MI_INFO *info, register uchar *to, uchar *from,
       if (flag & bit)
       {
 	if (type == FIELD_BLOB || type == FIELD_SKIP_ZERO)
-	  memset(to, 0, rec_length);
+	  bzero((uchar*) to,rec_length);
 	else if (type == FIELD_SKIP_ENDSPACE ||
 		 type == FIELD_SKIP_PRESPACE)
 	{
@@ -1289,11 +1289,11 @@ ulong _mi_rec_unpack(register MI_INFO *info, register uchar *to, uchar *from,
 	  if (type == FIELD_SKIP_ENDSPACE)
 	  {
 	    memcpy(to,(uchar*) from,(size_t) length);
-	    memset(to + length, ' ', rec_length-length);
+	    bfill((uchar*) to+length,rec_length-length,' ');
 	  }
 	  else
 	  {
-	    memset(to, ' ', rec_length-length);
+	    bfill((uchar*) to,rec_length-length,' ');
 	    memcpy(to+rec_length-length,(uchar*) from,(size_t) length);
 	  }
 	  from+=length;
@@ -1385,7 +1385,7 @@ ulong _mi_calc_blob_length(uint length, const uchar *pos)
 }
 
 
-void _mi_store_blob_length(uchar *pos,uint pack_length,uint length)
+void _my_store_blob_length(uchar *pos,uint pack_length,uint length)
 {
   switch (pack_length) {
   case 1:
@@ -1788,14 +1788,6 @@ int _mi_read_rnd_dynamic_record(MI_INFO *info, uchar *buf,
       }
       if (b_type & (BLOCK_DELETED | BLOCK_SYNC_ERROR))
       {
-        /*
-          If we're not on the first block of a record and
-          the block is marked as deleted or out of sync,
-          something's gone wrong: the record is damaged.
-        */
-        if (block_of_record != 0)
-          goto panic;
-
 	my_errno=HA_ERR_RECORD_DELETED;
 	info->lastpos=block_info.filepos;
 	info->nextpos=block_info.filepos+block_info.block_len;

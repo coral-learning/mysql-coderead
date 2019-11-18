@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -10,8 +10,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 
 /**
@@ -30,27 +30,17 @@
 #include "sql_class.h"          // THD
 #include "set_var.h"            // Cached_item, Cached_item_field, ...
 
-using std::min;
-using std::max;
-
 /**
   Create right type of Cached_item for an item.
 */
 
-Cached_item *new_Cached_item(THD *thd, Item *item, bool use_result_field)
+Cached_item *new_Cached_item(THD *thd, Item *item)
 {
   if (item->real_item()->type() == Item::FIELD_ITEM &&
       !(((Item_field *) (item->real_item()))->field->flags & BLOB_FLAG))
-  {
-    Item_field *real_item= (Item_field *) item->real_item();
-    Field *cached_field= use_result_field ? real_item->result_field :
-                                            real_item->field;
-    return new Cached_item_field(cached_field);
-  }
+    return new Cached_item_field((Item_field *) (item->real_item()));
   switch (item->result_type()) {
   case STRING_RESULT:
-    if (item->is_temporal())
-      return new Cached_item_temporal((Item_field *) item);
     return new Cached_item_str(thd, (Item_field *) item);
   case INT_RESULT:
     return new Cached_item_int((Item_field *) item);
@@ -76,7 +66,7 @@ Cached_item::~Cached_item() {}
 
 Cached_item_str::Cached_item_str(THD *thd, Item *arg)
   :item(arg),
-   value_max_length(min<uint32>(arg->max_length, thd->variables.max_sort_length)),
+   value_max_length(min(arg->max_length, thd->variables.max_sort_length)),
    value(value_max_length)
 {}
 
@@ -85,25 +75,21 @@ bool Cached_item_str::cmp(void)
   String *res;
   bool tmp;
 
-  DBUG_ENTER("Cached_item_str::cmp");
-  DBUG_ASSERT(!item->is_temporal());
   if ((res=item->val_str(&tmp_value)))
     res->length(min(res->length(), value_max_length));
-  DBUG_PRINT("info", ("old: %s, new: %s",
-                      value.c_ptr_safe(), res ? res->c_ptr_safe() : ""));
   if (null_value != item->null_value)
   {
     if ((null_value= item->null_value))
-      DBUG_RETURN(TRUE);			// New value was null
+      return TRUE;				// New value was null
     tmp=TRUE;
   }
   else if (null_value)
-    DBUG_RETURN(0);				// new and old value was null
+    return 0;					// new and old value was null
   else
     tmp= sortcmp(&value,res,item->collation.collation) != 0;
   if (tmp)
     value.copy(*res);				// Remember for next cmp
-  DBUG_RETURN(tmp);
+  return tmp;
 }
 
 Cached_item_str::~Cached_item_str()
@@ -113,79 +99,40 @@ Cached_item_str::~Cached_item_str()
 
 bool Cached_item_real::cmp(void)
 {
-  DBUG_ENTER("Cached_item_real::cmp");
   double nr= item->val_real();
-  DBUG_PRINT("info", ("old: %f, new: %f", value, nr));
   if (null_value != item->null_value || nr != value)
   {
     null_value= item->null_value;
     value=nr;
-    DBUG_RETURN(TRUE);
+    return TRUE;
   }
-  DBUG_RETURN(FALSE);
+  return FALSE;
 }
 
 bool Cached_item_int::cmp(void)
 {
-  DBUG_ENTER("Cached_item_int::cmp");
   longlong nr=item->val_int();
-  DBUG_PRINT("info", ("old: %lld, new: %lld", value, nr));
   if (null_value != item->null_value || nr != value)
   {
     null_value= item->null_value;
     value=nr;
-    DBUG_RETURN(TRUE);
+    return TRUE;
   }
-  DBUG_RETURN(FALSE);
-}
-
-
-bool Cached_item_temporal::cmp(void)
-{
-  DBUG_ENTER("Cached_item_temporal::cmp");
-  longlong nr= item->val_temporal_by_field_type();
-  DBUG_PRINT("info", ("old: %lld, new: %lld", value, nr)); 
-  if (null_value != item->null_value || nr != value)
-  {
-    null_value= item->null_value;
-    value= nr;
-    DBUG_RETURN(TRUE);
-  }
-  DBUG_RETURN(FALSE);
+  return FALSE;
 }
 
 
 bool Cached_item_field::cmp(void)
 {
-  DBUG_ENTER("Cached_item_field::cmp");
-  DBUG_EXECUTE("info", dbug_print(););
-
-  bool different= false;
-
-  if (field->is_null())
+  bool tmp= field->cmp(buff) != 0;		// This is not a blob!
+  if (tmp)
+    field->get_image(buff,length,field->charset());
+  if (null_value != field->is_null())
   {
-    if (!null_value)
-    {
-      different= true;
-      null_value= true;
-    }
+    null_value= !null_value;
+    tmp=TRUE;
   }
-  else
-  {
-    if (null_value)
-    {
-      different= true;
-      null_value= false;
-      field->get_image(buff, length, field->charset());
-    }
-    else if (field->cmp(buff))                  // Not a blob: cmp() is OK
-    {
-      different= true;
-      field->get_image(buff, length, field->charset());
-    }
-  }
-
-  DBUG_RETURN(different);
+  return tmp;
 }
 
 
@@ -214,3 +161,13 @@ bool Cached_item_decimal::cmp()
   }
   return FALSE;
 }
+
+
+/*****************************************************************************
+** Instansiate templates
+*****************************************************************************/
+
+#ifdef HAVE_EXPLICIT_TEMPLATE_INSTANTIATION
+template class List<Cached_item>;
+template class List_iterator<Cached_item>;
+#endif

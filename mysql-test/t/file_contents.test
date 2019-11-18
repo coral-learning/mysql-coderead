@@ -21,14 +21,6 @@ if ($dir_bin =~ m|/usr/|) {
   } else {
     # RedHat: version number in directory name
     $dir_docs = glob "$dir_docs/MySQL-server*";
-    if (! -d "$dir_docs") {
-      # If not it might be ULN so try that
-      $dir_docs = glob "$dir_bin/share/doc/mysql-*-server*";
-      if (! -f "$dir_docs/INFO_BIN") {
-        # Debian/ Ubuntu
-        $dir_docs = glob "$dir_bin/share/mysql/docs";
-      }
-    }
   }
 } elsif ($dir_bin =~ m|/usr$|) {
   # RPM build during development
@@ -39,14 +31,6 @@ if ($dir_bin =~ m|/usr/|) {
   } else {
     # RedHat: version number in directory name
     $dir_docs = glob "$dir_docs/MySQL-server*";
-    if (! -d "$dir_docs") {
-      # If not it might be ULN so try that
-      $dir_docs = glob "$dir_bin/share/doc/mysql-*-server*";
-      if (! -f "$dir_docs/INFO_BIN") {
-        # Debian/ Ubuntu
-        $dir_docs = glob "$dir_bin/share/mysql/docs";
-      }
-    }
   }
 } else {
   # tar.gz package, Windows, or developer work (in git)

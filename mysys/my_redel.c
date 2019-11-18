@@ -81,11 +81,15 @@ end:
 
 int my_copystat(const char *from, const char *to, int MyFlags)
 {
-  MY_STAT statbuf;
+  struct stat statbuf;
 
-  if (my_stat(from, &statbuf, MyFlags) == NULL)
+  if (stat(from, &statbuf))
+  {
+    my_errno=errno;
+    if (MyFlags & (MY_FAE+MY_WME))
+      my_error(EE_STAT, MYF(ME_BELL+ME_WAITTANG),from,errno);
     return -1;				/* Can't get stat on input file */
-
+  }
   if ((statbuf.st_mode & S_IFMT) != S_IFREG)
     return 1;
 
@@ -94,11 +98,7 @@ int my_copystat(const char *from, const char *to, int MyFlags)
   {
     my_errno= errno;
     if (MyFlags & (MY_FAE+MY_WME))
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      my_error(EE_CHANGE_PERMISSIONS, MYF(ME_BELL+ME_WAITTANG), from,
-               errno, my_strerror(errbuf, sizeof(errbuf), errno));
-    }
+      my_error(EE_CHANGE_PERMISSIONS, MYF(ME_BELL+ME_WAITTANG), from, errno);
     return -1;
   }
 
@@ -113,11 +113,7 @@ int my_copystat(const char *from, const char *to, int MyFlags)
   {
     my_errno= errno;
     if (MyFlags & (MY_FAE+MY_WME))
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      my_error(EE_CHANGE_OWNERSHIP, MYF(ME_BELL+ME_WAITTANG), from,
-               errno, my_strerror(errbuf, sizeof(errbuf), errno));
-    }
+      my_error(EE_CHANGE_OWNERSHIP, MYF(ME_BELL+ME_WAITTANG), from, errno);
     return -1;
   }
 #endif /* !__WIN__ */

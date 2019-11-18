@@ -1,4 +1,4 @@
-/* Copyright (c) 2005, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -182,14 +182,13 @@ static uchar sort_order_cp932[]=
                        (0x80<=(c) && (c)<=0xfc))
 
 
-static uint ismbchar_cp932(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+static uint ismbchar_cp932(CHARSET_INFO *cs __attribute__((unused)),
 			 const char* p, const char *e)
 {
   return (iscp932head((uchar) *p) && (e-p)>1 && iscp932tail((uchar)p[1]) ? 2: 0);
 }
 
-static uint mbcharlen_cp932(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
-                            uint c)
+static uint mbcharlen_cp932(CHARSET_INFO *cs __attribute__((unused)),uint c)
 {
   return (iscp932head((uchar) c) ? 2 : 1);
 }
@@ -198,7 +197,7 @@ static uint mbcharlen_cp932(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
 #define cp932code(c,d)	((((uint) (uchar)(c)) << 8) | (uint) (uchar) (d))
 
 
-static MY_UNICASE_CHARACTER c81[256]=
+static MY_UNICASE_INFO c81[256]=
 {
   /* 8100-810F */
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
@@ -408,7 +407,7 @@ static MY_UNICASE_CHARACTER c81[256]=
 };
 
 
-static MY_UNICASE_CHARACTER c82[256]=
+static MY_UNICASE_INFO c82[256]=
 {
   /* 8200-820F */
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
@@ -616,7 +615,7 @@ static MY_UNICASE_CHARACTER c82[256]=
 };
 
 
-static MY_UNICASE_CHARACTER c83[256]=
+static MY_UNICASE_INFO c83[256]=
 {
   /* 8300-830F */
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
@@ -826,7 +825,7 @@ static MY_UNICASE_CHARACTER c83[256]=
 };
 
 
-static MY_UNICASE_CHARACTER c84[256]=
+static MY_UNICASE_INFO c84[256]=
 {
   /* 8400-840F */
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
@@ -1036,7 +1035,7 @@ static MY_UNICASE_CHARACTER c84[256]=
 };
 
 
-static MY_UNICASE_CHARACTER c87[256]=
+static MY_UNICASE_INFO c87[256]=
 {
   /* 8700-870F */
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
@@ -1246,7 +1245,7 @@ static MY_UNICASE_CHARACTER c87[256]=
 };
 
 
-static MY_UNICASE_CHARACTER cEE[256]=
+static MY_UNICASE_INFO cEE[256]=
 {
   /* EE00-EE0F */
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
@@ -1457,7 +1456,7 @@ static MY_UNICASE_CHARACTER cEE[256]=
 };
 
 
-static MY_UNICASE_CHARACTER cFA[256]=
+static MY_UNICASE_INFO cFA[256]=
 {
   /* FA00-FA0F */
   {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
@@ -1667,7 +1666,7 @@ static MY_UNICASE_CHARACTER cFA[256]=
 };
 
 
-static MY_UNICASE_CHARACTER *my_caseinfo_pages_cp932[256]=
+static MY_UNICASE_INFO *my_caseinfo_cp932[256]=
 {
   NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, /* 0 */
   NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
@@ -1704,13 +1703,7 @@ static MY_UNICASE_CHARACTER *my_caseinfo_pages_cp932[256]=
 };
 
 
-MY_UNICASE_INFO my_caseinfo_cp932=
-{
-  0xFFFF,
-  my_caseinfo_pages_cp932
-};
-
-static int my_strnncoll_cp932_internal(const CHARSET_INFO *cs,
+static int my_strnncoll_cp932_internal(CHARSET_INFO *cs,
 				      const uchar **a_res, size_t a_length,
 				      const uchar **b_res, size_t b_length)
 {
@@ -1742,7 +1735,7 @@ static int my_strnncoll_cp932_internal(const CHARSET_INFO *cs,
 }
 
 
-static int my_strnncoll_cp932(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+static int my_strnncoll_cp932(CHARSET_INFO *cs __attribute__((unused)),
 			      const uchar *a, size_t a_length, 
 			      const uchar *b, size_t b_length,
                               my_bool b_is_prefix)
@@ -1754,12 +1747,11 @@ static int my_strnncoll_cp932(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
 }
 
 
-static int my_strnncollsp_cp932(const CHARSET_INFO *cs
-                                MY_ATTRIBUTE((unused)),
+static int my_strnncollsp_cp932(CHARSET_INFO *cs __attribute__((unused)),
                                 const uchar *a, size_t a_length, 
                                 const uchar *b, size_t b_length,
                                 my_bool diff_if_only_endspace_difference
-                                MY_ATTRIBUTE((unused)))
+                                __attribute__((unused)))
 {
   const uchar *a_end= a + a_length;
   const uchar *b_end= b + b_length;
@@ -1793,6 +1785,30 @@ static int my_strnncollsp_cp932(const CHARSET_INFO *cs
     }
   }
   return res;
+}
+
+
+
+static size_t my_strnxfrm_cp932(CHARSET_INFO *cs __attribute__((unused)),
+                                uchar *dest, size_t len,
+                                const uchar *src, size_t srclen)
+{
+  uchar *d_end = dest + len;
+  uchar *s_end = (uchar*) src + srclen;
+  while (dest < d_end && src < s_end)
+  {
+    if (ismbchar_cp932(cs,(char*) src, (char*) s_end))
+    {
+      *dest++ = *src++;
+      if (dest < d_end && src < s_end)
+	*dest++ = *src++;
+    }
+    else
+      *dest++ = sort_order_cp932[(uchar)*src++];
+  }
+  if (len > srclen)
+    bfill(dest, len - srclen, ' ');
+  return len;
 }
 
 
@@ -34601,7 +34617,7 @@ static uint16 unicode_to_cp932[65536]=
 */
 
 static int
-my_mb_wc_cp932(const CHARSET_INFO *cs  MY_ATTRIBUTE((unused)),
+my_mb_wc_cp932(CHARSET_INFO *cs  __attribute__((unused)),
 	       my_wc_t *pwc, const uchar *s, const uchar *e){
   int hi;
 
@@ -34645,7 +34661,7 @@ my_mb_wc_cp932(const CHARSET_INFO *cs  MY_ATTRIBUTE((unused)),
   @retval   MY_CS_ILUNI    If the Unicode character does not exist in CP932
 */
 static int
-my_wc_mb_cp932(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+my_wc_mb_cp932(CHARSET_INFO *cs __attribute__((unused)),
 	       my_wc_t wc, uchar *s, uchar *e)
 {
   int code;
@@ -34685,7 +34701,7 @@ my_wc_mb_cp932(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
 
 
 static
-size_t my_numcells_cp932(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+size_t my_numcells_cp932(CHARSET_INFO *cs __attribute__((unused)),
                       const char *str, const char *str_end)
 {
   size_t clen= 0;
@@ -34719,8 +34735,7 @@ size_t my_numcells_cp932(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
 */
 
 static
-size_t my_well_formed_len_cp932(const CHARSET_INFO *cs
-                                MY_ATTRIBUTE((unused)),
+size_t my_well_formed_len_cp932(CHARSET_INFO *cs __attribute__((unused)),
                                 const char *b, const char *e,
                                 size_t pos, int *error)
 {
@@ -34764,7 +34779,7 @@ static MY_COLLATION_HANDLER my_collation_ci_handler =
   NULL,			/* init */
   my_strnncoll_cp932,
   my_strnncollsp_cp932,
-  my_strnxfrm_mb,
+  my_strnxfrm_cp932,
   my_strnxfrmlen_simple,
   my_like_range_mb,
   my_wildcmp_mb,	/* wildcmp  */
@@ -34819,10 +34834,11 @@ CHARSET_INFO my_charset_cp932_japanese_ci=
     to_lower_cp932,
     to_upper_cp932,
     sort_order_cp932,
-    NULL,		/* uca          */
+    NULL,		/* contractions */
+    NULL,		/* sort_order_big*/
     NULL,		/* tab_to_uni   */
     NULL,		/* tab_from_uni */
-    &my_caseinfo_cp932, /* caseinfo     */
+    my_caseinfo_cp932,  /* caseinfo     */
     NULL,		/* state_map    */
     NULL,		/* ident_map    */
     1,			/* strxfrm_multiply */
@@ -34834,8 +34850,6 @@ CHARSET_INFO my_charset_cp932_japanese_ci=
     0xFCFC,		/* max_sort_char */
     ' ',                /* pad char      */
     1,                  /* escape_with_backslash_is_dangerous */
-    1,                  /* levels_for_compare */
-    1,                  /* levels_for_order   */
     &my_charset_handler,
     &my_collation_ci_handler
 };
@@ -34852,10 +34866,11 @@ CHARSET_INFO my_charset_cp932_bin=
     to_lower_cp932,
     to_upper_cp932,
     NULL,		/* sort_order   */
-    NULL,		/* uca          */
+    NULL,		/* contractions */
+    NULL,		/* sort_order_big*/
     NULL,		/* tab_to_uni   */
     NULL,		/* tab_from_uni */
-    &my_caseinfo_cp932, /* caseinfo     */
+    my_caseinfo_cp932,  /* caseinfo     */
     NULL,		/* state_map    */
     NULL,		/* ident_map    */
     1,			/* strxfrm_multiply */
@@ -34867,8 +34882,6 @@ CHARSET_INFO my_charset_cp932_bin=
     0xFCFC,		/* max_sort_char */
     ' ',                /* pad char      */
     1,                  /* escape_with_backslash_is_dangerous */
-    1,                  /* levels_for_compare */
-    1,                  /* levels_for_order   */
     &my_charset_handler,
     &my_collation_mb_bin_handler
 };

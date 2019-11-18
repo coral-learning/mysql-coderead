@@ -22,7 +22,6 @@ a
 8
 drop table foo;
 create table foo (a int);
-RESET MASTER;
 select * from foo;
 a
 5
@@ -41,4 +40,3 @@ ERROR 42S01: Table 't1' already exists
 insert into t1 values(1);
 DROP DATABASE b51226;
 FLUSH LOGS;
-RESET MASTER;

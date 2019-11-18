@@ -750,11 +750,7 @@ private:
     byte *m_block;
 };
 
-/*
-  XXX MYSQL: Setting A (assumeAligned) to false,
-  keeping it true might trigger segfault on SPARC.
-*/
-template <class T, class B, bool A= false>
+template <class T, class B, bool A=true>
 struct BlockGetAndPut
 {
     // function needed because of C++ grammatical ambiguity between

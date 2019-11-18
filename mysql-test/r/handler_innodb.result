@@ -1,4 +1,4 @@
-SET SESSION DEFAULT_STORAGE_ENGINE = InnoDB;
+SET SESSION STORAGE_ENGINE = InnoDB;
 drop table if exists t1,t3,t4,t5;
 create table t1 (a int, b char(10), key a(a), key b(a,b));
 insert into t1 values
@@ -515,7 +515,7 @@ select * from t1;
 ERROR 42S02: Table 'test.t1' doesn't exist
 drop table if exists t1;
 Warnings:
-Note	1051	Unknown table 'test.t1'
+Note	1051	Unknown table 't1'
 drop table if exists t1;
 create table t1 (a int) ENGINE=MEMORY;
 --> client 2
@@ -784,7 +784,6 @@ create table t1 (a int, key a (a));
 insert into t1 (a) values (1), (2), (3), (4), (5);
 create table t2 (a int, key a (a)) select * from t1;
 create temporary table t3 (a int, key a (a)) select * from t2;
-create temporary table t4 like t3;
 handler t1 open;
 handler t2 open;
 handler t3 open;
@@ -801,8 +800,6 @@ handler t2 close;
 ERROR HY000: Can't execute the given command because you have active locked tables or an active transaction
 handler t3 open;
 ERROR HY000: Can't execute the given command because you have active locked tables or an active transaction
-handler t4 open;
-ERROR HY000: Can't execute the given command because you have active locked tables or an active transaction
 # After UNLOCK TABLES handlers should be around and
 # we should be able to continue reading through them.
 unlock tables;
@@ -818,7 +815,7 @@ handler t3 read next;
 a
 1
 handler t3 close;
-drop temporary tables t3, t4;
+drop temporary table t3;
 #
 # Other operations that implicitly close handler:
 #
@@ -1748,97 +1745,4 @@ HANDLER t1 READ FIRST WHERE f1() = 1;
 ERROR 42000: This version of MySQL doesn't yet support 'stored functions in HANDLER ... READ'
 HANDLER t1 CLOSE;
 DROP FUNCTION f1;
-DROP TABLE t1;
-#
-# Bug#13008220 HANDLER SQL STATEMENT CAN MISS TO INITIALIZE
-#              FOR RANDOM READ
-#
-# A handler can only have one active 'cursor' at a time,
-# so switching between index and/or random should restart the cursor.
-CREATE TABLE t1(a INT, b INT, KEY b(b), KEY ab(a, b));
-INSERT INTO t1 VALUES (2, 20), (1, 10), (4, 40), (3, 30);
-HANDLER t1 OPEN;
-HANDLER t1 READ b FIRST;
-a	b
-1	10
-HANDLER t1 READ NEXT;
-a	b
-2	20
-HANDLER t1 READ NEXT;
-a	b
-1	10
-HANDLER t1 READ b FIRST;
-a	b
-1	10
-HANDLER t1 READ b NEXT;
-a	b
-2	20
-HANDLER t1 READ b NEXT;
-a	b
-3	30
-HANDLER t1 READ FIRST;
-a	b
-2	20
-HANDLER t1 READ b FIRST;
-a	b
-1	10
-HANDLER t1 READ NEXT;
-a	b
-2	20
-HANDLER t1 READ NEXT;
-a	b
-1	10
-HANDLER t1 READ NEXT;
-a	b
-4	40
-HANDLER t1 READ NEXT;
-a	b
-3	30
-HANDLER t1 READ NEXT;
-a	b
-HANDLER t1 READ b NEXT;
-a	b
-1	10
-HANDLER t1 READ b NEXT;
-a	b
-2	20
-HANDLER t1 READ b NEXT;
-a	b
-3	30
-HANDLER t1 READ b NEXT;
-a	b
-4	40
-HANDLER t1 READ b NEXT;
-a	b
-HANDLER t1 READ NEXT;
-a	b
-2	20
-HANDLER t1 READ b NEXT;
-a	b
-1	10
-HANDLER t1 READ FIRST;
-a	b
-2	20
-HANDLER t1 READ b PREV;
-a	b
-4	40
-HANDLER t1 READ b LAST;
-a	b
-4	40
-HANDLER t1 READ NEXT;
-a	b
-2	20
-HANDLER t1 READ ab FIRST;
-a	b
-1	10
-HANDLER t1 READ b NEXT;
-a	b
-1	10
-HANDLER t1 READ ab LAST;
-a	b
-4	40
-HANDLER t1 READ b PREV;
-a	b
-4	40
-HANDLER t1 CLOSE;
 DROP TABLE t1;

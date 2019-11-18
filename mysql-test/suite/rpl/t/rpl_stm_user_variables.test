@@ -37,7 +37,7 @@ CREATE TABLE t1 (`tinyint` TINYINT,
 -- echo #########################################
 -- echo #### [ on master ]
 -- query_vertical SELECT * FROM t1
---source include/sync_slave_sql_with_master.inc
+-- sync_slave_with_master
 -- echo #### [ on slave ]
 -- query_vertical SELECT * FROM t1
 -- echo #########################################
@@ -67,7 +67,7 @@ INSERT INTO t1 VALUES (@positive,
 -- echo #########################################
 -- echo #### [ on master ]
 -- query_vertical SELECT * FROM t1
---source include/sync_slave_sql_with_master.inc
+-- sync_slave_with_master
 -- echo #### [ on slave ]
 -- query_vertical SELECT * FROM t1
 -- echo #########################################
@@ -86,7 +86,7 @@ TRUNCATE t1;
 -- echo #########################################
 -- echo #### [ on master ]
 -- query_vertical SELECT * FROM t1
---source include/sync_slave_sql_with_master.inc
+-- sync_slave_with_master
 -- echo #### [ on slave ]
 -- query_vertical SELECT * FROM t1
 -- echo #########################################
@@ -116,7 +116,7 @@ INSERT INTO t1 VALUES (@negative,
 -- echo #########################################
 -- echo #### [ on master ]
 -- query_vertical SELECT * FROM t1
---source include/sync_slave_sql_with_master.inc
+-- sync_slave_with_master
 -- echo #### [ on slave ]
 -- query_vertical SELECT * FROM t1
 -- echo #########################################
@@ -134,7 +134,7 @@ TRUNCATE t1;
 ## cleanup
 -- connection master
 DROP TABLE t1;
---source include/sync_slave_sql_with_master.inc
+-- sync_slave_with_master
 
 #####################################################################
 #
@@ -155,7 +155,7 @@ SET @aux1= @aux;
 -- error ER_DUP_ENTRY
 INSERT INTO t1 VALUES (@aux) , (@aux1);
 
---source include/sync_slave_sql_with_master.inc
+-- sync_slave_with_master
 
 -- echo ## assertion: master and slave tables are in sync
 -- let $diff_tables=master:t1,slave:t1
@@ -165,45 +165,6 @@ INSERT INTO t1 VALUES (@aux) , (@aux1);
 DROP TRIGGER tr1;
 DROP TABLE t1;
 
---source include/sync_slave_sql_with_master.inc
-
---echo
---echo # The GET DIAGNOSTICS itself is not replicated, but it can set
---echo # variables which can be used in statements that are replicated.
---echo
-
---source include/rpl_reset.inc
-connection master;
-
-CREATE TABLE t1 (a INT, b INT);
-GET DIAGNOSTICS @var1 = NUMBER;
-INSERT INTO t1 VALUES (@var1, 0), (@var1, 0);
-
-DELIMITER |;
-CREATE PROCEDURE p1()
-LANGUAGE SQL
-BEGIN
-  DECLARE count INT;
-  UPDATE t1 SET b = 2 WHERE a = 0;
-  GET DIAGNOSTICS count = ROW_COUNT;
-  INSERT INTO t1 VALUES (1, count);
-END|
-DELIMITER ;|
-
-CALL p1();
-
---source include/sync_slave_sql_with_master.inc
-
-connection slave;
---echo # On slave, check if the statement was replicated.
-SELECT * FROM t1 ORDER BY a;
-
-connection master;
---echo # Show events and cleanup
---source include/show_binlog_events.inc
-DROP TABLE t1;
-DROP PROCEDURE p1;
-
---source include/sync_slave_sql_with_master.inc
+-- sync_slave_with_master
 
 --source include/rpl_end.inc

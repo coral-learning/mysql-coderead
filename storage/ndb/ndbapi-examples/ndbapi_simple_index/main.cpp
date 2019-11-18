@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003, 2005-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 // 
 //  ndbapi_simple_index.cpp: Using secondary indexes in NDB API
@@ -44,7 +43,6 @@
 //    9     9
 
 #include <mysql.h>
-#include <mysqld_error.h>
 #include <NdbApi.hpp>
 
 // Used for cout
@@ -86,28 +84,20 @@ int main(int argc, char** argv)
 			     0, mysqld_sock, 0) )
       MYSQLERROR(mysql);
 
-    mysql_query(&mysql, "CREATE DATABASE ndb_examples_1");
-    if (mysql_query(&mysql, "USE ndb_examples") != 0) MYSQLERROR(mysql);
+    mysql_query(&mysql, "CREATE DATABASE TEST_DB_1");
+    if (mysql_query(&mysql, "USE TEST_DB_1") != 0) MYSQLERROR(mysql);
 
-    while (mysql_query(&mysql, 
+    if (mysql_query(&mysql, 
 		    "CREATE TABLE"
-		    "  api_simple_index"
+		    "  MYTABLENAME"
 		    "    (ATTR1 INT UNSIGNED,"
 		    "     ATTR2 INT UNSIGNED NOT NULL,"
 		    "     PRIMARY KEY USING HASH (ATTR1),"
 		    "     UNIQUE MYINDEXNAME USING HASH (ATTR2))"
 		    "  ENGINE=NDB"))
-    {
-      if (mysql_errno(&mysql) == ER_TABLE_EXISTS_ERROR)
-      {
-        std::cout << "MySQL Cluster already has example table: api_scan. "
-        << "Dropping it..." << std::endl; 
-        mysql_query(&mysql, "DROP TABLE api_simple_index");
-      }
-      else MYSQLERROR(mysql);
-    }
+      MYSQLERROR(mysql);
   }
- 
+
   /**************************************************************
    * Connect to ndb cluster                                     *
    **************************************************************/
@@ -128,17 +118,17 @@ int main(int argc, char** argv)
   }
 
   Ndb* myNdb = new Ndb( cluster_connection,
-			"ndb_examples" );  // Object representing the database
+			"TEST_DB_1" );  // Object representing the database
   if (myNdb->init() == -1) { 
     APIERROR(myNdb->getNdbError());
     exit(-1);
   }
 
   const NdbDictionary::Dictionary* myDict= myNdb->getDictionary();
-  const NdbDictionary::Table *myTable= myDict->getTable("api_simple_index");
+  const NdbDictionary::Table *myTable= myDict->getTable("MYTABLENAME");
   if (myTable == NULL)
     APIERROR(myDict->getNdbError());
-  const NdbDictionary::Index *myIndex= myDict->getIndex("MYINDEXNAME$unique","api_simple_index");
+  const NdbDictionary::Index *myIndex= myDict->getIndex("MYINDEXNAME$unique","MYTABLENAME");
   if (myIndex == NULL)
     APIERROR(myDict->getNdbError());
 
@@ -269,6 +259,12 @@ int main(int argc, char** argv)
       myNdb->closeTransaction(myTransaction);
     }
   }
+
+  /**************
+   * Drop table *
+   **************/
+  if (mysql_query(&mysql, "DROP TABLE MYTABLENAME"))
+    MYSQLERROR(mysql);
 
   delete myNdb;
   delete cluster_connection;

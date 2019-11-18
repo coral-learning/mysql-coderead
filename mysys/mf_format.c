@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2012, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -30,7 +30,6 @@ char * fn_format(char * to, const char *name, const char *dir,
   const char *ext;
   reg1 size_t length;
   size_t dev_length;
-  my_bool not_used;
   DBUG_ENTER("fn_format");
   DBUG_ASSERT(name != NULL);
   DBUG_ASSERT(extension != NULL);
@@ -41,13 +40,11 @@ char * fn_format(char * to, const char *name, const char *dir,
   name+=(length=dirname_part(dev, (startpos=(char *) name), &dev_length));
   if (length == 0 || (flag & MY_REPLACE_DIR))
   {
-    DBUG_ASSERT(dir != NULL);
     /* Use given directory */
     convert_dirname(dev,dir,NullS);		/* Fix to this OS */
   }
   else if ((flag & MY_RELATIVE_PATH) && !test_if_hard_path(dev))
   {
-    DBUG_ASSERT(dir != NULL);
     /* Put 'dir' before the given path */
     strmake(buff,dev,sizeof(buff)-1);
     pos=convert_dirname(dev,dir,NullS);
@@ -57,7 +54,7 @@ char * fn_format(char * to, const char *name, const char *dir,
   if (flag & MY_PACK_FILENAME)
     pack_dirname(dev,dev);			/* Put in ./.. and ~/.. */
   if (flag & MY_UNPACK_FILENAME)
-    (void) unpack_dirname(dev, dev, &not_used);	/* Replace ~/.. with dir */
+    (void) unpack_dirname(dev,dev);		/* Replace ~/.. with dir */
 
   if (!(flag & MY_APPEND_EXT) &&
       (pos= (char*) strchr(name,FN_EXTCHAR)) != NullS)
@@ -88,7 +85,7 @@ char * fn_format(char * to, const char *name, const char *dir,
     tmp_length= strlength(startpos);
     DBUG_PRINT("error",("dev: '%s'  ext: '%s'  length: %u",dev,ext,
                         (uint) length));
-    (void) strmake(to, startpos, MY_MIN(tmp_length, FN_REFLEN-1));
+    (void) strmake(to,startpos,min(tmp_length,FN_REFLEN-1));
   }
   else
   {

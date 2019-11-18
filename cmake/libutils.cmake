@@ -126,7 +126,7 @@ ENDMACRO()
 
 MACRO(MERGE_STATIC_LIBS TARGET OUTPUT_NAME LIBS_TO_MERGE)
   # To produce a library we need at least one source file.
-  # It is created by ADD_CUSTOM_COMMAND below and will
+  # It is created by ADD_CUSTOM_COMMAND below and will helps 
   # also help to track dependencies.
   SET(SOURCE_FILE ${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_depends.c)
   ADD_LIBRARY(${TARGET} STATIC ${SOURCE_FILE})
@@ -287,14 +287,10 @@ FUNCTION(GET_DEPENDEND_OS_LIBS target result)
   SET(${result} ${ret} PARENT_SCOPE)
 ENDFUNCTION()
 
-# We try to hide the symbols in yassl/zlib to avoid name clashes with
-# other libraries like openssl.
-FUNCTION(RESTRICT_SYMBOL_EXPORTS target)
+MACRO(RESTRICT_SYMBOL_EXPORTS target)
   IF(CMAKE_COMPILER_IS_GNUCXX AND UNIX)
-    SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -Werror")
     CHECK_C_COMPILER_FLAG("-fvisibility=hidden" HAVE_VISIBILITY_HIDDEN)
     IF(HAVE_VISIBILITY_HIDDEN)
-      MESSAGE(STATUS "HAVE_VISIBILITY_HIDDEN")
       GET_TARGET_PROPERTY(COMPILE_FLAGS ${target} COMPILE_FLAGS)
       IF(NOT COMPILE_FLAGS)
         # Avoid COMPILE_FLAGS-NOTFOUND
@@ -304,4 +300,4 @@ FUNCTION(RESTRICT_SYMBOL_EXPORTS target)
         COMPILE_FLAGS "${COMPILE_FLAGS} -fvisibility=hidden")
     ENDIF()
   ENDIF()
-ENDFUNCTION()
+ENDMACRO()

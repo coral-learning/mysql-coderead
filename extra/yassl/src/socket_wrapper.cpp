@@ -52,32 +52,11 @@
 #endif // _WIN32
 
 
-namespace {
-
-
-extern "C" long system_recv(void *ptr, void *buf, size_t count)
-{
-  yaSSL::socket_t *socket = (yaSSL::socket_t *) ptr;
-  return ::recv(*socket, reinterpret_cast<char *>(buf), count, 0);
-}
-
-
-extern "C" long system_send(void *ptr, const void *buf, size_t count)
-{
-  yaSSL::socket_t *socket = (yaSSL::socket_t *) ptr;
-  return ::send(*socket, reinterpret_cast<const char *>(buf), count, 0);
-}
-
-
-}
-
-
 namespace yaSSL {
 
 
 Socket::Socket(socket_t s) 
-    : socket_(s), wouldBlock_(false), nonBlocking_(false),
-      ptr_(&socket_), send_func_(system_send), recv_func_(system_recv)
+    : socket_(s), wouldBlock_(false), nonBlocking_(false)
 {}
 
 
@@ -130,34 +109,17 @@ uint Socket::get_ready() const
 }
 
 
-void Socket::set_transport_ptr(void *ptr)
-{
-  ptr_ = ptr;
-}
-
-
-void Socket::set_transport_recv_function(yaSSL_recv_func_t recv_func)
-{
-  recv_func_ = recv_func;
-}
-
-
-void Socket::set_transport_send_function(yaSSL_send_func_t send_func)
-{
-  send_func_ = send_func;
-}
-
-
-uint Socket::send(const byte* buf, unsigned int sz, unsigned int& written)
+uint Socket::send(const byte* buf, unsigned int sz, unsigned int& written,
+                  int flags)
 {
     const byte* pos = buf;
     const byte* end = pos + sz;
 
     wouldBlock_ = false;
 
-    /* Remove send()/recv() hooks once non-blocking send is implemented. */
     while (pos != end) {
-        int sent = send_func_(ptr_, pos, static_cast<int>(end - pos));
+        int sent = ::send(socket_, reinterpret_cast<const char *>(pos),
+                          static_cast<int>(end - pos), flags);
         if (sent == -1) {
             if (get_lastError() == SOCKET_EWOULDBLOCK || 
                 get_lastError() == SOCKET_EAGAIN) {
@@ -175,11 +137,11 @@ uint Socket::send(const byte* buf, unsigned int sz, unsigned int& written)
 }
 
 
-uint Socket::receive(byte* buf, unsigned int sz)
+uint Socket::receive(byte* buf, unsigned int sz, int flags)
 {
     wouldBlock_ = false;
 
-    int recvd = recv_func_(ptr_, buf, sz);
+    int recvd = ::recv(socket_, reinterpret_cast<char *>(buf), sz, flags);
 
     // idea to seperate error from would block by arnetheduck@gmail.com
     if (recvd == -1) {
@@ -194,6 +156,14 @@ uint Socket::receive(byte* buf, unsigned int sz)
         return static_cast<uint>(-1);
 
     return recvd;
+}
+
+
+// wait if blocking for input, return false for error
+bool Socket::wait()
+{
+    byte b;
+    return receive(&b, 1, MSG_PEEK) != static_cast<uint>(-1);
 }
 
 

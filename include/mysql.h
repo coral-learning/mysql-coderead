@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2012, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -42,7 +42,7 @@
 extern "C" {
 #endif
 
-#ifndef MY_GLOBAL_INCLUDED                /* If not standard header */
+#ifndef _global_h				/* If not standard header */
 #ifndef MYSQL_ABI_CHECK
 #include <sys/types.h>
 #endif
@@ -66,7 +66,7 @@ typedef char my_bool;
 typedef int my_socket;
 #endif /* __WIN__ */
 #endif /* my_socket_defined */
-#endif /* MY_GLOBAL_INCLUDED */
+#endif /* _global_h */
 
 #include "mysql_version.h"
 #include "mysql_com.h"
@@ -118,7 +118,7 @@ typedef struct st_mysql_field {
 typedef char **MYSQL_ROW;		/* return data as array of strings */
 typedef unsigned int MYSQL_FIELD_OFFSET; /* offset to current field */
 
-#ifndef MY_GLOBAL_INCLUDED
+#ifndef _global_h
 #if defined(NO_CLIENT_LONG_LONG)
 typedef unsigned long my_ulonglong;
 #elif defined (__WIN__)
@@ -167,15 +167,9 @@ enum mysql_option
   MYSQL_OPT_GUESS_CONNECTION, MYSQL_SET_CLIENT_IP, MYSQL_SECURE_AUTH,
   MYSQL_REPORT_DATA_TRUNCATION, MYSQL_OPT_RECONNECT,
   MYSQL_OPT_SSL_VERIFY_SERVER_CERT, MYSQL_PLUGIN_DIR, MYSQL_DEFAULT_AUTH,
-  MYSQL_OPT_BIND,
-  MYSQL_OPT_SSL_KEY, MYSQL_OPT_SSL_CERT, 
-  MYSQL_OPT_SSL_CA, MYSQL_OPT_SSL_CAPATH, MYSQL_OPT_SSL_CIPHER,
-  MYSQL_OPT_SSL_CRL, MYSQL_OPT_SSL_CRLPATH,
-  MYSQL_OPT_CONNECT_ATTR_RESET, MYSQL_OPT_CONNECT_ATTR_ADD,
-  MYSQL_OPT_CONNECT_ATTR_DELETE,
-  MYSQL_SERVER_PUBLIC_KEY,
   MYSQL_ENABLE_CLEARTEXT_PLUGIN,
-  MYSQL_OPT_CAN_HANDLE_EXPIRED_PASSWORDS
+  /* Set MYSQL_OPT_SSL_MODE to be the same as in 5.6 (ABI compatibility). */
+  MYSQL_OPT_SSL_MODE= 38
 };
 
 /**
@@ -205,20 +199,7 @@ struct st_mysql_options {
   my_bool unused3;
   my_bool unused4;
   enum mysql_option methods_to_use;
-  union {
-    /*
-      The ip/hostname to use when authenticating
-      client against embedded server built with
-      grant tables - only used in embedded server
-    */
-    char *client_ip;
-
-    /*
-      The local address to bind when connecting to
-      remote server - not used in embedded server
-    */
-    char *bind_address;
-  } ci;
+  char *client_ip;
   /* Refuse client connecting to server if it uses old (pre-4.1.1) protocol */
   my_bool secure_auth;
   /* 0 - never report, 1 - always report (default) */
@@ -243,6 +224,11 @@ enum mysql_protocol_type
 {
   MYSQL_PROTOCOL_DEFAULT, MYSQL_PROTOCOL_TCP, MYSQL_PROTOCOL_SOCKET,
   MYSQL_PROTOCOL_PIPE, MYSQL_PROTOCOL_MEMORY
+};
+
+enum mysql_ssl_mode
+{
+  SSL_MODE_REQUIRED= 3
 };
 
 typedef struct character_set
@@ -465,8 +451,6 @@ MYSQL_RES *	STDCALL mysql_list_tables(MYSQL *mysql,const char *wild);
 MYSQL_RES *	STDCALL mysql_list_processes(MYSQL *mysql);
 int		STDCALL mysql_options(MYSQL *mysql,enum mysql_option option,
 				      const void *arg);
-int		STDCALL mysql_options4(MYSQL *mysql,enum mysql_option option,
-                                       const void *arg1, const void *arg2);
 void		STDCALL mysql_free_result(MYSQL_RES *result);
 void		STDCALL mysql_data_seek(MYSQL_RES *result,
 					my_ulonglong offset);

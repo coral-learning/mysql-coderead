@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003, 2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef NDBT_RESTARTS_HPP
 #define NDBT_RESTARTS_HPP
@@ -39,14 +38,13 @@
  *
  */
 
-class NDBT_Context;
 
 class NdbRestarts {
 public:
   NdbRestarts(const char* _addr = 0): 
     m_restarter(_addr)
   {
-    myRandom48Init((long)NdbTick_CurrentMillisecond());
+    myRandom48Init(NdbTick_CurrentMillisecond());
   }
 
   enum NdbRestartType{
@@ -56,7 +54,7 @@ public:
   };
 
   struct NdbRestart {
-    typedef int (restartFunc)(NDBT_Context*, NdbRestarter&, const NdbRestart*);
+    typedef int (restartFunc)(NdbRestarter&, const NdbRestart*);
     
     NdbRestart(const char* _name,
 	       NdbRestartType _type,
@@ -74,13 +72,13 @@ public:
 
   int getNumRestarts();
 
-  int executeRestart(NDBT_Context*, int _num, unsigned int _to = 120);
-  int executeRestart(NDBT_Context*, const char* _name, unsigned int _to = 120);
+  int executeRestart(int _num, unsigned int _timeout = 120);
+  int executeRestart(const char* _name, unsigned int _timeout = 120);
 
   void listRestarts();
   void listRestarts(NdbRestartType _type);
 private:
-  int executeRestart(NDBT_Context*, const NdbRestart*, unsigned int _timeout);
+  int executeRestart(const NdbRestart*, unsigned int _timeout);
 
   struct NdbErrorInsert {
     NdbErrorInsert(const char* _name,

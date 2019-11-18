@@ -51,7 +51,5 @@ select event_name, operation,
 
 # Cleanup
 
-update performance_schema.setup_instruments set enabled='YES';
-
 drop table test.t1;
 

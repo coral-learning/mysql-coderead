@@ -19,9 +19,9 @@ class THD;
 struct TABLE_LIST;
 
 /**
-  Sql_cmd_truncate_table represents the TRUNCATE statement.
+  Truncate_statement represents the TRUNCATE statement.
 */
-class Sql_cmd_truncate_table : public Sql_cmd
+class Truncate_statement : public Sql_statement
 {
 private:
   /* Set if a lock must be downgraded after truncate is done. */
@@ -29,12 +29,14 @@ private:
 
 public:
   /**
-    Constructor, used to represent a TRUNCATE statement.
+    Constructor, used to represent a ALTER TABLE statement.
+    @param lex the LEX structure for this statement.
   */
-  Sql_cmd_truncate_table()
+  Truncate_statement(LEX *lex)
+    : Sql_statement(lex)
   {}
 
-  virtual ~Sql_cmd_truncate_table()
+  virtual ~Truncate_statement()
   {}
 
   /**
@@ -43,11 +45,6 @@ public:
     @return false on success.
   */
   bool execute(THD *thd);
-
-  virtual enum_sql_command sql_command_code() const
-  {
-    return SQLCOM_TRUNCATE;
-  }
 
 protected:
   enum truncate_result{

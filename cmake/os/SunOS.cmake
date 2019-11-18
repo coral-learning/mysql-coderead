@@ -1,4 +1,4 @@
-# Copyright (c) 2010, 2016, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2010, Oracle and/or its affiliates. All rights reserved.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,33 +17,6 @@ INCLUDE(CheckSymbolExists)
 INCLUDE(CheckCSourceRuns)
 INCLUDE(CheckCSourceCompiles) 
 
-# We require SunStudio 12u2 (CC 5.11)
-IF(NOT FORCE_UNSUPPORTED_COMPILER)
-  IF(CMAKE_C_COMPILER_ID MATCHES "SunPro")
-    # CC -V yields
-    # CC: Studio 12.5 Sun C++ 5.14 SunOS_sparc Dodona 2016/04/04
-    # CC: Sun C++ 5.13 SunOS_sparc Beta 2014/03/11
-    # CC: Sun C++ 5.11 SunOS_sparc 2010/08/13
-    EXECUTE_PROCESS(
-      COMMAND ${CMAKE_CXX_COMPILER} "-V"
-      OUTPUT_VARIABLE stdout
-      ERROR_VARIABLE  stderr
-      RESULT_VARIABLE result
-    )
-    STRING(REGEX MATCH "CC: Sun C\\+\\+ 5\\.([0-9]+)" VERSION_STRING ${stderr})
-    IF (NOT CMAKE_MATCH_1 OR CMAKE_MATCH_1 STREQUAL "")
-      STRING(REGEX MATCH "CC: Studio 12\\.5 Sun C\\+\\+ 5\\.([0-9]+)"
-        VERSION_STRING ${stderr})
-    ENDIF()
-    SET(CC_MINOR_VERSION ${CMAKE_MATCH_1})
-    IF(${CC_MINOR_VERSION} LESS 11)
-      MESSAGE(FATAL_ERROR "SunStudio 12u2 or newer is required!")
-    ENDIF()
-  ELSE()
-    MESSAGE(FATAL_ERROR "Unsupported compiler!")
-  ENDIF()
-ENDIF()
-
 # Enable 64 bit file offsets
 SET(_FILE_OFFSET_BITS 64)
 
@@ -56,7 +29,7 @@ SET(LIBM m)
 
 # CMake defined -lthread as thread flag. This crashes in dlopen 
 # when trying to load plugins workaround with -lpthread
-SET(CMAKE_THREAD_LIBS_INIT -lpthread CACHE INTERNAL "" FORCE)
+SET(CMAKE_THREADS_LIBS_INIT -lpthread CACHE INTERNAL "" FORCE)
 
 # Solaris specific large page support
 CHECK_SYMBOL_EXISTS(MHA_MAPSIZE_VA sys/mman.h  HAVE_DECL_MHA_MAPSIZE_VA)
@@ -119,9 +92,4 @@ IF(CMAKE_COMPILER_IS_GNUCC AND CMAKE_SIZEOF_VOID_P EQUAL 4
       SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mcpu=v9")
     ENDIF()
   ENDIF()
-ENDIF()
-
-# This is used for the version_compile_machine variable.
-IF(CMAKE_SIZEOF_VOID_P MATCHES 8 AND CMAKE_SYSTEM_PROCESSOR MATCHES "i386")
-  SET(MYSQL_MACHINE_TYPE "x86_64")
 ENDIF()

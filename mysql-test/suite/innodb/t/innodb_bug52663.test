@@ -1,6 +1,4 @@
 --source include/have_innodb.inc
-# Adding big test option for this test.
---source include/big_test.inc
 
 set session transaction isolation level read committed;
 

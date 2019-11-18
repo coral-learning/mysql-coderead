@@ -378,6 +378,10 @@
 #include "sql_analyse.h"         // append_escaped
 #include <mysql/plugin.h>
 
+#ifdef USE_PRAGMA_IMPLEMENTATION
+#pragma implementation                          // gcc: Class implementation
+#endif
+
 #include "ha_federated.h"
 #include "probes_mysql.h"
 
@@ -385,11 +389,6 @@
 #include "key.h"                                // key_copy
 
 #include <mysql/plugin.h>
-
-#include <algorithm>
-
-using std::min;
-using std::max;
 
 /* Variables for federated share methods */
 static HASH federated_open_tables;              // To track open tables
@@ -402,6 +401,7 @@ static const int bulk_padding= 64;              // bytes "overhead" in packet
 
 /* Variables used when chopping off trailing characters */
 static const uint sizeof_trailing_comma= sizeof(", ") - 1;
+static const uint sizeof_trailing_closeparen= sizeof(") ") - 1;
 static const uint sizeof_trailing_and= sizeof(" AND ") - 1;
 static const uint sizeof_trailing_where= sizeof(" WHERE ") - 1;
 
@@ -425,7 +425,7 @@ static handler *federated_create_handler(handlerton *hton,
 /* Function we use in the creation of our hash to get key */
 
 static uchar *federated_get_key(FEDERATED_SHARE *share, size_t *length,
-                                my_bool not_used MY_ATTRIBUTE ((unused)))
+                                my_bool not_used __attribute__ ((unused)))
 {
   *length= share->share_key_length;
   return (uchar*) share->share_key;
@@ -445,8 +445,11 @@ static void init_federated_psi_keys(void)
   const char* category= "federated";
   int count;
 
+  if (PSI_server == NULL)
+    return;
+
   count= array_elements(all_federated_mutexes);
-  mysql_mutex_register(category, all_federated_mutexes, count);
+  PSI_server->register_mutex(category, all_federated_mutexes, count);
 }
 #endif /* HAVE_PSI_INTERFACE */
 
@@ -576,8 +579,8 @@ static int parse_url_error(FEDERATED_SHARE *share, TABLE *table, int error_num)
   size_t buf_len;
   DBUG_ENTER("ha_federated parse_url_error");
 
-  buf_len= min<size_t>(table->s->connect_string.length,
-                       FEDERATED_QUERY_BUFFER_SIZE-1);
+  buf_len= min(table->s->connect_string.length,
+               FEDERATED_QUERY_BUFFER_SIZE-1);
   strmake(buf, table->s->connect_string.str, buf_len);
   my_error(error_num, MYF(0), buf);
   DBUG_RETURN(error_num);
@@ -602,7 +605,8 @@ int get_connection(MEM_ROOT *mem_root, FEDERATED_SHARE *share)
        get_server_by_name(mem_root, share->connection_string, &server_buffer)))
   {
     DBUG_PRINT("info", ("get_server_by_name returned > 0 error condition!"));
-    error_num= ER_FOREIGN_DATA_STRING_INVALID_CANT_CREATE;
+    /* need to come up with error handling */
+    error_num=1;
     goto error;
   }
   DBUG_PRINT("info", ("get_server_by_name returned server at %lx",
@@ -823,7 +827,7 @@ static int parse_url(MEM_ROOT *mem_root, FEDERATED_SHARE *share, TABLE *table,
         user:@hostname:port/db/table
         Then password is a null string, so set to NULL
       */
-      if (share->password[0] == '\0')
+      if ((share->password[0] == '\0'))
         share->password= NULL;
     }
     else
@@ -901,7 +905,7 @@ ha_federated::ha_federated(handlerton *hton,
   mysql(0), stored_result(0)
 {
   trx_next= 0;
-  memset(&bulk_insert, 0, sizeof(bulk_insert));
+  bzero(&bulk_insert, sizeof(bulk_insert));
 }
 
 
@@ -1312,7 +1316,7 @@ bool ha_federated::create_where_from_key(String *to,
     }
 
     for (key_part= key_info->key_part,
-         remainder= key_info->user_defined_key_parts,
+         remainder= key_info->key_parts,
          length= ranges[i]->length,
          ptr= ranges[i]->key; ;
          remainder--,
@@ -1461,7 +1465,7 @@ prepare_for_next_key_part:
         ptr was incremented by 1. Since store_length still counts null-byte,
         we need to subtract 1 from store_length.
       */
-      ptr+= store_length - MY_TEST(key_part->null_bit);
+      ptr+= store_length - test(key_part->null_bit);
       if (tmp.append(STRING_WITH_LEN(" AND ")))
         goto err;
 
@@ -1710,6 +1714,43 @@ int ha_federated::close(void)
   DBUG_RETURN(free_share(share));
 }
 
+/*
+
+  Checks if a field in a record is SQL NULL.
+
+  SYNOPSIS
+    field_in_record_is_null()
+      table     TABLE pointer, MySQL table object
+      field     Field pointer, MySQL field object
+      record    char pointer, contains record
+
+    DESCRIPTION
+      This method uses the record format information in table to track
+      the null bit in record.
+
+    RETURN VALUE
+      1    if NULL
+      0    otherwise
+*/
+
+static inline uint field_in_record_is_null(TABLE *table,
+                                    Field *field,
+                                    char *record)
+{
+  int null_offset;
+  DBUG_ENTER("ha_federated::field_in_record_is_null");
+
+  if (!field->null_ptr)
+    DBUG_RETURN(0);
+
+  null_offset= (uint) ((char*)field->null_ptr - (char*)table->record[0]);
+
+  if (record[null_offset] & field->null_bit)
+    DBUG_RETURN(1);
+
+  DBUG_RETURN(0);
+}
+
 
 /**
   @brief Construct the INSERT statement.
@@ -1823,6 +1864,8 @@ int ha_federated::write_row(uchar *buf)
   values_string.length(0);
   insert_field_value_string.length(0);
   ha_statistic_increment(&SSV::ha_write_count);
+  if (table->timestamp_field_type & TIMESTAMP_AUTO_SET_ON_INSERT)
+    table->timestamp_field->set_time();
 
   /*
     start both our field and field values strings
@@ -2095,12 +2138,12 @@ int ha_federated::repair(THD* thd, HA_CHECK_OPT* check_opt)
 
   Keep in mind that the server can do updates based on ordering if an ORDER BY
   clause was used. Consecutive ordering is not guaranteed.
-
-  Currently new_data will not have an updated AUTO_INCREMENT record. You can
-  do this for federated by doing the following:
-
-    if (table->next_number_field && record == table->record[0])
-      update_auto_increment();
+  Currently new_data will not have an updated auto_increament record, or
+  and updated timestamp field. You can do these for federated by doing these:
+  if (table->timestamp_on_update_now)
+    update_timestamp(new_row+table->timestamp_on_update_now-1);
+  if (table->next_number_field && record == table->record[0])
+    update_auto_increment();
 
   Called from sql_select.cc, sql_acl.cc, sql_update.cc, and sql_insert.cc.
 */
@@ -2119,7 +2162,7 @@ int ha_federated::update_row(const uchar *old_data, uchar *new_data)
     this? Because we only are updating one record, and LIMIT enforces
     this.
   */
-  bool has_a_primary_key= MY_TEST(table->s->primary_key != MAX_KEY);
+  bool has_a_primary_key= test(table->s->primary_key != MAX_KEY);
   
   /*
     buffers for following strings
@@ -2199,7 +2242,7 @@ int ha_federated::update_row(const uchar *old_data, uchar *new_data)
       size_t field_name_length= strlen((*field)->field_name);
       append_ident(&where_string, (*field)->field_name, field_name_length,
                    ident_quote_char);
-      if ((*field)->is_null_in_record(old_data))
+      if (field_in_record_is_null(table, *field, (char*) old_data))
         where_string.append(STRING_WITH_LEN(" IS NULL "));
       else
       {
@@ -2688,7 +2731,7 @@ int ha_federated::rnd_next_int(uchar *buf)
   format
 
   SYNOPSIS
-    ha_federated::read_next()
+    field_in_record_is_null()
       buf       byte pointer to record 
       result    mysql result set 
 
@@ -2743,7 +2786,7 @@ int ha_federated::read_next(uchar *buf, MYSQL_RES *result)
   @param[in]  record  record data (unused)
 */
 
-void ha_federated::position(const uchar *record MY_ATTRIBUTE ((unused)))
+void ha_federated::position(const uchar *record __attribute__ ((unused)))
 {
   DBUG_ENTER("ha_federated::position");
   
@@ -3289,7 +3332,7 @@ MYSQL_RES *ha_federated::store_result(MYSQL *mysql_arg)
   DBUG_ENTER("ha_federated::store_result");
   if (result)
   {
-    (void) insert_dynamic(&results, &result);
+    (void) insert_dynamic(&results, (uchar*) &result);
   }
   position_called= FALSE;
   DBUG_RETURN(result);

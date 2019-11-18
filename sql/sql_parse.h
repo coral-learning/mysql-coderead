@@ -1,4 +1,4 @@
-/* Copyright (c) 2006, 2015, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2006, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA */
 
 #ifndef SQL_PARSE_INCLUDED
 #define SQL_PARSE_INCLUDED
@@ -35,14 +35,10 @@ enum enum_mysql_completiontype {
 
 extern "C" int test_if_data_home_dir(const char *dir);
 
-bool stmt_causes_implicit_commit(const THD *thd, uint mask);
-
-bool select_precheck(THD *thd, LEX *lex, TABLE_LIST *tables,
-                     TABLE_LIST *first_table);
 bool multi_update_precheck(THD *thd, TABLE_LIST *tables);
 bool multi_delete_precheck(THD *thd, TABLE_LIST *tables);
 int mysql_multi_update_prepare(THD *thd);
-int mysql_multi_delete_prepare(THD *thd, uint *table_count);
+int mysql_multi_delete_prepare(THD *thd);
 bool mysql_insert_select_prepare(THD *thd);
 bool update_precheck(THD *thd, TABLE_LIST *tables);
 bool delete_precheck(THD *thd, TABLE_LIST *tables);
@@ -78,16 +74,15 @@ LEX_USER *get_current_user(THD *thd, LEX_USER *user);
 bool check_string_byte_length(LEX_STRING *str, const char *err_msg,
                               uint max_byte_length);
 bool check_string_char_length(LEX_STRING *str, const char *err_msg,
-                              uint max_char_length, const CHARSET_INFO *cs,
+                              uint max_char_length, CHARSET_INFO *cs,
                               bool no_error);
-const CHARSET_INFO* merge_charset_and_collation(const CHARSET_INFO *cs,
-                                                const CHARSET_INFO *cl);
+CHARSET_INFO* merge_charset_and_collation(CHARSET_INFO *cs, CHARSET_INFO *cl);
 bool check_host_name(LEX_STRING *str);
 bool check_identifier_name(LEX_STRING *str, uint max_char_length,
                            uint err_code, const char *param_for_err_msg);
 bool mysql_test_parse_for_slave(THD *thd,char *inBuf,uint length);
+bool sqlcom_can_generate_row_events(const THD *thd);
 bool is_update_query(enum enum_sql_command command);
-bool is_explainable_query(enum enum_sql_command command);
 bool is_log_table_write_query(enum enum_sql_command command);
 bool alloc_query(THD *thd, const char *packet, uint packet_length);
 void mysql_init_select(LEX *lex);
@@ -107,8 +102,6 @@ void do_handle_bootstrap(THD *thd);
 bool dispatch_command(enum enum_server_command command, THD *thd,
 		      char* packet, uint packet_length);
 void log_slow_statement(THD *thd);
-bool log_slow_applicable(THD *thd);
-void log_slow_do(THD *thd);
 bool append_file_to_dir(THD *thd, const char **filename_ptr,
                         const char *table_name);
 bool append_file_to_dir(THD *thd, const char **filename_ptr,
@@ -121,12 +114,13 @@ bool add_field_to_list(THD *thd, LEX_STRING *field_name, enum enum_field_types t
 		       Item *default_value, Item *on_update_value,
 		       LEX_STRING *comment,
 		       char *change, List<String> *interval_list,
-		       const CHARSET_INFO *cs,
+		       CHARSET_INFO *cs,
 		       uint uint_geom_type);
 bool add_to_list(THD *thd, SQL_I_List<ORDER> &list, Item *group, bool asc);
 void add_join_on(TABLE_LIST *b,Item *expr);
 void add_join_natural(TABLE_LIST *a,TABLE_LIST *b,List<String> *using_fields,
                       SELECT_LEX *lex);
+bool add_proc_to_list(THD *thd, Item *item);
 bool push_new_name_resolution_context(THD *thd,
                                       TABLE_LIST *left_op,
                                       TABLE_LIST *right_op);
@@ -206,12 +200,10 @@ check_table_access(THD *thd, ulong requirements,TABLE_LIST *tables,
 
 bool check_global_access(THD *thd, ulong want_access);
 
-inline bool is_supported_parser_charset(const CHARSET_INFO *cs)
+inline bool is_supported_parser_charset(CHARSET_INFO *cs)
 {
-  return (cs->mbminlen == 1);
+  return test(cs->mbminlen == 1);
 }
 
-
-extern "C" bool sqlcom_can_generate_row_events(enum enum_sql_command command);
 
 #endif /* SQL_PARSE_INCLUDED */

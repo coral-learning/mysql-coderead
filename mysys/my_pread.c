@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -95,13 +95,12 @@ size_t my_pread(File Filedes, uchar *Buffer, size_t Count, my_off_t offset,
 
       if (MyFlags & (MY_WME | MY_FAE | MY_FNABP))
       {
-        char errbuf[MYSYS_STRERROR_SIZE];
         if (readbytes == (size_t) -1)
-          my_error(EE_READ, MYF(ME_BELL+ME_WAITTANG), my_filename(Filedes),
-                   my_errno, my_strerror(errbuf, sizeof(errbuf), my_errno));
+          my_error(EE_READ, MYF(ME_BELL+ME_WAITTANG),
+                   my_filename(Filedes),my_errno);
         else if (MyFlags & (MY_NABP | MY_FNABP))
-          my_error(EE_EOFERR, MYF(ME_BELL+ME_WAITTANG), my_filename(Filedes),
-                   my_errno, my_strerror(errbuf, sizeof(errbuf), my_errno));
+          my_error(EE_EOFERR, MYF(ME_BELL+ME_WAITTANG),
+                   my_filename(Filedes),my_errno);
       }
       if (readbytes == (size_t) -1 || (MyFlags & (MY_FNABP | MY_NABP)))
         DBUG_RETURN(MY_FILE_ERROR);         /* Return with error */
@@ -113,7 +112,7 @@ size_t my_pread(File Filedes, uchar *Buffer, size_t Count, my_off_t offset,
 } /* my_pread */
 
 
-/**
+/*
   Write a chunk of bytes to a file at a given position
 
   SYNOPSIOS
@@ -129,36 +128,25 @@ size_t my_pread(File Filedes, uchar *Buffer, size_t Count, my_off_t offset,
     to set the position in the file back to the original position
     if the system doesn't support pwrite()
 
-  if (MyFlags & (MY_NABP | MY_FNABP))
-  @returns
-    0  if Count == 0
-    On succes, 0
-    On failure, (size_t)-1 == MY_FILE_ERROR
-
-  otherwise
-  @returns
-    0  if Count == 0
-    On success, the number of bytes written.
-    On partial success (if less than Count bytes could be written),
-       the actual number of bytes written.
-    On failure, (size_t)-1 == MY_FILE_ERROR
+  RETURN
+    (size_t) -1   Error
+    #             Number of bytes read
 */
 
 size_t my_pwrite(File Filedes, const uchar *Buffer, size_t Count,
                  my_off_t offset, myf MyFlags)
 {
-  size_t writtenbytes;
-  size_t sum_written= 0;
-  uint errors= 0;
-  const size_t initial_count= Count;
+  size_t writtenbytes, written;
+  uint errors;
 
   DBUG_ENTER("my_pwrite");
   DBUG_PRINT("my",("fd: %d  Seek: %llu  Buffer: %p  Count: %lu  MyFlags: %d",
              Filedes, offset, Buffer, (ulong)Count, MyFlags));
+  errors= 0;
+  written= 0;
 
   for (;;)
   {
-    errno= 0;
 #if !defined (HAVE_PREAD) && !defined (_WIN32)
     int error;
     writtenbytes= (size_t) -1;
@@ -174,14 +162,11 @@ size_t my_pwrite(File Filedes, const uchar *Buffer, size_t Count,
     writtenbytes= pwrite(Filedes, Buffer, Count, offset);
 #endif
     if(writtenbytes == Count)
-    {
-      sum_written+= writtenbytes;
       break;
-    }
     my_errno= errno;
     if (writtenbytes != (size_t) -1)
     {
-      sum_written+= writtenbytes;
+      written+= writtenbytes;
       Buffer+= writtenbytes;
       Count-= writtenbytes;
       offset+= writtenbytes;
@@ -199,37 +184,23 @@ size_t my_pwrite(File Filedes, const uchar *Buffer, size_t Count,
       errors++;
       continue;
     }
-    if (writtenbytes != 0 && writtenbytes != (size_t) -1)
-      continue;
-    else if (my_errno == EINTR)
-    {
-      continue;                                 /* Retry */
-    }
-    else if (writtenbytes == 0 && !errors++)    /* Retry once */
-    {
-      /* We may come here if the file quota is exeeded */
-      continue;
-    }
+    if ((writtenbytes && writtenbytes != (size_t) -1) || my_errno == EINTR)
+      continue;					/* Retry */
 #endif
-    break;                                  /* Return bytes written */
-  }
-  if (MyFlags & (MY_NABP | MY_FNABP))
-  {
-    if (sum_written == initial_count)
-      DBUG_RETURN(0);        /* Want only errors, not bytes written */
-    if (MyFlags & (MY_WME | MY_FAE | MY_FNABP))
+    if (MyFlags & (MY_NABP | MY_FNABP))
     {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      my_error(EE_WRITE, MYF(ME_BELL | ME_WAITTANG), my_filename(Filedes),
-               my_errno, my_strerror(errbuf, sizeof(errbuf), my_errno));
+      if (MyFlags & (MY_WME | MY_FAE | MY_FNABP))
+      {
+        my_error(EE_WRITE, MYF(ME_BELL | ME_WAITTANG),
+                 my_filename(Filedes),my_errno);
+      }
+      DBUG_RETURN(MY_FILE_ERROR);		/* Error on read */
     }
-    DBUG_RETURN(MY_FILE_ERROR);
+    else
+      break;					/* Return bytes written */
   }
   DBUG_EXECUTE_IF("check", my_seek(Filedes, -1, SEEK_SET, MYF(0)););
-
-  if (sum_written == 0)
-    DBUG_RETURN(MY_FILE_ERROR);
-
-  DBUG_RETURN(sum_written);
-
+  if (MyFlags & (MY_NABP | MY_FNABP))
+    DBUG_RETURN(0);			/* Want only errors */
+  DBUG_RETURN(writtenbytes+written); /* purecov: inspected */
 } /* my_pwrite */

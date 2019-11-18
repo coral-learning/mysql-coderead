@@ -1,6 +1,4 @@
 call mtr.add_suppression("InnoDB: Warning: cannot find a free slot for an undo log. Do you have too");
-set @old_innodb_undo_logs = @@innodb_undo_logs;
-set global innodb_undo_logs=1;
 show variables like "max_connections";
 Variable_name	Value
 max_connections	64
@@ -17,7 +15,7 @@ select count(*) from information_schema.processlist;
 count(*)
 33
 CREATE TABLE mysqltest.testtable (id int unsigned not null primary key) ENGINE=InnoDB;
-ERROR HY000: Too many active concurrent transactions
+ERROR HY000: Can't create table 'mysqltest.testtable' (errno: 177)
 select count(*) from information_schema.processlist;
 count(*)
 33
@@ -25,4 +23,3 @@ select count(*) from information_schema.processlist;
 count(*)
 33
 drop database mysqltest;
-set global innodb_undo_logs = @old_innodb_undo_logs;

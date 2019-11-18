@@ -1,4 +1,4 @@
-/* Copyright (c) 2003, 2012, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -12,6 +12,10 @@
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface			/* gcc class implementation */
+#endif
 
 #include <zlib.h>
 #include "azlib.h"
@@ -28,38 +32,20 @@ typedef struct st_archive_record_buffer {
 } archive_record_buffer;
 
 
-class Archive_share : public Handler_share
-{
-public:
+typedef struct st_archive_share {
+  char *table_name;
+  char data_file_name[FN_REFLEN];
+  uint table_name_length,use_count;
   mysql_mutex_t mutex;
   THR_LOCK lock;
   azio_stream archive_write;     /* Archive file we are working with */
-  ha_rows rows_recorded;    /* Number of rows in tables */
-  char table_name[FN_REFLEN];
-  char data_file_name[FN_REFLEN];
-  bool in_optimize;
   bool archive_write_open;
   bool dirty;               /* Flag for if a flush should occur */
   bool crashed;             /* Meta file is crashed */
-  Archive_share();
-  ~Archive_share()
-  {
-    DBUG_PRINT("ha_archive", ("~Archive_share: %p",
-                              this));
-    if (archive_write_open)
-    {
-      mysql_mutex_lock(&mutex);
-      (void) close_archive_writer();
-      mysql_mutex_unlock(&mutex);
-    }
-    thr_lock_delete(&lock);
-    mysql_mutex_destroy(&mutex);
-  }
-  int init_archive_writer();
-  void close_archive_writer();
-  int write_v1_metafile();
-  int read_v1_metafile();
-};
+  ha_rows rows_recorded;    /* Number of rows in tables */
+  ulonglong mean_rec_length;
+  char real_path[FN_REFLEN];
+} ARCHIVE_SHARE;
 
 /*
   Version for file format.
@@ -72,8 +58,8 @@ public:
 class ha_archive: public handler
 {
   THR_LOCK_DATA lock;        /* MySQL lock */
-  Archive_share *share;      /* Shared lock info */
-
+  ARCHIVE_SHARE *share;      /* Shared lock info */
+  
   azio_stream archive;            /* Archive file we are working with */
   my_off_t current_position;  /* The position of the row we just read */
   uchar byte_buffer[IO_SIZE]; /* Initial buffer for our string */
@@ -90,8 +76,6 @@ class ha_archive: public handler
   archive_record_buffer *create_record_buffer(unsigned int length);
   void destroy_record_buffer(archive_record_buffer *r);
   int frm_copy(azio_stream *src, azio_stream *dst);
-  void frm_load(const char *name, azio_stream *dst);
-  unsigned int pack_row_v1(uchar *record);
 
 public:
   ha_archive(handlerton *hton, TABLE_SHARE *table_arg);
@@ -138,13 +122,14 @@ public:
   int get_row(azio_stream *file_to_read, uchar *buf);
   int get_row_version2(azio_stream *file_to_read, uchar *buf);
   int get_row_version3(azio_stream *file_to_read, uchar *buf);
-  Archive_share *get_share(const char *table_name, int *rc);
+  ARCHIVE_SHARE *get_share(const char *table_name, int *rc);
+  int free_share();
+  int init_archive_writer();
   int init_archive_reader();
   bool auto_repair() const { return 1; } // For the moment we just do this
   int read_data_header(azio_stream *file_to_read);
   void position(const uchar *record);
   int info(uint);
-  int extra(enum ha_extra_function operation);
   void update_create_info(HA_CREATE_INFO *create_info);
   int create(const char *name, TABLE *form, HA_CREATE_INFO *create_info);
   int optimize(THD* thd, HA_CHECK_OPT* check_opt);
@@ -158,13 +143,11 @@ public:
   THR_LOCK_DATA **store_lock(THD *thd, THR_LOCK_DATA **to,
                              enum thr_lock_type lock_type);
   bool is_crashed() const;
-  int check_for_upgrade(HA_CHECK_OPT *check_opt);
   int check(THD* thd, HA_CHECK_OPT* check_opt);
   bool check_and_repair(THD *thd);
   uint32 max_row_length(const uchar *buf);
   bool fix_rec_buff(unsigned int length);
   int unpack_row(azio_stream *file_to_read, uchar *record);
-  unsigned int pack_row(uchar *record, azio_stream *writer);
-  bool check_if_incompatible_data(HA_CREATE_INFO *info, uint table_changes);
+  unsigned int pack_row(uchar *record);
 };
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -526,7 +526,7 @@ static size_t thai2sortable(uchar *tstr, size_t len)
 */
 
 static
-int my_strnncoll_tis620(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+int my_strnncoll_tis620(CHARSET_INFO *cs __attribute__((unused)),
                         const uchar *s1, size_t len1, 
                         const uchar *s2, size_t len2,
                         my_bool s2_is_prefix)
@@ -556,7 +556,7 @@ int my_strnncoll_tis620(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
 
 
 static
-int my_strnncollsp_tis620(const CHARSET_INFO * cs MY_ATTRIBUTE((unused)),
+int my_strnncollsp_tis620(CHARSET_INFO * cs __attribute__((unused)),
 			  const uchar *a0, size_t a_length, 
 			  const uchar *b0, size_t b_length,
                           my_bool diff_if_only_endspace_difference)
@@ -581,7 +581,7 @@ int my_strnncollsp_tis620(const CHARSET_INFO * cs MY_ATTRIBUTE((unused)),
   a_length= thai2sortable(a, a_length);
   b_length= thai2sortable(b, b_length);
   
-  end= a + (length= MY_MIN(a_length, b_length));
+  end= a + (length= min(a_length, b_length));
   while (a < end)
   {
     if (*a++ != *b++)
@@ -632,39 +632,18 @@ ret:
   Ret: Conveted string size
 */
 
-static size_t
-my_strnxfrm_tis620(const CHARSET_INFO *cs,
-                   uchar *dst, size_t dstlen, uint nweights,
-                   const uchar *src, size_t srclen, uint flags)
+static
+size_t my_strnxfrm_tis620(CHARSET_INFO *cs __attribute__((unused)),
+                          uchar *dest, size_t len,
+                          const uchar *src, size_t srclen)
 {
-  size_t dstlen0= dstlen;
-  size_t min_len= MY_MIN(dstlen, srclen);
-  size_t len= 0;
-
-  /*
-    We don't use strmake here, since it requires one more character for
-    the terminating '\0', while this function itself and the following calling
-    functions do not require it
-  */
-  while (len < min_len)
-  {
-    if (! (dst[len] = src[len]))
-      break;
-    len++;
-  }
-
-  len= thai2sortable(dst, len);
-  set_if_smaller(dstlen, nweights);
-  set_if_smaller(len, dstlen);
-  len= my_strxfrm_pad_desc_and_reverse(cs, dst, dst + len, dst + dstlen,
-                                       dstlen - len, flags, 0);
-  if ((flags & MY_STRXFRM_PAD_TO_MAXLEN) && len < dstlen0)
-  {
-    uint fill_length= dstlen0 - len;
-    cs->cset->fill(cs, (char*) dst + len, fill_length, cs->pad_char);
-    len= dstlen0;
-  }
-  return len;
+  size_t dstlen= len;
+  len= (size_t) (strmake((char*) dest, (char*) src, min(len, srclen)) -
+                 (char*) dest);
+  len= thai2sortable(dest, len);
+  if (dstlen > len)
+    bfill(dest + len, dstlen - len, ' ');
+  return dstlen;
 }
 
 
@@ -841,10 +820,10 @@ NULL,NULL,NULL,NULL,NULL,NULL,NULL,plFF
 
 
 static
-int my_mb_wc_tis620(const CHARSET_INFO *cs  MY_ATTRIBUTE((unused)),
+int my_mb_wc_tis620(CHARSET_INFO *cs  __attribute__((unused)),
 		  my_wc_t *wc,
 		  const uchar *str,
-		  const uchar *end MY_ATTRIBUTE((unused)))
+		  const uchar *end __attribute__((unused)))
 {
   if (str >= end)
     return MY_CS_TOOSMALL;
@@ -854,10 +833,10 @@ int my_mb_wc_tis620(const CHARSET_INFO *cs  MY_ATTRIBUTE((unused)),
 }
 
 static
-int my_wc_mb_tis620(const CHARSET_INFO *cs  MY_ATTRIBUTE((unused)),
+int my_wc_mb_tis620(CHARSET_INFO *cs  __attribute__((unused)),
 		  my_wc_t wc,
 		  uchar *str,
-		  uchar *end MY_ATTRIBUTE((unused)))
+		  uchar *end __attribute__((unused)))
 {
   uchar *pl;
   
@@ -930,10 +909,11 @@ CHARSET_INFO my_charset_tis620_thai_ci=
     to_lower_tis620,
     to_upper_tis620,
     sort_order_tis620,
-    NULL,		/* uca          */
+    NULL,		/* contractions */
+    NULL,		/* sort_order_big*/
     NULL,		/* tab_to_uni   */
     NULL,		/* tab_from_uni */
-    &my_unicase_default,/* caseinfo     */
+    my_unicase_default, /* caseinfo     */
     NULL,		/* state_map    */
     NULL,		/* ident_map    */
     4,			/* strxfrm_multiply */
@@ -945,8 +925,6 @@ CHARSET_INFO my_charset_tis620_thai_ci=
     255,		/* max_sort_char */
     ' ',                /* pad char      */
     0,                  /* escape_with_backslash_is_dangerous */
-    1,                  /* levels_for_compare */
-    1,                  /* levels_for_order   */
     &my_charset_handler,
     &my_collation_ci_handler
 };
@@ -963,10 +941,11 @@ CHARSET_INFO my_charset_tis620_bin=
     to_lower_tis620,
     to_upper_tis620,
     NULL,		/* sort_order   */
-    NULL,		/* uca          */
+    NULL,		/* contractions */
+    NULL,		/* sort_order_big*/
     NULL,		/* tab_to_uni   */
     NULL,		/* tab_from_uni */
-    &my_unicase_default,/* caseinfo     */
+    my_unicase_default, /* caseinfo     */
     NULL,		/* state_map    */
     NULL,		/* ident_map    */
     1,			/* strxfrm_multiply */
@@ -978,8 +957,6 @@ CHARSET_INFO my_charset_tis620_bin=
     255,		/* max_sort_char */
     ' ',                /* pad char      */
     0,                  /* escape_with_backslash_is_dangerous */
-    1,                  /* levels_for_compare */
-    1,                  /* levels_for_order   */
     &my_charset_handler,
     &my_collation_8bit_bin_handler
 };

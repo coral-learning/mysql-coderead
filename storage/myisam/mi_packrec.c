@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -684,7 +684,7 @@ static uint find_longest_bitstream(uint16 *table, uint16 *end)
       return OFFSET_TABLE_SIZE;
     }
     length2= find_longest_bitstream(next, end) + 1;
-    length= MY_MAX(length, length2);
+    length=max(length,length2);
   }
   return length;
 }
@@ -819,12 +819,12 @@ static void uf_zerofill_skip_zero(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff,
 				   uchar *to, uchar *end)
 {
   if (get_bit(bit_buff))
-    memset(to, 0, (end-to));
+    bzero((char*) to,(uint) (end-to));
   else
   {
     end-=rec->space_length_bits;
     decode_bytes(rec,bit_buff,to,end);
-    memset(end, 0, rec->space_length_bits);
+    bzero((char*) end,rec->space_length_bits);
   }
 }
 
@@ -832,7 +832,7 @@ static void uf_skip_zero(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff, uchar *to,
 			  uchar *end)
 {
   if (get_bit(bit_buff))
-    memset(to, 0, (end-to));
+    bzero((char*) to,(uint) (end-to));
   else
     decode_bytes(rec,bit_buff,to,end);
 }
@@ -841,7 +841,7 @@ static void uf_space_normal(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff, uchar *to,
 			    uchar *end)
 {
   if (get_bit(bit_buff))
-    memset(to, ' ', end - to);
+    bfill((uchar*) to,(end-to),' ');
   else
     decode_bytes(rec,bit_buff,to,end);
 }
@@ -851,7 +851,7 @@ static void uf_space_endspace_selected(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff,
 {
   uint spaces;
   if (get_bit(bit_buff))
-    memset(to, ' ', end-to);
+    bfill((uchar*) to,(end-to),' ');
   else
   {
     if (get_bit(bit_buff))
@@ -863,7 +863,7 @@ static void uf_space_endspace_selected(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff,
       }
       if (to+spaces != end)
 	decode_bytes(rec,bit_buff,to,end-spaces);
-      memset(end-spaces, ' ', spaces);
+      bfill((uchar*) end-spaces,spaces,' ');
     }
     else
       decode_bytes(rec,bit_buff,to,end);
@@ -883,7 +883,7 @@ static void uf_endspace_selected(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff,
     }
     if (to+spaces != end)
       decode_bytes(rec,bit_buff,to,end-spaces);
-    memset(end - spaces, ' ', spaces);
+    bfill((uchar*) end-spaces,spaces,' ');
   }
   else
     decode_bytes(rec,bit_buff,to,end);
@@ -894,7 +894,7 @@ static void uf_space_endspace(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff, uchar *t
 {
   uint spaces;
   if (get_bit(bit_buff))
-    memset(to, ' ', end - to);
+    bfill((uchar*) to,(end-to),' ');
   else
   {
     if ((spaces=get_bits(bit_buff,rec->space_length_bits))+to > end)
@@ -904,7 +904,7 @@ static void uf_space_endspace(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff, uchar *t
     }
     if (to+spaces != end)
       decode_bytes(rec,bit_buff,to,end-spaces);
-    memset(end - spaces, ' ', spaces);
+    bfill((uchar*) end-spaces,spaces,' ');
   }
 }
 
@@ -919,7 +919,7 @@ static void uf_endspace(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff, uchar *to,
   }
   if (to+spaces != end)
     decode_bytes(rec,bit_buff,to,end-spaces);
-  memset(end - spaces, ' ', spaces);
+  bfill((uchar*) end-spaces,spaces,' ');
 }
 
 static void uf_space_prespace_selected(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff,
@@ -927,7 +927,7 @@ static void uf_space_prespace_selected(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff,
 {
   uint spaces;
   if (get_bit(bit_buff))
-    memset(to, ' ', end - to);
+    bfill((uchar*) to,(end-to),' ');
   else
   {
     if (get_bit(bit_buff))
@@ -937,7 +937,7 @@ static void uf_space_prespace_selected(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff,
 	bit_buff->error=1;
 	return;
       }
-      memset(to, ' ', spaces);
+      bfill((uchar*) to,spaces,' ');
       if (to+spaces != end)
 	decode_bytes(rec,bit_buff,to+spaces,end);
     }
@@ -958,7 +958,7 @@ static void uf_prespace_selected(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff,
       bit_buff->error=1;
       return;
     }
-    memset(to, ' ', spaces);
+    bfill((uchar*) to,spaces,' ');
     if (to+spaces != end)
       decode_bytes(rec,bit_buff,to+spaces,end);
   }
@@ -972,7 +972,7 @@ static void uf_space_prespace(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff, uchar *t
 {
   uint spaces;
   if (get_bit(bit_buff))
-    memset(to, ' ', end-to);
+    bfill((uchar*) to,(end-to),' ');
   else
   {
     if ((spaces=get_bits(bit_buff,rec->space_length_bits))+to > end)
@@ -980,7 +980,7 @@ static void uf_space_prespace(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff, uchar *t
       bit_buff->error=1;
       return;
     }
-    memset(to, ' ', spaces);
+    bfill((uchar*) to,spaces,' ');
     if (to+spaces != end)
       decode_bytes(rec,bit_buff,to+spaces,end);
   }
@@ -995,7 +995,7 @@ static void uf_prespace(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff, uchar *to,
     bit_buff->error=1;
     return;
   }
-  memset(to, ' ', spaces);
+  bfill((uchar*) to,spaces,' ');
   if (to+spaces != end)
     decode_bytes(rec,bit_buff,to+spaces,end);
 }
@@ -1005,11 +1005,11 @@ static void uf_zerofill_normal(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff, uchar *
 {
   end-=rec->space_length_bits;
   decode_bytes(rec,bit_buff,(uchar*) to,end);
-  memset(end, 0, rec->space_length_bits);
+  bzero((char*) end,rec->space_length_bits);
 }
 
 static void uf_constant(MI_COLUMNDEF *rec,
-			MI_BIT_BUFF *bit_buff MY_ATTRIBUTE((unused)),
+			MI_BIT_BUFF *bit_buff __attribute__((unused)),
 			uchar *to,
 			uchar *end)
 {
@@ -1027,18 +1027,18 @@ static void uf_intervall(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff, uchar *to,
 
 
 /*ARGSUSED*/
-static void uf_zero(MI_COLUMNDEF *rec MY_ATTRIBUTE((unused)),
-		    MI_BIT_BUFF *bit_buff MY_ATTRIBUTE((unused)),
+static void uf_zero(MI_COLUMNDEF *rec __attribute__((unused)),
+		    MI_BIT_BUFF *bit_buff __attribute__((unused)),
 		    uchar *to, uchar *end)
 {
-  memset(to, 0, (end-to));
+  bzero((char*) to,(uint) (end-to));
 }
 
 static void uf_blob(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff,
 		    uchar *to, uchar *end)
 {
   if (get_bit(bit_buff))
-    memset(to, 0, (end-to));
+    bzero((uchar*) to,(end-to));
   else
   {
     ulong length=get_bits(bit_buff,rec->space_length_bits);
@@ -1046,11 +1046,11 @@ static void uf_blob(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff,
     if (bit_buff->blob_pos+length > bit_buff->blob_end)
     {
       bit_buff->error=1;
-      memset(to, 0, (end-to));
+      bzero((uchar*) to,(end-to));
       return;
     }
     decode_bytes(rec,bit_buff,bit_buff->blob_pos,bit_buff->blob_pos+length);
-    _mi_store_blob_length((uchar*) to,pack_length,length);
+    _my_store_blob_length((uchar*) to,pack_length,length);
     memcpy(to+pack_length, &bit_buff->blob_pos, sizeof(char*));
     bit_buff->blob_pos+=length;
   }
@@ -1058,7 +1058,7 @@ static void uf_blob(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff,
 
 
 static void uf_varchar1(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff,
-		       uchar *to, uchar *end MY_ATTRIBUTE((unused)))
+		       uchar *to, uchar *end __attribute__((unused)))
 {
   if (get_bit(bit_buff))
     to[0]= 0;				/* Zero lengths */
@@ -1072,7 +1072,7 @@ static void uf_varchar1(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff,
 
 
 static void uf_varchar2(MI_COLUMNDEF *rec, MI_BIT_BUFF *bit_buff,
-		       uchar *to, uchar *end MY_ATTRIBUTE((unused)))
+		       uchar *to, uchar *end __attribute__((unused)))
 {
   if (get_bit(bit_buff))
     to[0]=to[1]=0;				/* Zero lengths */
@@ -1398,7 +1398,7 @@ uint _mi_pack_get_block_info(MI_INFO *myisam, MI_BIT_BUFF *bit_buff,
   info->filepos=filepos+head_length;
   if (file > 0)
   {
-    info->offset= MY_MIN(info->rec_len, ref_length - head_length);
+    info->offset=min(info->rec_len, ref_length - head_length);
     memcpy(*rec_buff_p, header + head_length, info->offset);
   }
   return 0;
@@ -1607,7 +1607,7 @@ static int _mi_read_mempack_record(MI_INFO *info, my_off_t filepos, uchar *buf)
 static int _mi_read_rnd_mempack_record(MI_INFO *info, uchar *buf,
 				       register my_off_t filepos,
 				       my_bool skip_deleted_blocks
-				       MY_ATTRIBUTE((unused)))
+				       __attribute__((unused)))
 {
   MI_BLOCK_INFO block_info;
   MYISAM_SHARE *share=info->s;

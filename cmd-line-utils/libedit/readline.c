@@ -51,7 +51,7 @@
 #else
 #include "np/vis.h"
 #endif
-#include "editline/readline.h"
+#include "readline/readline.h"
 #include "el.h"
 #include "fcns.h"		/* for EL_NUM_FCNS */
 #include "histedit.h"

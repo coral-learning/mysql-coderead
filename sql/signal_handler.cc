@@ -18,7 +18,6 @@
 
 #include "sys_vars.h"
 #include "my_stacktrace.h"
-#include "global_threads.h"
 
 #ifdef __WIN__
 #include <crtdbg.h>
@@ -35,6 +34,9 @@
 static volatile sig_atomic_t segfaulted= 0;
 extern ulong max_used_connections;
 extern volatile sig_atomic_t calling_initgroups;
+#ifdef HAVE_NPTL
+extern volatile sig_atomic_t ld_assume_kernel_is_set;
+#endif
 
 /**
  * Handler for fatal signals
@@ -111,7 +113,7 @@ extern "C" sig_handler handle_fatal_signal(int sig)
   my_safe_printf_stderr("max_threads=%u\n",
                         (uint) thread_scheduler->max_threads);
 
-  my_safe_printf_stderr("thread_count=%u\n", get_thread_count());
+  my_safe_printf_stderr("thread_count=%u\n", (uint) thread_count);
 
   my_safe_printf_stderr("connection_count=%u\n", (uint) connection_count);
 
@@ -184,7 +186,7 @@ extern "C" sig_handler handle_fatal_signal(int sig)
       "Some pointers may be invalid and cause the dump to abort.\n");
 
     my_safe_printf_stderr("Query (%p): ", thd->query());
-    my_safe_print_str(thd->query(), MY_MIN(1024U, thd->query_length()));
+    my_safe_print_str(thd->query(), min(1024U, thd->query_length()));
     my_safe_printf_stderr("Connection ID (thread ID): %lu\n",
                           (ulong) thd->thread_id);
     my_safe_printf_stderr("Status: %s\n\n", kreason);
@@ -207,6 +209,21 @@ extern "C" sig_handler handle_fatal_signal(int sig)
       "have this problem (2.3.4 or later when used with nscd),\n"
       "disable LDAP in your nsswitch.conf, or use a "
       "mysqld that is not statically linked.\n");
+  }
+#endif
+
+#ifdef HAVE_NPTL
+  if (thd_lib_detected == THD_LIB_LT && !ld_assume_kernel_is_set)
+  {
+    my_safe_printf_stderr("%s",
+      "You are running a statically-linked LinuxThreads binary on an NPTL\n"
+      "system. This can result in crashes on some distributions due to "
+      "LT/NPTL conflicts.\n"
+      "You should either build a dynamically-linked binary, "
+      "or force LinuxThreads\n"
+      "to be used with the LD_ASSUME_KERNEL environment variable.\n"
+      "Please consult the documentation for your distribution "
+      "on how to do that.\n");
   }
 #endif
 

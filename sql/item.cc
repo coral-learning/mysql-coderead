@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2000, 2018, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,6 +15,9 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 
+#ifdef USE_PRAGMA_IMPLEMENTATION
+#pragma implementation				// gcc: Class implementation
+#endif
 #include "my_global.h"                          /* NO_EMBEDDED_ACCESS_CHECKS */
 #include "sql_priv.h"
 #include "unireg.h"                    // REQUIRED: for other includes
@@ -22,8 +25,7 @@
 #include <m_ctype.h>
 #include "my_dir.h"
 #include "sp_rcontext.h"
-#include "sp_head.h"                  // sp_prepare_func_item
-#include "sp.h"                       // sp_map_item_type
+#include "sp_head.h"
 #include "sql_trigger.h"
 #include "sql_select.h"
 #include "sql_show.h"                           // append_identifier
@@ -39,11 +41,6 @@
                                        // find_item_in_list,
                                        // RESOLVED_AGAINST_ALIAS, ...
 #include "log_event.h"                 // append_query_string
-#include "sql_test.h"                  // print_where
-#include "sql_optimizer.h"             // JOIN
-
-using std::min;
-using std::max;
 
 const String my_null_string("NULL", 4, default_charset_info);
 
@@ -93,8 +90,8 @@ void
 Hybrid_type_traits_decimal::fix_length_and_dec(Item *item, Item *arg) const
 {
   item->decimals= arg->decimals;
-  item->max_length= min<uint32>(arg->max_length + DECIMAL_LONGLONG_DIGITS,
-                                DECIMAL_MAX_STR_LENGTH);
+  item->max_length= min(arg->max_length + DECIMAL_LONGLONG_DIGITS,
+                        DECIMAL_MAX_STR_LENGTH);
 }
 
 
@@ -281,41 +278,6 @@ String *Item::val_string_from_decimal(String *str)
 }
 
 
-String *Item::val_string_from_datetime(String *str)
-{
-  DBUG_ASSERT(fixed == 1);
-  MYSQL_TIME ltime;
-  if (get_date(&ltime, TIME_FUZZY_DATE) ||
-      (null_value= str->alloc(MAX_DATE_STRING_REP_LENGTH)))
-    return (String *) 0;
-  make_datetime((DATE_TIME_FORMAT *) 0, &ltime, str, decimals);
-  return str;
-}
-
-
-String *Item::val_string_from_date(String *str)
-{
-  DBUG_ASSERT(fixed == 1);
-  MYSQL_TIME ltime;
-  if (get_date(&ltime, TIME_FUZZY_DATE) ||
-      (null_value= str->alloc(MAX_DATE_STRING_REP_LENGTH)))
-    return (String *) 0;
-  make_date((DATE_TIME_FORMAT *) 0, &ltime, str);
-  return str;
-}
-
-
-String *Item::val_string_from_time(String *str)
-{
-  DBUG_ASSERT(fixed == 1);
-  MYSQL_TIME ltime;
-  if (get_time(&ltime) || (null_value= str->alloc(MAX_DATE_STRING_REP_LENGTH)))
-    return (String *) 0;
-  make_time((DATE_TIME_FORMAT *) 0, &ltime, str, decimals);
-  return str;
-}
-
-
 my_decimal *Item::val_decimal_from_real(my_decimal *decimal_value)
 {
   double nr= val_real();
@@ -348,7 +310,7 @@ my_decimal *Item::val_decimal_from_string(my_decimal *decimal_value)
                      decimal_value) & E_DEC_BAD_NUM)
   {
     ErrConvString err(res);
-    push_warning_printf(current_thd, Sql_condition::WARN_LEVEL_WARN,
+    push_warning_printf(current_thd, MYSQL_ERROR::WARN_LEVEL_WARN,
                         ER_TRUNCATED_WRONG_VALUE,
                         ER(ER_TRUNCATED_WRONG_VALUE), "DECIMAL",
                         err.ptr());
@@ -363,13 +325,9 @@ my_decimal *Item::val_decimal_from_date(my_decimal *decimal_value)
   MYSQL_TIME ltime;
   if (get_date(&ltime, TIME_FUZZY_DATE))
   {
-    /*
-      The conversion may fail in strict mode. Do not return a NULL pointer,
-      as the result may be used in subsequent arithmetic operations.
-    */
     my_decimal_set_zero(decimal_value);
     null_value= 1;                               // set NULL, stop processing
-    return decimal_value;;
+    return 0;
   }
   return date2my_decimal(&ltime, decimal_value);
 }
@@ -382,71 +340,9 @@ my_decimal *Item::val_decimal_from_time(my_decimal *decimal_value)
   if (get_time(&ltime))
   {
     my_decimal_set_zero(decimal_value);
-    null_value= 1;
     return 0;
   }
   return date2my_decimal(&ltime, decimal_value);
-}
-
-
-longlong Item::val_time_temporal()
-{
-  MYSQL_TIME ltime;
-  if ((null_value= get_time(&ltime)))
-    return 0;
-  return TIME_to_longlong_time_packed(&ltime);
-}
-
-
-longlong Item::val_date_temporal()
-{
-  MYSQL_TIME ltime;
- longlong flags=  (TIME_FUZZY_DATE | MODE_INVALID_DATES |
-                   (current_thd->variables.sql_mode &
-                   (MODE_NO_ZERO_IN_DATE | MODE_NO_ZERO_DATE)));
-  if ((null_value= get_date(&ltime, flags)))
-    return 0;
-  return TIME_to_longlong_datetime_packed(&ltime);
-}
-
-
-// TS-TODO: split into separate methods?
-longlong Item::val_temporal_with_round(enum_field_types type, uint8 dec)
-{
-  longlong nr= val_temporal_by_field_type();
-  longlong diff= my_time_fraction_remainder(MY_PACKED_TIME_GET_FRAC_PART(nr),
-                                            dec);
-  longlong abs_diff= diff > 0 ? diff : - diff;
-  if (abs_diff * 2 >= (int) log_10_int[DATETIME_MAX_DECIMALS - dec])
-  {
-    /* Needs rounding */
-    switch (type)
-    {
-    case MYSQL_TYPE_TIME:
-      {
-        MYSQL_TIME ltime;
-        TIME_from_longlong_time_packed(&ltime, nr);
-        return my_time_round(&ltime, dec) ?
-               0 : TIME_to_longlong_time_packed(&ltime);
-      }
-    case MYSQL_TYPE_TIMESTAMP:
-    case MYSQL_TYPE_DATETIME:
-      {
-        MYSQL_TIME ltime;
-        int warnings= 0;
-        TIME_from_longlong_datetime_packed(&ltime, nr);
-        return my_datetime_round(&ltime, dec, &warnings) ? 
-               0 : TIME_to_longlong_datetime_packed(&ltime);
-        return nr;
-      }
-    default:
-      DBUG_ASSERT(0);
-      break;
-    }
-  }
-  /* Does not need rounding, do simple truncation. */
-  nr-= diff;
-  return nr;
 }
 
 
@@ -473,51 +369,23 @@ longlong Item::val_int_from_decimal()
   return result;
 }
 
-
-longlong Item::val_int_from_time()
-{
-  DBUG_ASSERT(fixed == 1);
-  MYSQL_TIME ltime;
-  return get_time(&ltime) ?
-         0LL : (ltime.neg ? -1 : 1) * TIME_to_ulonglong_time_round(&ltime);
-}
-
-
-longlong Item::val_int_from_date()
-{
-  DBUG_ASSERT(fixed == 1);
-  MYSQL_TIME ltime;
-  return get_date(&ltime, TIME_FUZZY_DATE) ?
-         0LL : (longlong) TIME_to_ulonglong_date(&ltime);
-}
-
-
-longlong Item::val_int_from_datetime()
-{
-  DBUG_ASSERT(fixed == 1);
-  MYSQL_TIME ltime;
-  return get_date(&ltime, TIME_FUZZY_DATE) ?
-         0LL: (longlong) TIME_to_ulonglong_datetime_round(&ltime);
-}
-
-
-type_conversion_status Item::save_time_in_field(Field *field)
+int Item::save_time_in_field(Field *field)
 {
   MYSQL_TIME ltime;
   if (get_time(&ltime))
     return set_field_to_null_with_conversions(field, 0);
   field->set_notnull();
-  return field->store_time(&ltime, decimals);
+  return field->store_time(&ltime, MYSQL_TIMESTAMP_TIME);
 }
 
 
-type_conversion_status Item::save_date_in_field(Field *field)
+int Item::save_date_in_field(Field *field)
 {
   MYSQL_TIME ltime;
   if (get_date(&ltime, TIME_FUZZY_DATE))
     return set_field_to_null_with_conversions(field, 0);
   field->set_notnull();
-  return field->store_time(&ltime, decimals);
+  return field->store_time(&ltime, MYSQL_TIMESTAMP_DATETIME);
 }
 
 
@@ -542,26 +410,25 @@ type_conversion_status Item::save_date_in_field(Field *field)
     Nonzero value if error
 */
 
-type_conversion_status
-Item::save_str_value_in_field(Field *field, String *result)
+int Item::save_str_value_in_field(Field *field, String *result)
 {
   if (null_value)
     return set_field_to_null(field);
-
   field->set_notnull();
-  return field->store(result->ptr(), result->length(), collation.collation);
+  return field->store(result->ptr(), result->length(),
+		      collation.collation);
 }
 
 
 Item::Item():
-  is_expensive_cache(-1), rsize(0),
-  marker(0), fixed(0),
-  collation(&my_charset_bin, DERIVATION_COERCIBLE),
-  runtime_item(false), with_subselect(false),
-  with_stored_program(false), tables_locked_cache(false)
+  rsize(0), name(0), orig_name(0), name_length(0), fixed(0),
+  is_autogenerated_name(TRUE),
+  collation(&my_charset_bin, DERIVATION_COERCIBLE)
 {
+  marker= 0;
   maybe_null=null_value=with_sum_func=unsigned_flag=0;
   decimals= 0; max_length= 0;
+  with_subselect= 0;
   cmp_context= (Item_result)-1;
 
   /* Put item in free list so that we can free all items at end */
@@ -591,12 +458,12 @@ Item::Item():
   tables.
 */
 Item::Item(THD *thd, Item *item):
-  is_expensive_cache(-1),
   rsize(0),
   str_value(item->str_value),
-  item_name(item->item_name),
+  name(item->name),
   orig_name(item->orig_name),
   max_length(item->max_length),
+  name_length(item->name_length),
   marker(item->marker),
   decimals(item->decimals),
   maybe_null(item->maybe_null),
@@ -604,12 +471,10 @@ Item::Item(THD *thd, Item *item):
   unsigned_flag(item->unsigned_flag),
   with_sum_func(item->with_sum_func),
   fixed(item->fixed),
+  is_autogenerated_name(item->is_autogenerated_name),
   collation(item->collation),
-  cmp_context(item->cmp_context),
-  runtime_item(false),
   with_subselect(item->has_subquery()),
-  with_stored_program(item->with_stored_program),
-  tables_locked_cache(item->tables_locked_cache)
+  cmp_context(item->cmp_context)
 {
   next= thd->free_list;				// Put in free list
   thd->free_list= this;
@@ -625,56 +490,9 @@ uint Item::decimal_precision() const
     uint prec= 
       my_decimal_length_to_precision(max_char_length(), decimals,
                                      unsigned_flag);
-    return min<uint>(prec, DECIMAL_MAX_PRECISION);
+    return min(prec, DECIMAL_MAX_PRECISION);
   }
-  switch (field_type())
-  {
-    case MYSQL_TYPE_TIME:
-      return decimals + TIME_INT_DIGITS;
-    case MYSQL_TYPE_DATETIME:
-    case MYSQL_TYPE_TIMESTAMP:
-      return decimals + DATETIME_INT_DIGITS;
-    case MYSQL_TYPE_DATE:
-      return decimals + DATE_INT_DIGITS;
-    default:
-      break;
-  }
-  return min<uint>(max_char_length(), DECIMAL_MAX_PRECISION);
-}
-
-
-uint Item::time_precision()
-{
-  if (const_item() && result_type() == STRING_RESULT && !is_temporal())
-  {
-    MYSQL_TIME ltime;
-    String buf, *tmp;
-    MYSQL_TIME_STATUS status;
-    DBUG_ASSERT(fixed);
-    // Nanosecond rounding is not needed, for performance purposes
-    if ((tmp= val_str(&buf)) &&
-        str_to_time(tmp, &ltime, TIME_NO_NSEC_ROUNDING, &status) == 0)
-      return MY_MIN(status.fractional_digits, DATETIME_MAX_DECIMALS);
-  }
-  return MY_MIN(decimals, DATETIME_MAX_DECIMALS);
-}
-
-
-uint Item::datetime_precision()
-{
-  if (const_item() && result_type() == STRING_RESULT && !is_temporal())
-  {
-    MYSQL_TIME ltime;
-    String buf, *tmp;
-    MYSQL_TIME_STATUS status;
-    DBUG_ASSERT(fixed);
-    // Nanosecond rounding is not needed, for performance purposes
-    if ((tmp= val_str(&buf)) &&
-        !str_to_datetime(tmp, &ltime, TIME_NO_NSEC_ROUNDING | TIME_FUZZY_DATE,
-                         &status))
-      return MY_MIN(status.fractional_digits, DATETIME_MAX_DECIMALS);
-  }
-  return MY_MIN(decimals, DATETIME_MAX_DECIMALS);
+  return min(max_char_length(), DECIMAL_MAX_PRECISION);
 }
 
 
@@ -682,47 +500,12 @@ void Item::print_item_w_name(String *str, enum_query_type query_type)
 {
   print(str, query_type);
 
-  if (item_name.is_set())
+  if (name)
   {
     THD *thd= current_thd;
     str->append(STRING_WITH_LEN(" AS "));
-    append_identifier(thd, str, item_name);
+    append_identifier(thd, str, name, (uint) strlen(name));
   }
-}
-
-
-/**
-   @details
-   "SELECT (subq) GROUP BY (same_subq)" confuses ONLY_FULL_GROUP_BY (it does
-   not see that both subqueries are the same, raises an error).
-   To avoid hitting this problem, if the original query was:
-   "SELECT expression AS x GROUP BY x", we print "GROUP BY x", not
-   "GROUP BY expression". Same for ORDER BY.
-   This has practical importance for views created as
-   "CREATE VIEW v SELECT (subq) AS x GROUP BY x"
-   (print_order() is used to write the view's definition in the frm file).
-   We make one exception: if the view is merge-able, its ORDER clause will be
-   merged into the parent query's. If an identifier in the merged ORDER clause
-   is allowed to be either an alias or an expression of the view's underlying
-   tables, resolution is difficult: it may be to be found in the underlying
-   tables of the view, or in the SELECT list of the view; unlike other ORDER
-   elements directly originating from the parent query.
-   To avoid this problem, if the view is merge-able, we print the
-   expression. This does not cause problems with only_full_group_by, because a
-   merge-able view never has GROUP BY. @see mysql_register_view().
-*/
-void Item::print_for_order(String *str,
-                           enum_query_type query_type,
-                           bool used_alias)
-{
-  if (used_alias)
-  {
-    DBUG_ASSERT(item_name.is_set());
-    // In the clause, user has referenced expression using an alias; we use it
-    append_identifier(current_thd, str, item_name);
-  }
-  else
-    print(str,query_type);
 }
 
 
@@ -731,9 +514,8 @@ void Item::cleanup()
   DBUG_ENTER("Item::cleanup");
   fixed=0;
   marker= 0;
-  tables_locked_cache= false;
-  if (orig_name.is_set())
-    item_name= orig_name;
+  if (orig_name)
+    name= orig_name;
   DBUG_VOID_RETURN;
 }
 
@@ -764,9 +546,9 @@ void Item::rename(char *new_name)
     we can compare pointers to names here, because if name was not changed,
     pointer will be same
   */
-  if (!orig_name.is_set() && new_name != item_name.ptr())
-    orig_name= item_name;
-  item_name.set(new_name);
+  if (!orig_name && new_name != name)
+    orig_name= name;
+  name= new_name;
 }
 
 
@@ -817,7 +599,19 @@ Item_ident::Item_ident(Name_resolution_context *context_arg,
    alias_name_used(FALSE), cached_field_index(NO_CACHED_FIELD_INDEX),
    cached_table(0), depended_from(0)
 {
-  item_name.set(field_name_arg);
+  name = (char*) field_name_arg;
+}
+
+
+Item_ident::Item_ident(TABLE_LIST *view_arg, const char *field_name_arg)
+  :orig_db_name(NullS), orig_table_name(view_arg->table_name),
+   orig_field_name(field_name_arg), context(&view_arg->view->select_lex.context),
+   db_name(NullS), table_name(view_arg->alias),
+   field_name(field_name_arg),
+   alias_name_used(FALSE), cached_field_index(NO_CACHED_FIELD_INDEX),
+   cached_table(NULL), depended_from(NULL)
+{
+  name = (char*) field_name_arg;
 }
 
 
@@ -855,6 +649,7 @@ void Item_ident::cleanup()
   db_name= orig_db_name; 
   table_name= orig_table_name;
   field_name= orig_field_name;
+  depended_from= 0;
   DBUG_VOID_RETURN;
 }
 
@@ -902,24 +697,6 @@ bool Item_field::collect_item_field_processor(uchar *arg)
   DBUG_RETURN(FALSE);
 }
 
-
-bool Item_field::add_field_to_set_processor(uchar *arg)
-{
-  DBUG_ENTER("Item_field::add_field_to_set_processor");
-  DBUG_PRINT("info", ("%s", field->field_name ? field->field_name : "noname"));
-  TABLE *table= (TABLE *) arg;
-  if (field->table == table)
-    bitmap_set_bit(&table->tmp_set, field->field_index);
-  DBUG_RETURN(FALSE);
-}
-
-
-bool Item_field::remove_column_from_bitmap(uchar *argument)
-{
-  MY_BITMAP *bitmap= reinterpret_cast<MY_BITMAP*>(argument);
-  bitmap_clear_bit(bitmap, field->field_index);
-  return false;
-}
 
 /**
   Check if an Item_field references some field from a list of fields.
@@ -980,63 +757,48 @@ bool Item::check_cols(uint c)
 }
 
 
-const Name_string null_name_string(NULL, 0);
-
-
-void Name_string::copy(const char *str, size_t length, const CHARSET_INFO *cs)
+void Item::set_name(const char *str, uint length, CHARSET_INFO *cs)
 {
   if (!length)
   {
     /* Empty string, used by AS or internal function like last_insert_id() */
-    set(str ? "" : NULL, 0);
+    name= (char*) str;
+    name_length= 0;
     return;
   }
   if (cs->ctype)
   {
+    uint orig_len= length;
     /*
       This will probably need a better implementation in the future:
       a function in CHARSET_INFO structure.
     */
-    while (length && !my_isgraph(cs, *str))
+    while (length && !my_isgraph(cs,*str))
     {						// Fix problem with yacc
       length--;
       str++;
+    }
+    if (orig_len != length && !is_autogenerated_name)
+    {
+      if (length == 0)
+        push_warning_printf(current_thd, MYSQL_ERROR::WARN_LEVEL_WARN,
+                            ER_NAME_BECOMES_EMPTY, ER(ER_NAME_BECOMES_EMPTY),
+                            str + length - orig_len);
+      else
+        push_warning_printf(current_thd, MYSQL_ERROR::WARN_LEVEL_WARN,
+                            ER_REMOVED_SPACES, ER(ER_REMOVED_SPACES),
+                            str + length - orig_len);
     }
   }
   if (!my_charset_same(cs, system_charset_info))
   {
     size_t res_length;
-    char *tmp= sql_strmake_with_convert(str, length, cs, MAX_ALIAS_NAME,
-                                        system_charset_info, &res_length);
-    set(tmp, tmp ? res_length : 0);
+    name= sql_strmake_with_convert(str, name_length= length, cs,
+				   MAX_ALIAS_NAME, system_charset_info,
+				   &res_length);
   }
   else
-  {
-    size_t len= min<size_t>(length, MAX_ALIAS_NAME);
-    char *tmp= sql_strmake(str, len);
-    set(tmp, tmp ? len : 0);
-  }
-}
-
-
-void Item_name_string::copy(const char *str_arg, size_t length_arg,
-                            const CHARSET_INFO *cs_arg,
-                            bool is_autogenerated_arg)
-{
-  m_is_autogenerated= is_autogenerated_arg;
-  copy(str_arg, length_arg, cs_arg);
-  if (length_arg > length() && !is_autogenerated())
-  {
-    ErrConvString tmp(str_arg, static_cast<uint>(length_arg), cs_arg);
-    if (length() == 0)
-      push_warning_printf(current_thd, Sql_condition::WARN_LEVEL_WARN,
-                          ER_NAME_BECOMES_EMPTY, ER(ER_NAME_BECOMES_EMPTY),
-                          tmp.ptr());
-    else
-      push_warning_printf(current_thd, Sql_condition::WARN_LEVEL_WARN,
-                          ER_REMOVED_SPACES, ER(ER_REMOVED_SPACES),
-                          tmp.ptr());
-  }
+    name= sql_strmake(str, (name_length= min(length,MAX_ALIAS_NAME)));
 }
 
 
@@ -1045,7 +807,6 @@ void Item_name_string::copy(const char *str_arg, size_t length_arg,
   This function is called when:
   - Comparing items in the WHERE clause (when doing where optimization)
   - When trying to find an ORDER BY/GROUP BY item in the SELECT part
-  - When matching fields in multiple equality objects (Item_equal)
 */
 
 bool Item::eq(const Item *item, bool binary_cmp) const
@@ -1055,11 +816,12 @@ bool Item::eq(const Item *item, bool binary_cmp) const
     for all basic constants we have special checks, and Item_param's
     type() can be only among basic constant types.
   */
-  return type() == item->type() && item_name.eq_safe(item->item_name);
+  return type() == item->type() && name && item->name &&
+    !my_strcasecmp(system_charset_info,name,item->name);
 }
 
 
-Item *Item::safe_charset_converter(const CHARSET_INFO *tocs)
+Item *Item::safe_charset_converter(CHARSET_INFO *tocs)
 {
   Item_func_conv_charset *conv= new Item_func_conv_charset(this, tocs, 1);
   return conv->safe ? conv : NULL;
@@ -1077,7 +839,7 @@ Item *Item::safe_charset_converter(const CHARSET_INFO *tocs)
   the latter returns a non-fixed Item, so val_str() crashes afterwards.
   Override Item_num method, to return a fixed item.
 */
-Item *Item_num::safe_charset_converter(const CHARSET_INFO *tocs)
+Item *Item_num::safe_charset_converter(CHARSET_INFO *tocs)
 {
   /*
     Item_num returns pure ASCII result,
@@ -1117,7 +879,7 @@ Item *Item_num::safe_charset_converter(const CHARSET_INFO *tocs)
 }
 
 
-Item *Item_static_float_func::safe_charset_converter(const CHARSET_INFO *tocs)
+Item *Item_static_float_func::safe_charset_converter(CHARSET_INFO *tocs)
 {
   Item_string *conv;
   char buf[64];
@@ -1133,28 +895,13 @@ Item *Item_static_float_func::safe_charset_converter(const CHARSET_INFO *tocs)
 }
 
 
-Item *Item_string::safe_charset_converter(const CHARSET_INFO *tocs)
-{
-  return charset_converter(tocs, true);
-}
-
-
-/**
-  Convert a string item into the requested character set.
-
-  @param tocs       Character set to to convert the string to.
-  @param lossless   Whether data loss is acceptable.
-
-  @return A new item representing the converted string.
-*/
-Item *Item_string::charset_converter(const CHARSET_INFO *tocs, bool lossless)
+Item *Item_string::safe_charset_converter(CHARSET_INFO *tocs)
 {
   Item_string *conv;
   uint conv_errors;
   char *ptr;
   String tmp, cstr, *ostr= val_str(&tmp);
   cstr.copy(ostr->ptr(), ostr->length(), ostr->charset(), tocs, &conv_errors);
-  conv_errors= lossless && conv_errors;
   if (conv_errors || !(conv= new Item_string(cstr.ptr(), cstr.length(),
                                              cstr.charset(),
                                              collation.derivation)))
@@ -1176,7 +923,7 @@ Item *Item_string::charset_converter(const CHARSET_INFO *tocs, bool lossless)
 }
 
 
-Item *Item_param::safe_charset_converter(const CHARSET_INFO *tocs)
+Item *Item_param::safe_charset_converter(CHARSET_INFO *tocs)
 {
   if (const_item())
   {
@@ -1211,8 +958,7 @@ Item *Item_param::safe_charset_converter(const CHARSET_INFO *tocs)
 }
 
 
-Item *Item_static_string_func::
-safe_charset_converter(const CHARSET_INFO *tocs)
+Item *Item_static_string_func::safe_charset_converter(CHARSET_INFO *tocs)
 {
   Item_string *conv;
   uint conv_errors;
@@ -1252,253 +998,67 @@ bool Item_string::eq(const Item *item, bool binary_cmp) const
 }
 
 
-bool Item::get_date_from_string(MYSQL_TIME *ltime, uint flags)
-{
-  char buff[MAX_DATE_STRING_REP_LENGTH];
-  String tmp(buff, sizeof(buff), &my_charset_bin), *res;
-  if (!(res= val_str(&tmp)))
-  {
-    set_zero_time(ltime, MYSQL_TIMESTAMP_DATETIME);
-    return true;
-  }
-  return str_to_datetime_with_warn(res, ltime, flags);
-}
-
-
-bool Item::get_date_from_real(MYSQL_TIME *ltime, uint flags)
-{
-  double value= val_real();
-  if (null_value)
-  {
-    set_zero_time(ltime, MYSQL_TIMESTAMP_DATETIME);
-    return true;
-  }
-  return my_double_to_datetime_with_warn(value, ltime, flags);
-
-}
-
-
-bool Item::get_date_from_decimal(MYSQL_TIME *ltime, uint flags)
-{
-  my_decimal buf, *decimal= val_decimal(&buf);
-  if (null_value)
-  {
-    set_zero_time(ltime, MYSQL_TIMESTAMP_DATETIME);
-    return true;
-  }
-  return my_decimal_to_datetime_with_warn(decimal, ltime, flags);
-}
-
-
-bool Item::get_date_from_int(MYSQL_TIME *ltime, uint flags)
-{
-  longlong value= val_int();
-  if (null_value)
-  {
-    set_zero_time(ltime, MYSQL_TIMESTAMP_DATETIME);
-    return true;
-  }
-  return my_longlong_to_datetime_with_warn(value, ltime, flags);
-}
-
-
-bool Item::get_date_from_time(MYSQL_TIME *ltime)
-{
-   MYSQL_TIME tm;
-   if (get_time(&tm))
-   {
-     DBUG_ASSERT(null_value);
-     return true;
-   }
-   time_to_datetime(current_thd, &tm, ltime);
-   return false;
-}
-
-
-bool Item::get_date_from_numeric(MYSQL_TIME *ltime, uint fuzzydate)
-{
-  switch (result_type())
-  {
-  case REAL_RESULT:
-    return get_date_from_real(ltime, fuzzydate);
-  case DECIMAL_RESULT:
-    return get_date_from_decimal(ltime, fuzzydate);
-  case INT_RESULT:
-    return get_date_from_int(ltime, fuzzydate);
-  case STRING_RESULT:
-  case ROW_RESULT:
-    DBUG_ASSERT(0);
-  }
-  return (null_value= true);  // Impossible result_type
-}
-
-
 /**
   Get the value of the function as a MYSQL_TIME structure.
   As a extra convenience the time structure is reset on error!
 */
 
-bool Item::get_date_from_non_temporal(MYSQL_TIME *ltime, uint fuzzydate)
+bool Item::get_date(MYSQL_TIME *ltime,uint fuzzydate)
 {
-  DBUG_ASSERT(!is_temporal());
-  switch (result_type())
+  if (result_type() == STRING_RESULT)
   {
-  case STRING_RESULT:
-    return get_date_from_string(ltime, fuzzydate);
-  case REAL_RESULT:
-    return get_date_from_real(ltime, fuzzydate);
-  case DECIMAL_RESULT:
-    return get_date_from_decimal(ltime, fuzzydate);
-  case INT_RESULT:
-    return get_date_from_int(ltime, fuzzydate);
-  case ROW_RESULT:
-    DBUG_ASSERT(0);
+    char buff[40];
+    String tmp(buff,sizeof(buff), &my_charset_bin),*res;
+    if (!(res=val_str(&tmp)) ||
+        str_to_datetime_with_warn(res->charset(), res->ptr(), res->length(),
+                                  ltime, fuzzydate) <= MYSQL_TIMESTAMP_ERROR)
+      goto err;
   }
-  return (null_value= true);  // Impossible result_type
-}
-
-
-bool Item::get_time_from_string(MYSQL_TIME *ltime)
-{
-  char buff[MAX_DATE_STRING_REP_LENGTH];
-  String tmp(buff, sizeof(buff), &my_charset_bin), *res;
-  if (!(res= val_str(&tmp)))
+  else
   {
-    set_zero_time(ltime, MYSQL_TIMESTAMP_TIME);
-    return true;
+    int was_cut;
+    longlong value= val_int();
+
+    if (null_value)
+      goto err;
+
+    if (number_to_datetime(value, ltime, fuzzydate, &was_cut) == LL(-1))
+    {
+      char buff[22], *end;
+      end= longlong10_to_str(value, buff, -10);
+      make_truncated_value_warning(current_thd, MYSQL_ERROR::WARN_LEVEL_WARN,
+                                   buff, (int) (end-buff), MYSQL_TIMESTAMP_NONE,
+                                   NullS);
+      goto err;
+    }
   }
-  return str_to_time_with_warn(res, ltime);
+  return 0;
+
+err:
+  bzero((char*) ltime,sizeof(*ltime));
+  return 1;
 }
-
-
-bool Item::get_time_from_real(MYSQL_TIME *ltime)
-{
-  double value= val_real();
-  if (null_value)
-  {
-    set_zero_time(ltime, MYSQL_TIMESTAMP_TIME);
-    return true;
-  }
-  return my_double_to_time_with_warn(value, ltime);
-}
- 
-
-bool Item::get_time_from_decimal(MYSQL_TIME *ltime)
-{
-  my_decimal buf, *decimal= val_decimal(&buf);
-  if (null_value)
-  {
-    set_zero_time(ltime, MYSQL_TIMESTAMP_TIME);
-    return true;
-  }
-  return my_decimal_to_time_with_warn(decimal, ltime);
-}
-
-
-bool Item::get_time_from_int(MYSQL_TIME *ltime)
-{
-  DBUG_ASSERT(!is_temporal());
-  longlong value= val_int();
-  if (null_value)
-  {
-    set_zero_time(ltime, MYSQL_TIMESTAMP_TIME);
-    return true;
-  }
-  return my_longlong_to_time_with_warn(value, ltime);
-}
-
-
-bool Item::get_time_from_date(MYSQL_TIME *ltime)
-{
-  DBUG_ASSERT(fixed == 1);
-  if (get_date(ltime, TIME_FUZZY_DATE)) // Need this check if NULL value
-    return true;
-  set_zero_time(ltime, MYSQL_TIMESTAMP_TIME);
-  return false;
-}
-
-
-bool Item::get_time_from_datetime(MYSQL_TIME *ltime)
-{
-  DBUG_ASSERT(fixed == 1);
-  if (get_date(ltime, TIME_FUZZY_DATE))
-    return true;
-  datetime_to_time(ltime);
-  return false;
-}
-
-
-bool Item::get_time_from_numeric(MYSQL_TIME *ltime)
-{
-  DBUG_ASSERT(!is_temporal());
-  switch (result_type())
-  {
-  case REAL_RESULT:
-    return get_time_from_real(ltime);
-  case DECIMAL_RESULT:
-    return get_time_from_decimal(ltime);
-  case INT_RESULT:
-    return get_time_from_int(ltime);
-  case STRING_RESULT:
-  case ROW_RESULT:
-    DBUG_ASSERT(0);
-  }
-  return (null_value= true); // Impossible result type
-}
- 
-
-
 
 /**
-  Get time value from int, real, decimal or string.
+  Get time of first argument.\
 
   As a extra convenience the time structure is reset on error!
 */
 
-bool Item::get_time_from_non_temporal(MYSQL_TIME *ltime)
+bool Item::get_time(MYSQL_TIME *ltime)
 {
-  DBUG_ASSERT(!is_temporal());
-  switch (result_type())
+  char buff[40];
+  String tmp(buff,sizeof(buff),&my_charset_bin),*res;
+  if (!(res=val_str_ascii(&tmp)) ||
+      str_to_time_with_warn(res->charset(), res->ptr(), res->length(), ltime))
   {
-  case STRING_RESULT:
-    return get_time_from_string(ltime);
-  case REAL_RESULT:
-    return get_time_from_real(ltime);
-  case DECIMAL_RESULT:
-    return get_time_from_decimal(ltime);
-  case INT_RESULT:
-    return get_time_from_int(ltime);
-  case ROW_RESULT:
-    DBUG_ASSERT(0);
+    bzero((char*) ltime,sizeof(*ltime));
+    return 1;
   }
-  return (null_value= true); // Impossible result type
+  return 0;
 }
 
-
-/**
-   If argument is NULL, sets null_value. Otherwise:
-   if invalid DATETIME value, or a valid DATETIME value but which is out of
-   the supported Unix timestamp range, sets 'tm' to 0.
-*/
-bool Item::get_timeval(struct timeval *tm, int *warnings)
-{
-  MYSQL_TIME ltime;
-  if (get_date(&ltime, TIME_FUZZY_DATE))
-  {
-    if (null_value)
-      return true; /* Value is NULL */
-    goto zero; /* Could not extract date from the value */
-  }
-  if (datetime_to_timeval(current_thd, &ltime, tm, warnings))
-    goto zero; /* Value is out of the supported range */
-  return false; /* Value is a good Unix timestamp */
-zero:
-  tm->tv_sec= tm->tv_usec= 0;
-  return false;
-}
-
-
-const CHARSET_INFO *Item::default_charset()
+CHARSET_INFO *Item::default_charset()
 {
   return current_thd->variables.collation_connection;
 }
@@ -1512,51 +1072,23 @@ const CHARSET_INFO *Item::default_charset()
    for example in opt_range to adjust the key value to fit the column.
 */
 
-type_conversion_status
-Item::save_in_field_no_warnings(Field *field, bool no_conversions)
+int Item::save_in_field_no_warnings(Field *field, bool no_conversions)
 {
-  DBUG_ENTER("Item::save_in_field_no_warnings");
+  int res;
   TABLE *table= field->table;
   THD *thd= table->in_use;
   enum_check_fields tmp= thd->count_cuted_fields;
   my_bitmap_map *old_map= dbug_tmp_use_all_columns(table, table->write_set);
-  sql_mode_t sql_mode= thd->variables.sql_mode;
+  ulonglong sql_mode= thd->variables.sql_mode;
   thd->variables.sql_mode&= ~(MODE_NO_ZERO_IN_DATE | MODE_NO_ZERO_DATE);
   thd->count_cuted_fields= CHECK_FIELD_IGNORE;
 
-  const type_conversion_status res= save_in_field(field, no_conversions);
+  res= save_in_field(field, no_conversions);
 
   thd->count_cuted_fields= tmp;
   dbug_tmp_restore_column_map(table->write_set, old_map);
   thd->variables.sql_mode= sql_mode;
-  DBUG_RETURN(res);
-}
-
-
-bool Item::is_blob_field() const
-{
-  DBUG_ASSERT(fixed);
-
-  enum_field_types type= field_type();
-  if (type == MYSQL_TYPE_BLOB || type == MYSQL_TYPE_GEOMETRY ||
-      // Char length, not the byte one, should be taken into account
-      (max_length/collation.collation->mbmaxlen > CONVERT_IF_BIGGER_TO_BLOB))
-    return true;
-
-  /*
-    This function is used only for subquery/semijoin materialization;
-    these are not able to handle a tmp table with share->uniques==true; it is
-    possible, if the tmp table has many rows, that it becomes a MyISAM table,
-    which will have share->uniques==true if the column's length in bytes is
-    bigger than MI_MAX_KEY_LENGTH.
-    So we add and extra restriction, only in MySQL 5.6: if longer than this,
-    pretend it's a blob, to disable materialization:
-  */
-  if (max_length >=
-      (MI_MAX_KEY_LENGTH - HA_KEY_NULL_LENGTH - HA_KEY_BLOB_LENGTH))
-    return true;
-
-  return false;
+  return res;
 }
 
 
@@ -1564,12 +1096,15 @@ bool Item::is_blob_field() const
   Item_sp_variable methods
 *****************************************************************************/
 
-Item_sp_variable::Item_sp_variable(const Name_string sp_var_name)
-  :m_thd(0), m_name(sp_var_name)
+Item_sp_variable::Item_sp_variable(char *sp_var_name_str,
+                                   uint sp_var_name_length)
+  :m_thd(0)
 #ifndef DBUG_OFF
    , m_sp(0)
 #endif
 {
+  m_name.str= sp_var_name_str;
+  m_name.length= sp_var_name_length;
 }
 
 
@@ -1586,7 +1121,7 @@ bool Item_sp_variable::fix_fields(THD *thd, Item **)
   decimals= it->decimals;
   unsigned_flag= it->unsigned_flag;
   fixed= 1;
-  collation.set(it->collation);
+  collation.set(it->collation.collation, it->collation.derivation);
 
   return FALSE;
 }
@@ -1658,22 +1193,6 @@ my_decimal *Item_sp_variable::val_decimal(my_decimal *decimal_value)
 }
 
 
-bool Item_sp_variable::get_date(MYSQL_TIME *ltime, uint fuzzydate)
-{
-  DBUG_ASSERT(fixed);
-  Item *it= this_item();
-  return (null_value= it->get_date(ltime, fuzzydate));
-}
-
-
-bool Item_sp_variable::get_time(MYSQL_TIME *ltime)
-{
-  DBUG_ASSERT(fixed);
-  Item *it= this_item();
-  return (null_value= it->get_time(ltime));
-}
-
-
 bool Item_sp_variable::is_null()
 {
   return this_item()->is_null();
@@ -1684,18 +1203,17 @@ bool Item_sp_variable::is_null()
   Item_splocal methods
 *****************************************************************************/
 
-Item_splocal::Item_splocal(const Name_string sp_var_name,
+Item_splocal::Item_splocal(const LEX_STRING &sp_var_name,
                            uint sp_var_idx,
                            enum_field_types sp_var_type,
                            uint pos_in_q, uint len_in_q)
-  :Item_sp_variable(sp_var_name),
+  :Item_sp_variable(sp_var_name.str, sp_var_name.length),
    m_var_idx(sp_var_idx),
    limit_clause_param(FALSE),
    pos_in_query(pos_in_q), len_in_query(len_in_q)
 {
   maybe_null= TRUE;
 
-  sp_var_type= real_type_to_type(sp_var_type);
   m_type= sp_map_item_type(sp_var_type);
   m_field_type= sp_var_type;
   m_result_type= sp_map_result_type(sp_var_type);
@@ -1705,33 +1223,33 @@ Item_splocal::Item_splocal(const Name_string sp_var_name,
 Item *
 Item_splocal::this_item()
 {
-  DBUG_ASSERT(m_sp == m_thd->sp_runtime_ctx->sp);
+  DBUG_ASSERT(m_sp == m_thd->spcont->sp);
 
-  return m_thd->sp_runtime_ctx->get_item(m_var_idx);
+  return m_thd->spcont->get_item(m_var_idx);
 }
 
 const Item *
 Item_splocal::this_item() const
 {
-  DBUG_ASSERT(m_sp == m_thd->sp_runtime_ctx->sp);
+  DBUG_ASSERT(m_sp == m_thd->spcont->sp);
 
-  return m_thd->sp_runtime_ctx->get_item(m_var_idx);
+  return m_thd->spcont->get_item(m_var_idx);
 }
 
 
 Item **
 Item_splocal::this_item_addr(THD *thd, Item **)
 {
-  DBUG_ASSERT(m_sp == thd->sp_runtime_ctx->sp);
+  DBUG_ASSERT(m_sp == thd->spcont->sp);
 
-  return thd->sp_runtime_ctx->get_item_addr(m_var_idx);
+  return thd->spcont->get_item_addr(m_var_idx);
 }
 
 
 void Item_splocal::print(String *str, enum_query_type)
 {
-  str->reserve(m_name.length() + 8);
-  str->append(m_name);
+  str->reserve(m_name.length+8);
+  str->append(m_name.str, m_name.length);
   str->append('@');
   str->qs_append(m_var_idx);
 }
@@ -1748,7 +1266,7 @@ bool Item_splocal::set_value(THD *thd, sp_rcontext *ctx, Item **it)
 *****************************************************************************/
 
 Item_case_expr::Item_case_expr(uint case_expr_id)
-  :Item_sp_variable(Name_string(C_STRING_WITH_LEN("case_expr"))),
+  :Item_sp_variable( C_STRING_WITH_LEN("case_expr")),
    m_case_expr_id(case_expr_id)
 {
 }
@@ -1757,9 +1275,9 @@ Item_case_expr::Item_case_expr(uint case_expr_id)
 Item *
 Item_case_expr::this_item()
 {
-  DBUG_ASSERT(m_sp == m_thd->sp_runtime_ctx->sp);
+  DBUG_ASSERT(m_sp == m_thd->spcont->sp);
 
-  return m_thd->sp_runtime_ctx->get_case_expr(m_case_expr_id);
+  return m_thd->spcont->get_case_expr(m_case_expr_id);
 }
 
 
@@ -1767,18 +1285,18 @@ Item_case_expr::this_item()
 const Item *
 Item_case_expr::this_item() const
 {
-  DBUG_ASSERT(m_sp == m_thd->sp_runtime_ctx->sp);
+  DBUG_ASSERT(m_sp == m_thd->spcont->sp);
 
-  return m_thd->sp_runtime_ctx->get_case_expr(m_case_expr_id);
+  return m_thd->spcont->get_case_expr(m_case_expr_id);
 }
 
 
 Item **
 Item_case_expr::this_item_addr(THD *thd, Item **)
 {
-  DBUG_ASSERT(m_sp == thd->sp_runtime_ctx->sp);
+  DBUG_ASSERT(m_sp == thd->spcont->sp);
 
-  return thd->sp_runtime_ctx->get_case_expr_addr(m_case_expr_id);
+  return thd->spcont->get_case_expr_addr(m_case_expr_id);
 }
 
 
@@ -1831,20 +1349,6 @@ my_decimal *Item_name_const::val_decimal(my_decimal *decimal_value)
 }
 
 
-bool Item_name_const::get_date(MYSQL_TIME *ltime, uint fuzzydate)
-{
-  DBUG_ASSERT(fixed);
-  return (null_value= value_item->get_date(ltime, fuzzydate));
-}
-
-
-bool Item_name_const::get_time(MYSQL_TIME *ltime)
-{
-  DBUG_ASSERT(fixed);
-  return (null_value= value_item->get_time(ltime));
-}
-
-
 bool Item_name_const::is_null()
 {
   return value_item->is_null();
@@ -1855,11 +1359,10 @@ Item_name_const::Item_name_const(Item *name_arg, Item *val):
     value_item(val), name_item(name_arg)
 {
   /*
-    The value argument to NAME_CONST can only be a literal 
-    constant.   Some extra tests are needed to support
-    a collation specificer and to handle negative values
+    The value argument to NAME_CONST can only be a literal constant. Some extra
+    tests are needed to support a collation specificer and to handle negative
+    values.
   */
-    
   if (!(valid_args= name_item->basic_const_item() &&
                     (value_item->basic_const_item() ||
                      ((value_item->type() == FUNC_ITEM) &&
@@ -1867,7 +1370,8 @@ Item_name_const::Item_name_const(Item *name_arg, Item *val):
                          Item_func::COLLATE_FUNC) ||
                       ((((Item_func *) value_item)->functype() ==
                          Item_func::NEG_FUNC) &&
-                      (((Item_func *) value_item)->key_item()->basic_const_item())))))))
+                      (((Item_func *)
+                        value_item)->key_item()->basic_const_item())))))))
     my_error(ER_WRONG_ARGUMENTS, MYF(0), "NAME_CONST");
   Item::maybe_null= TRUE;
 }
@@ -1914,7 +1418,7 @@ Item::Type Item_name_const::type() const
 bool Item_name_const::fix_fields(THD *thd, Item **ref)
 {
   char buf[128];
-  String *tmp;
+  String *item_name;
   String s(buf, sizeof(buf), &my_charset_bin);
   s.length(0);
 
@@ -1922,17 +1426,16 @@ bool Item_name_const::fix_fields(THD *thd, Item **ref)
       name_item->fix_fields(thd, &name_item) ||
       !value_item->const_item() ||
       !name_item->const_item() ||
-      !(tmp= name_item->val_str(&s))) // Can't have a NULL name 
+      !(item_name= name_item->val_str(&s))) // Can't have a NULL name 
   {
     my_error(ER_RESERVED_SYNTAX, MYF(0), "NAME_CONST");
     return TRUE;
   }
-  if (item_name.is_autogenerated())
+  if (is_autogenerated_name)
   {
-    item_name.copy(tmp->ptr(), (uint) tmp->length(), system_charset_info);
+    set_name(item_name->ptr(), (uint) item_name->length(), system_charset_info);
   }
-  collation.set(value_item->collation.collation, DERIVATION_IMPLICIT,
-                value_item->collation.repertoire);
+  collation.set(value_item->collation.collation, DERIVATION_IMPLICIT);
   max_length= value_item->max_length;
   decimals= value_item->decimals;
   fixed= 1;
@@ -1992,7 +1495,7 @@ public:
     thd->fatal_error() may be called if we are out of memory
 */
 
-void Item::split_sum_func2(THD *thd, Ref_ptr_array ref_pointer_array,
+void Item::split_sum_func2(THD *thd, Item **ref_pointer_array,
                            List<Item> &fields, Item **ref, 
                            bool skip_registered)
 {
@@ -2029,8 +1532,7 @@ void Item::split_sum_func2(THD *thd, Ref_ptr_array ref_pointer_array,
 
     ref_pointer_array[el]= real_itm;
     if (!(item_ref= new Item_aggregate_ref(&thd->lex->current_select->context,
-                                           &ref_pointer_array[el], 0,
-                                           item_name.ptr())))
+                                           ref_pointer_array + el, 0, name)))
       return;                                   // fatal_error is set
     if (type() == SUM_FUNC_ITEM)
       item_ref->depended_from= ((Item_sum *) this)->depended_from(); 
@@ -2184,8 +1686,8 @@ bool DTCollation::aggregate(DTCollation &dt, uint flags)
         set(dt);
         return 0;
       }
-      const CHARSET_INFO *bin= get_charset_by_csname(collation->csname,
-                                                     MY_CS_BINSORT,MYF(0));
+      CHARSET_INFO *bin= get_charset_by_csname(collation->csname, 
+                                               MY_CS_BINSORT,MYF(0));
       set(bin, DERIVATION_NONE);
     }
   }
@@ -2310,8 +1812,10 @@ bool agg_item_set_converter(DTCollation &coll, const char *fname,
     In case we're in statement prepare, create conversion item
     in its memory: it will be reused on each execute.
   */
-  Prepared_stmt_arena_holder ps_arena_holder(
-    thd, thd->stmt_arena->is_stmt_prepare());
+  Query_arena backup;
+  Query_arena *arena= thd->stmt_arena->is_stmt_prepare() ?
+                      thd->activate_stmt_arena_if_needed(&backup) :
+                      NULL;
 
   for (i= 0, arg= args; i < nargs; i++, arg+= item_sep)
   {
@@ -2379,7 +1883,8 @@ bool agg_item_set_converter(DTCollation &coll, const char *fname,
       break; // we cannot return here, we need to restore "arena".
     }
   }
-
+  if (arena)
+    thd->restore_active_arena(arena, &backup);
   return res;
 }
 
@@ -2444,6 +1949,9 @@ Item_field::Item_field(Field *f)
    item_equal(0), no_const_subst(0),
    have_privileges(0), any_privileges(0)
 {
+  if (f->table->pos_in_table_list != NULL)
+    context= &(f->table->pos_in_table_list->select_lex->context);
+
   set_field(f);
   /*
     field_name and table_name should not point to garbage
@@ -2495,7 +2003,7 @@ Item_field::Item_field(THD *thd, Name_resolution_context *context_arg,
       during execution. Still we need it to point to persistent
       memory if this item is to be reused.
     */
-    item_name.set(orig_field_name);
+    name= (char*) orig_field_name;
   }
   set_field(f);
 }
@@ -2594,7 +2102,7 @@ void Item_field::set_field(Field *field_par)
   field_name= field_par->field_name;
   db_name= field_par->table->s->db.str;
   alias_name_used= field_par->table->alias_name_used;
-  unsigned_flag= MY_TEST(field_par->flags & UNSIGNED_FLAG);
+  unsigned_flag=test(field_par->flags & UNSIGNED_FLAG);
   collation.set(field_par->charset(), field_par->derivation(),
                 field_par->repertoire());
   fix_char_length(field_par->char_length());
@@ -2617,14 +2125,14 @@ void Item_field::reset_field(Field *f)
 {
   set_field(f);
   /* 'name' is pointing at field->field_name of old field */
-  item_name.set(f->field_name);
+  name= (char*) f->field_name;
 }
 
 const char *Item_ident::full_name() const
 {
   char *tmp;
   if (!table_name || !field_name)
-    return field_name ? field_name : item_name.is_set() ? item_name.ptr() : "tmp_field";
+    return field_name ? field_name : name ? name : "tmp_field";
   if (db_name && db_name[0])
   {
     tmp=(char*) sql_alloc((uint) strlen(db_name)+(uint) strlen(table_name)+
@@ -2645,50 +2153,42 @@ const char *Item_ident::full_name() const
   return tmp;
 }
 
-
-void Item_ident::print(String *str, enum_query_type query_type,
-                       const char *db_name_arg,
-                       const char *table_name_arg) const
+void Item_ident::print(String *str, enum_query_type query_type)
 {
   THD *thd= current_thd;
   char d_name_buff[MAX_ALIAS_NAME], t_name_buff[MAX_ALIAS_NAME];
-  const char *d_name= db_name_arg, *t_name= table_name_arg;
+  const char *d_name= db_name, *t_name= table_name;
   if (lower_case_table_names== 1 ||
       (lower_case_table_names == 2 && !alias_name_used))
   {
-    if (table_name_arg && table_name_arg[0])
+    if (table_name && table_name[0])
     {
-      strmov(t_name_buff, table_name_arg);
+      strmov(t_name_buff, table_name);
       my_casedn_str(files_charset_info, t_name_buff);
       t_name= t_name_buff;
     }
-    if (db_name_arg && db_name_arg[0])
+    if (db_name && db_name[0])
     {
-      strmov(d_name_buff, db_name_arg);
+      strmov(d_name_buff, db_name);
       my_casedn_str(files_charset_info, d_name_buff);
       d_name= d_name_buff;
     }
   }
 
-  if (!table_name_arg || !field_name || !field_name[0])
+  if (!table_name || !field_name || !field_name[0])
   {
     const char *nm= (field_name && field_name[0]) ?
-                      field_name : item_name.is_set() ? item_name.ptr() : "tmp_field";
+                      field_name : name ? name : "tmp_field";
     append_identifier(thd, str, nm, (uint) strlen(nm));
     return;
   }
-  if (db_name_arg && db_name_arg[0] && !alias_name_used)
+  if (db_name && db_name[0] && !alias_name_used)
   {
     if (!(cached_table && cached_table->belong_to_view &&
           cached_table->belong_to_view->compact_view_format))
     {
-      const size_t d_name_len= strlen(d_name);
-      if (!((query_type & QT_NO_DEFAULT_DB) &&
-            db_is_default_db(d_name, d_name_len, thd)))
-      {
-        append_identifier(thd, str, d_name, (uint)d_name_len);
-        str->append('.');
-      }
+      append_identifier(thd, str, d_name, (uint)strlen(d_name));
+      str->append('.');
     }
     append_identifier(thd, str, t_name, (uint)strlen(t_name));
     str->append('.');
@@ -2696,7 +2196,7 @@ void Item_ident::print(String *str, enum_query_type query_type,
   }
   else
   {
-    if (table_name_arg[0])
+    if (table_name[0])
     {
       append_identifier(thd, str, t_name, (uint) strlen(t_name));
       str->append('.');
@@ -2736,24 +2236,6 @@ longlong Item_field::val_int()
 }
 
 
-longlong Item_field::val_time_temporal()
-{
-  DBUG_ASSERT(fixed == 1);
-  if ((null_value= field->is_null()))
-    return 0;
-  return field->val_time_temporal();
-}
-
-
-longlong Item_field::val_date_temporal()
-{
-  DBUG_ASSERT(fixed == 1);
-  if ((null_value= field->is_null()))
-    return 0;
-  return field->val_date_temporal();
-}
-
-
 my_decimal *Item_field::val_decimal(my_decimal *decimal_value)
 {
   if ((null_value= field->is_null()))
@@ -2774,7 +2256,7 @@ bool Item_field::get_date(MYSQL_TIME *ltime,uint fuzzydate)
 {
   if ((null_value=field->is_null()) || field->get_date(ltime,fuzzydate))
   {
-    memset(ltime, 0, sizeof(*ltime));
+    bzero((char*) ltime,sizeof(*ltime));
     return 1;
   }
   return 0;
@@ -2785,7 +2267,7 @@ bool Item_field::get_date_result(MYSQL_TIME *ltime,uint fuzzydate)
   if ((null_value=result_field->is_null()) ||
       result_field->get_date(ltime,fuzzydate))
   {
-    memset(ltime, 0, sizeof(*ltime));
+    bzero((char*) ltime,sizeof(*ltime));
     return 1;
   }
   return 0;
@@ -2793,21 +2275,12 @@ bool Item_field::get_date_result(MYSQL_TIME *ltime,uint fuzzydate)
 
 bool Item_field::get_time(MYSQL_TIME *ltime)
 {
-  if ((null_value= field->is_null()) || field->get_time(ltime))
+  if ((null_value=field->is_null()) || field->get_time(ltime))
   {
-    memset(ltime, 0, sizeof(*ltime));
+    bzero((char*) ltime,sizeof(*ltime));
     return 1;
   }
   return 0;
-}
-
-bool Item_field::get_timeval(struct timeval *tm, int *warnings)
-{
-  if ((null_value= field->is_null()))
-    return true;
-  if (field->get_timestamp(tm, warnings))
-    tm->tv_sec= tm->tv_usec= 0;
-  return false;
 }
 
 double Item_field::val_result()
@@ -2824,19 +2297,6 @@ longlong Item_field::val_int_result()
   return result_field->val_int();
 }
 
-longlong Item_field::val_time_temporal_result()
-{
-  if ((null_value= result_field->is_null()))
-    return 0;
-  return result_field->val_time_temporal();
-}
-
-longlong Item_field::val_date_temporal_result()
-{
-  if ((null_value= result_field->is_null()))
-    return 0;
-  return result_field->val_date_temporal();
-}
 
 my_decimal *Item_field::val_decimal_result(my_decimal *decimal_value)
 {
@@ -2897,7 +2357,8 @@ bool Item_field::eq(const Item *item, bool binary_cmp) const
     (In cases where we would choose wrong we would have to generate a
     ER_NON_UNIQ_ERROR).
   */
-  return (item_field->item_name.eq_safe(field_name) &&
+  return (!my_strcasecmp(system_charset_info, item_field->name,
+			 field_name) &&
 	  (!item_field->table_name || !table_name ||
 	   (!my_strcasecmp(table_alias_charset, item_field->table_name,
 			   table_name) &&
@@ -2912,106 +2373,6 @@ table_map Item_field::used_tables() const
   if (field->table->const_table)
     return 0;					// const item
   return (depended_from ? OUTER_REF_TABLE_BIT : field->table->map);
-}
-
-
-bool Item_field::used_tables_for_level(uchar *arg)
-{
-  // Used by resolver only, so can never reach a "const" table.
-  DBUG_ASSERT(!field->orig_table->const_table);
-  TABLE_LIST *tr= field->orig_table->pos_in_table_list;
-  Used_tables *const ut= (Used_tables *)(arg);
-
-  /*
-    When the qualifying query for the field (table_ref->select_lex) is the
-    same level as the requested level, add the table's map. When the qualifying
-    query for the field is outer relative to the requested level, add an outer
-    reference.
-  */
-  if (ut->select == tr->select_lex)
-    ut->used_tables|= tr->table->map;
-  else if (ut->select->nest_level > tr->select_lex->nest_level)
-    ut->used_tables|= OUTER_REF_TABLE_BIT;
-  return false;
-}
-
-void Item_ident::fix_after_pullout(st_select_lex *parent_select,
-                                   st_select_lex *removed_select)
-{
-  /*
-    Some field items may be created for use in execution only, without
-    a name resolution context. They have already been used in execution,
-    so no transformation is necessary here.
-
-    @todo: Provide strict phase-division in optimizer, to make sure that
-           execution-only objects do not exist during transformation stage.
-           Then, this test would be deemed unnecessary.
-  */
-  if (context == NULL)
-  {
-    DBUG_ASSERT(type() == FIELD_ITEM);
-    return;
-  }
-
-  if (context->select_lex == removed_select ||
-      context->select_lex == parent_select)
-  {
-    if (parent_select == depended_from)
-      depended_from= NULL;
-    Name_resolution_context *ctx= new Name_resolution_context();
-    ctx->outer_context= NULL; // We don't build a complete name resolver
-    ctx->table_list= NULL;    // We rely on first_name_resolution_table instead
-    ctx->select_lex= parent_select;
-    ctx->first_name_resolution_table= context->first_name_resolution_table;
-    ctx->last_name_resolution_table=  context->last_name_resolution_table;
-    ctx->error_processor=             context->error_processor;
-    ctx->error_processor_data=        context->error_processor_data;
-    ctx->resolve_in_select_list=      context->resolve_in_select_list;
-    ctx->security_ctx=                context->security_ctx;
-    this->context=ctx;
-  }
-  else
-  {
-    /*
-      The definition scope of this field item reference is inner to the removed
-      select_lex object.
-      No new resolution is needed, but we may need to update the dependency.
-    */
-    if (removed_select == depended_from)
-      depended_from= parent_select;
-  }
-
-  if (depended_from)
-  {
-    /*
-      Refresh used_tables information for subqueries between the definition
-      scope and resolution scope of the field item reference.
-    */
-    st_select_lex *child_select= context->select_lex;
-
-    while (child_select->outer_select() != depended_from)
-    {
-      /*
-        The subquery on this level is outer-correlated with respect to the field
-      */
-      Item_subselect *subq_predicate= child_select->master_unit()->item;
-
-      subq_predicate->used_tables_cache|= OUTER_REF_TABLE_BIT;
-      child_select= child_select->outer_select();
-    }
-
-    /*
-      child_select is select_lex immediately inner to the depended_from level.
-      Now, locate the subquery predicate that contains this select_lex and
-      update used tables information.
-    */
-    Item_subselect *subq_predicate= child_select->master_unit()->item;
-
-    Used_tables ut(depended_from);
-    (void) walk(&Item::used_tables_for_level, true, (uchar *)(&ut));
-    subq_predicate->used_tables_cache|= ut.used_tables;
-    subq_predicate->const_item_cache&= this->const_item();
-  }
 }
 
 
@@ -3030,17 +2391,18 @@ longlong Item_field::val_int_endpoint(bool left_endp, bool *incl_endp)
 }
 
 /**
-  Create an item from a string we KNOW points to a valid longlong.
-  str_arg does not necessary has to be a \\0 terminated string.
+  Create an item from a string we KNOW points to a valid longlong
+  end \\0 terminated number string.
   This is always 'signed'. Unsigned values are created with Item_uint()
 */
+
 Item_int::Item_int(const char *str_arg, uint length)
 {
   char *end_ptr= (char*) str_arg + length;
   int error;
   value= my_strtoll10(str_arg, &end_ptr, &error);
   max_length= (uint) (end_ptr - str_arg);
-  item_name.copy(str_arg, max_length);
+  name= (char*) str_arg;
   fixed= 1;
 }
 
@@ -3067,6 +2429,20 @@ void Item_int::print(String *str, enum_query_type query_type)
 }
 
 
+Item_uint::Item_uint(const char *str_arg, uint length):
+  Item_int(str_arg, length)
+{
+  unsigned_flag= 1;
+}
+
+
+Item_uint::Item_uint(const char *str_arg, longlong i, uint length):
+  Item_int(str_arg, i, length)
+{
+  unsigned_flag= 1;
+}
+
+
 String *Item_uint::val_str(String *str)
 {
   // following assert is redundant, because fixed=1 assigned in constructor
@@ -3085,10 +2461,10 @@ void Item_uint::print(String *str, enum_query_type query_type)
 
 
 Item_decimal::Item_decimal(const char *str_arg, uint length,
-                           const CHARSET_INFO *charset)
+                           CHARSET_INFO *charset)
 {
   str2my_decimal(E_DEC_FATAL_ERROR, str_arg, length, charset, &decimal_value);
-  item_name.set(str_arg);
+  name= (char*) str_arg;
   decimals= (uint8) decimal_value.frac;
   fixed= 1;
   max_length= my_decimal_precision_to_length_no_truncation(decimal_value.intg +
@@ -3121,12 +2497,11 @@ Item_decimal::Item_decimal(double val, int precision, int scale)
 }
 
 
-Item_decimal::Item_decimal(const Name_string &name_arg,
-                           const my_decimal *val_arg,
+Item_decimal::Item_decimal(const char *str, const my_decimal *val_arg,
                            uint decimal_par, uint length)
 {
   my_decimal2decimal(val_arg, &decimal_value);
-  item_name= name_arg;
+  name= (char*) str;
   decimals= (uint8) decimal_par;
   max_length= length;
   fixed= 1;
@@ -3232,15 +2607,6 @@ my_decimal *Item_float::val_decimal(my_decimal *decimal_value)
 }
 
 
-/**
-   @sa enum_query_type.
-   For us to be able to print a query (in debugging, optimizer trace, EXPLAIN
-   EXTENDED) without changing the query's result, this function must not
-   modify the item's content. Not even a realloc() of str_value is permitted:
-   Item_func_concat/repeat/encode::val_str() depend on the allocated length;
-   a change of this length can influence results of CONCAT(), REPEAT(),
-   ENCODE()...
-*/
 void Item_string::print(String *str, enum_query_type query_type)
 {
   const bool print_introducer=
@@ -3283,7 +2649,7 @@ void Item_string::print(String *str, enum_query_type query_type)
 
         thd->convert_string(&utf8_lex_str,
                             system_charset_info,
-                            str_value.ptr(),
+                            str_value.c_ptr_safe(),
                             str_value.length(),
                             str_value.charset());
 
@@ -3306,8 +2672,7 @@ void Item_string::print(String *str, enum_query_type query_type)
 
 
 double 
-double_from_string_with_check (const CHARSET_INFO *cs,
-                               const char *cptr, char *end)
+double_from_string_with_check (CHARSET_INFO *cs, const char *cptr, char *end)
 {
   int error;
   char *org_end;
@@ -3317,8 +2682,12 @@ double_from_string_with_check (const CHARSET_INFO *cs,
   tmp= my_strntod(cs, (char*) cptr, end - cptr, &end, &error);
   if (error || (end != org_end && !check_if_only_end_space(cs, end, org_end)))
   {
-    ErrConvString err(cptr, org_end - cptr, cs);
-    push_warning_printf(current_thd, Sql_condition::WARN_LEVEL_WARN,
+    ErrConvString err(cptr, cs);
+    /*
+      We can use str_value.ptr() here as Item_string is gurantee to put an
+      end \0 here.
+    */
+    push_warning_printf(current_thd, MYSQL_ERROR::WARN_LEVEL_WARN,
                         ER_TRUNCATED_WRONG_VALUE,
                         ER(ER_TRUNCATED_WRONG_VALUE), "DOUBLE",
                         err.ptr());
@@ -3336,8 +2705,7 @@ double Item_string::val_real()
 
 
 longlong 
-longlong_from_string_with_check (const CHARSET_INFO *cs,
-                                 const char *cptr, char *end)
+longlong_from_string_with_check (CHARSET_INFO *cs, const char *cptr, char *end)
 {
   int err;
   longlong tmp;
@@ -3353,7 +2721,7 @@ longlong_from_string_with_check (const CHARSET_INFO *cs,
        (end != org_end && !check_if_only_end_space(cs, end, org_end))))
   {
     ErrConvString err(cptr, cs);
-    push_warning_printf(current_thd, Sql_condition::WARN_LEVEL_WARN,
+    push_warning_printf(current_thd, MYSQL_ERROR::WARN_LEVEL_WARN,
                         ER_TRUNCATED_WRONG_VALUE,
                         ER(ER_TRUNCATED_WRONG_VALUE), "INTEGER",
                         err.ptr());
@@ -3413,7 +2781,7 @@ my_decimal *Item_null::val_decimal(my_decimal *decimal_value)
 }
 
 
-Item *Item_null::safe_charset_converter(const CHARSET_INFO *tocs)
+Item *Item_null::safe_charset_converter(CHARSET_INFO *tocs)
 {
   collation.set(tocs);
   return this;
@@ -3428,8 +2796,8 @@ Item *Item_null::safe_charset_converter(const CHARSET_INFO *tocs)
 
 static void
 default_set_param_func(Item_param *param,
-                       uchar **pos MY_ATTRIBUTE((unused)),
-                       ulong len MY_ATTRIBUTE((unused)))
+                       uchar **pos __attribute__((unused)),
+                       ulong len __attribute__((unused)))
 {
   param->set_null();
 }
@@ -3446,7 +2814,7 @@ Item_param::Item_param(uint pos_in_query_arg) :
   limit_clause_param(FALSE),
   m_out_param_info(NULL)
 {
-  item_name.set("?");
+  name= (char*) "?";
   /* 
     Since we can't say whenever this item can be NULL or cannot be NULL
     before mysql_stmt_execute(), so we assuming that it can be NULL until
@@ -3557,12 +2925,15 @@ void Item_param::set_time(MYSQL_TIME *tm, timestamp_type time_type,
   value.time= *tm;
   value.time.time_type= time_type;
 
-  if (check_datetime_range(&value.time))
+  if (value.time.year > 9999 || value.time.month > 12 ||
+      value.time.day > 31 ||
+      (time_type != MYSQL_TIMESTAMP_TIME && value.time.hour > 23) ||
+      value.time.minute > 59 || value.time.second > 59)
   {
-    make_truncated_value_warning(ErrConvString(&value.time,
-                                               MY_MIN(decimals,
-                                                      DATETIME_MAX_DECIMALS)),
-                                 time_type);
+    char buff[MAX_DATE_STRING_REP_LENGTH];
+    uint length= my_TIME_to_str(&value.time, buff);
+    make_truncated_value_warning(current_thd, MYSQL_ERROR::WARN_LEVEL_WARN,
+                                 buff, length, time_type, 0);
     set_zero_time(&value.time, MYSQL_TIMESTAMP_ERROR);
   }
 
@@ -3607,12 +2978,12 @@ bool Item_param::set_longdata(const char *str, ulong length)
     (here), and first have to concatenate all pieces together,
     write query to the binary log and only then perform conversion.
   */
-  if (str_value.length() + length > current_thd->variables.max_allowed_packet)
+  if (str_value.length() + length > max_long_data_size)
   {
     my_message(ER_UNKNOWN_ERROR,
                "Parameter of prepared statement which is set through "
                "mysql_send_long_data() is longer than "
-               "'max_allowed_packet' bytes",
+               "'max_long_data_size' bytes",
                MYF(0));
     DBUG_RETURN(true);
   }
@@ -3641,9 +3012,9 @@ bool Item_param::set_longdata(const char *str, ulong length)
 bool Item_param::set_from_user_var(THD *thd, const user_var_entry *entry)
 {
   DBUG_ENTER("Item_param::set_from_user_var");
-  if (entry && entry->ptr())
+  if (entry && entry->value)
   {
-    item_result_type= entry->type();
+    item_result_type= entry->type;
     unsigned_flag= entry->unsigned_flag;
     if (limit_clause_param)
     {
@@ -3654,17 +3025,17 @@ bool Item_param::set_from_user_var(THD *thd, const user_var_entry *entry)
     }
     switch (item_result_type) {
     case REAL_RESULT:
-      set_double(*(double*) entry->ptr());
+      set_double(*(double*)entry->value);
       item_type= Item::REAL_ITEM;
       break;
     case INT_RESULT:
-      set_int(*(longlong*) entry->ptr(), MY_INT64_NUM_DECIMAL_DIGITS);
+      set_int(*(longlong*)entry->value, MY_INT64_NUM_DECIMAL_DIGITS);
       item_type= Item::INT_ITEM;
       break;
     case STRING_RESULT:
     {
-      const CHARSET_INFO *fromcs= entry->collation.collation;
-      const CHARSET_INFO *tocs= thd->variables.collation_connection;
+      CHARSET_INFO *fromcs= entry->collation.collation;
+      CHARSET_INFO *tocs= thd->variables.collation_connection;
       uint32 dummy_offset;
 
       value.cs_info.character_set_of_placeholder= fromcs;
@@ -3683,13 +3054,13 @@ bool Item_param::set_from_user_var(THD *thd, const user_var_entry *entry)
       */
       item_type= Item::STRING_ITEM;
 
-      if (set_str((const char *) entry->ptr(), entry->length()))
+      if (set_str((const char *)entry->value, entry->length))
         DBUG_RETURN(1);
       break;
     }
     case DECIMAL_RESULT:
     {
-      const my_decimal *ent_value= (const my_decimal *) entry->ptr();
+      const my_decimal *ent_value= (const my_decimal *)entry->value;
       my_decimal2decimal(ent_value, &decimal_value);
       state= DECIMAL_VALUE;
       decimals= ent_value->frac;
@@ -3749,8 +3120,7 @@ void Item_param::reset()
 }
 
 
-type_conversion_status
-Item_param::save_in_field(Field *field, bool no_conversions)
+int Item_param::save_in_field(Field *field, bool no_conversions)
 {
   field->set_notnull();
 
@@ -3762,8 +3132,8 @@ Item_param::save_in_field(Field *field, bool no_conversions)
   case DECIMAL_VALUE:
     return field->store_decimal(&decimal_value);
   case TIME_VALUE:
-    field->store_time(&value.time);
-    return TYPE_OK;
+    field->store_time(&value.time, value.time.time_type);
+    return 0;
   case STRING_VALUE:
   case LONG_DATA_VALUE:
     return field->store(str_value.ptr(), str_value.length(),
@@ -3774,7 +3144,7 @@ Item_param::save_in_field(Field *field, bool no_conversions)
   default:
     DBUG_ASSERT(0);
   }
-  return TYPE_ERR_BAD_VALUE;
+  return 1;
 }
 
 
@@ -3787,10 +3157,9 @@ bool Item_param::get_time(MYSQL_TIME *res)
   }
   /*
     If parameter value isn't supplied assertion will fire in val_str()
-    which is called from Item::get_time_from_string().    
+    which is called from Item::get_time().
   */
-  return is_temporal() ? get_time_from_string(res) :
-                         get_time_from_non_temporal(res);
+  return Item::get_time(res);
 }
 
 
@@ -3801,8 +3170,7 @@ bool Item_param::get_date(MYSQL_TIME *res, uint fuzzydate)
     *res= value.time;
     return 0;
   }
-  return is_temporal() ? get_date_from_string(res, fuzzydate) :
-                         get_date_from_non_temporal(res, fuzzydate);
+  return Item::get_date(res, fuzzydate);
 }
 
 
@@ -3832,7 +3200,7 @@ double Item_param::val_real()
       This works for example when user says SELECT ?+0.0 and supplies
       time value for the placeholder.
     */
-    return TIME_to_double(&value.time);
+    return ulonglong2double(TIME_to_ulonglong(&value.time));
   case NULL_VALUE:
     return 0.0;
   default:
@@ -3863,7 +3231,7 @@ longlong Item_param::val_int()
                          str_value.length(), 10, (char**) 0, &dummy_err);
     }
   case TIME_VALUE:
-    return (longlong) TIME_to_ulonglong_round(&value.time);
+    return (longlong) TIME_to_ulonglong(&value.time);
   case NULL_VALUE:
     return 0; 
   default:
@@ -3889,7 +3257,11 @@ my_decimal *Item_param::val_decimal(my_decimal *dec)
     string2my_decimal(E_DEC_FATAL_ERROR, &str_value, dec);
     return dec;
   case TIME_VALUE:
-    return date2my_decimal(&value.time, dec);
+  {
+    longlong i= (longlong) TIME_to_ulonglong(&value.time);
+    int2my_decimal(E_DEC_FATAL_ERROR, i, 0, dec);
+    return dec;
+  }
   case NULL_VALUE:
     return 0; 
   default:
@@ -3920,8 +3292,7 @@ String *Item_param::val_str(String* str)
   {
     if (str->reserve(MAX_DATE_STRING_REP_LENGTH))
       break;
-    str->length((uint) my_TIME_to_str(&value.time, (char *) str->ptr(),
-                                      MY_MIN(decimals, DATETIME_MAX_DECIMALS)));
+    str->length((uint) my_TIME_to_str(&value.time, (char*) str->ptr()));
     str->set_charset(&my_charset_bin);
     return str;
   }
@@ -3973,8 +3344,7 @@ const String *Item_param::query_val_str(THD *thd, String* str) const
       buf= str->c_ptr_quick();
       ptr= buf;
       *ptr++= '\'';
-      ptr+= (uint) my_TIME_to_str(&value.time, ptr,
-                                  MY_MIN(decimals, DATETIME_MAX_DECIMALS));
+      ptr+= (uint) my_TIME_to_str(&value.time, ptr);
       *ptr++= '\'';
       str->length((uint32) (ptr - buf));
       break;
@@ -4006,9 +3376,6 @@ bool Item_param::convert_str_value(THD *thd)
   bool rc= FALSE;
   if (state == STRING_VALUE || state == LONG_DATA_VALUE)
   {
-    if (value.cs_info.final_character_set_of_str_value == NULL ||
-        value.cs_info.character_set_of_placeholder == NULL)
-      return true;
     /*
       Check is so simple because all charsets were set up properly
       in setup_one_conversion_function, where typecode of
@@ -4057,16 +3424,16 @@ Item_param::clone_item()
   /* see comments in the header file */
   switch (state) {
   case NULL_VALUE:
-    return new Item_null(item_name);
+    return new Item_null(name);
   case INT_VALUE:
     return (unsigned_flag ?
-            new Item_uint(item_name, value.integer, max_length) :
-            new Item_int(item_name, value.integer, max_length));
+            new Item_uint(name, value.integer, max_length) :
+            new Item_int(name, value.integer, max_length));
   case REAL_VALUE:
-    return new Item_float(item_name, value.real, decimals, max_length);
+    return new Item_float(name, value.real, decimals, max_length);
   case STRING_VALUE:
   case LONG_DATA_VALUE:
-    return new Item_string(item_name, str_value.c_ptr_quick(), str_value.length(),
+    return new Item_string(name, str_value.c_ptr_quick(), str_value.length(),
                            str_value.charset());
   case TIME_VALUE:
     break;
@@ -4214,18 +3581,16 @@ Item_param::set_value(THD *thd, sp_rcontext *ctx, Item **it)
                       str_value.charset());
     collation.set(str_value.charset(), DERIVATION_COERCIBLE);
     decimals= 0;
-    item_type= Item::STRING_ITEM;
+
     break;
   }
 
   case REAL_RESULT:
     set_double(arg->val_real());
-    item_type= Item::REAL_ITEM;
     break;
 
   case INT_RESULT:
     set_int(arg->val_int(), arg->max_length);
-    item_type= Item::INT_ITEM;
     break;
 
   case DECIMAL_RESULT:
@@ -4237,7 +3602,6 @@ Item_param::set_value(THD *thd, sp_rcontext *ctx, Item **it)
       return TRUE;
 
     set_decimal(dv);
-    item_type= Item::DECIMAL_ITEM;
     break;
   }
 
@@ -4247,11 +3611,11 @@ Item_param::set_value(THD *thd, sp_rcontext *ctx, Item **it)
     DBUG_ASSERT(TRUE);  // Abort in debug mode.
 
     set_null();         // Set to NULL in release mode.
-    item_type= Item::NULL_ITEM;
     return FALSE;
   }
 
   item_result_type= arg->result_type();
+  item_type= arg->type();
   return FALSE;
 }
 
@@ -4368,8 +3732,7 @@ longlong Item_copy_string::val_int()
 }
 
 
-type_conversion_status
-Item_copy_string::save_in_field(Field *field, bool no_conversions)
+int Item_copy_string::save_in_field(Field *field, bool no_conversions)
 {
   return save_str_value_in_field(field, &str_value);
 }
@@ -4403,16 +3766,6 @@ my_decimal *Item_copy_string::val_decimal(my_decimal *decimal_value)
 }
 
 
-bool Item_copy_string::get_date(MYSQL_TIME *ltime, uint fuzzydate)
-{
-  return get_date_from_string(ltime, fuzzydate);
-}
-
-bool Item_copy_string::get_time(MYSQL_TIME *ltime)
-{
-  return get_time_from_string(ltime);
-}
-
 /****************************************************************************
   Item_copy_int
 ****************************************************************************/
@@ -4423,14 +3776,12 @@ void Item_copy_int::copy()
   null_value=item->null_value;
 }
 
-static type_conversion_status
-save_int_value_in_field (Field *field, longlong nr,
-                         bool null_value, bool unsigned_flag);
+static int save_int_value_in_field (Field *field, longlong nr, 
+                                    bool null_value, bool unsigned_flag);
 
-type_conversion_status
-Item_copy_int::save_in_field(Field *field, bool no_conversions)
+int Item_copy_int::save_in_field(Field *field, bool no_conversions)
 {
-  return save_int_value_in_field(field, cached_value,
+  return save_int_value_in_field(field, cached_value, 
                                  null_value, unsigned_flag);
 }
 
@@ -4499,13 +3850,10 @@ my_decimal *Item_copy_float::val_decimal(my_decimal *decimal_value)
 }
 
 
-type_conversion_status
-Item_copy_float::save_in_field(Field *field, bool no_conversions)
+int Item_copy_float::save_in_field(Field *field, bool no_conversions)
 {
-  // TODO: call set_field_to_null_with_conversions below
   if (null_value)
     return set_field_to_null(field);
-
   field->set_notnull();
   return field->store(cached_value);
 }
@@ -4515,10 +3863,8 @@ Item_copy_float::save_in_field(Field *field, bool no_conversions)
   Item_copy_decimal
 ****************************************************************************/
 
-type_conversion_status
-Item_copy_decimal::save_in_field(Field *field, bool no_conversions)
+int Item_copy_decimal::save_in_field(Field *field, bool no_conversions)
 {
-  // TODO: call set_field_to_null_with_conversions below
   if (null_value)
     return set_field_to_null(field);
   field->set_notnull();
@@ -4603,26 +3949,6 @@ longlong Item_ref_null_helper::val_int()
 }
 
 
-longlong Item_ref_null_helper::val_time_temporal()
-{
-  DBUG_ASSERT(fixed == 1);
-  DBUG_ASSERT((*ref)->is_temporal());
-  longlong tmp= (*ref)->val_time_temporal_result();
-  owner->was_null|= null_value= (*ref)->null_value;
-  return tmp;
-}
-
-
-longlong Item_ref_null_helper::val_date_temporal()
-{
-  DBUG_ASSERT(fixed == 1);
-  DBUG_ASSERT((*ref)->is_temporal());
-  longlong tmp= (*ref)->val_date_temporal_result();
-  owner->was_null|= null_value= (*ref)->null_value;
-  return tmp;
-}
-
-
 my_decimal *Item_ref_null_helper::val_decimal(my_decimal *decimal_value)
 {
   DBUG_ASSERT(fixed == 1);
@@ -4682,7 +4008,7 @@ static void mark_as_dependent(THD *thd, SELECT_LEX *last, SELECT_LEX *current,
   current->mark_as_dependent(last);
   if (thd->lex->describe & DESCRIBE_EXTENDED)
   {
-    push_warning_printf(thd, Sql_condition::WARN_LEVEL_NOTE,
+    push_warning_printf(thd, MYSQL_ERROR::WARN_LEVEL_NOTE,
 		 ER_WARN_FIELD_RESOLVED, ER(ER_WARN_FIELD_RESOLVED),
                  db_name, (db_name[0] ? "." : ""),
                  table_name, (table_name [0] ? "." : ""),
@@ -4740,10 +4066,8 @@ void mark_select_range_as_dependent(THD *thd,
     if (found_field == view_ref_found)
     {
       Item::Type type= found_item->type();
-      Used_tables ut(last_select);
-      (void) found_item->walk(&Item::used_tables_for_level, true,
-                              (uchar *)(&ut));
-      prev_subselect_item->used_tables_cache|= ut.used_tables;
+      prev_subselect_item->used_tables_cache|=
+        found_item->used_tables();
       dependent= ((type == Item::REF_ITEM || type == Item::FIELD_ITEM) ?
                   (Item_ident*) found_item :
                   0);
@@ -4755,30 +4079,6 @@ void mark_select_range_as_dependent(THD *thd,
     mark_as_dependent(thd, last_select, current_sel, resolved_item,
                       dependent);
   }
-}
-
-
-/**
- Find a Item reference in a item list
-
- @param[in]   item            The Item to search for.
- @param[in]   list            Item list.
-
- @retval true   found
- @retval false  otherwise
-*/
-
-static bool find_item_in_item_list (Item *item, List<Item> *list)
-{
-  List_iterator<Item> li(*list);
-  Item *it= NULL;
-  while ((it= li++))    
-  {
-    if (it->walk(&Item::find_item_processor, true,
-                 (uchar*)item))
-      return true;
-  }
-  return false;
 }
 
 
@@ -4889,33 +4189,6 @@ static Item** find_field_in_group_list(Item *find_item, ORDER *group_list)
 
 
 /**
-  Check if an Item is fixed or is an Item_outer_ref.
-
-  @param ref the reference to check
-
-  @return Whether or not the item is a fixed item or an Item_outer_ref
-
-  @note Currently, this function is only used in DBUG_ASSERT
-  statements and therefore not included in optimized builds.
-*/
-#ifndef DBUG_OFF
-static bool is_fixed_or_outer_ref(Item *ref)
-{
-  /*
-    The requirements are that the Item pointer
-    1)  is not NULL, and
-    2a) points to a fixed Item, or
-    2b) points to an Item_outer_ref.
-  */
-  return (ref != NULL &&                     // 1
-          (ref->fixed ||                     // 2a
-           (ref->type() == Item::REF_ITEM && // 2b
-            static_cast<Item_ref *>(ref)->ref_type() == Item_ref::OUTER_REF)));
-}
-#endif
-
-
-/**
   Resolve a column reference in a sub-select.
 
   Resolve a column reference (usually inside a HAVING clause) against the
@@ -4982,7 +4255,7 @@ resolve_ref_in_select_and_group(THD *thd, Item_ident *ref, SELECT_LEX *select)
         !((*group_by_ref)->eq(*select_ref, 0)))
     {
       ambiguous_fields= TRUE;
-      push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN, ER_NON_UNIQ_ERROR,
+      push_warning_printf(thd, MYSQL_ERROR::WARN_LEVEL_WARN, ER_NON_UNIQ_ERROR,
                           ER(ER_NON_UNIQ_ERROR), ref->full_name(),
                           current_thd->where);
 
@@ -4998,7 +4271,7 @@ resolve_ref_in_select_and_group(THD *thd, Item_ident *ref, SELECT_LEX *select)
       the strict mode is enabled.
     */
     my_error(ER_NON_GROUPING_FIELD_USED, MYF(0),
-             ref->item_name.ptr(), "HAVING");
+             ref->name, "HAVING");
     return NULL;
   }
   if (select_ref != not_found_item || group_by_ref)
@@ -5009,16 +4282,11 @@ resolve_ref_in_select_and_group(THD *thd, Item_ident *ref, SELECT_LEX *select)
       if (!select->ref_pointer_array[counter])
       {
         my_error(ER_ILLEGAL_REFERENCE, MYF(0),
-                 ref->item_name.ptr(), "forward reference in item list");
+                 ref->name, "forward reference in item list");
         return NULL;
       }
-      /*
-       Assert if its an incorrect reference . We do not assert if its a outer
-       reference, as they get fixed later in fix_innner_refs function.
-      */
-      DBUG_ASSERT(is_fixed_or_outer_ref(*select_ref));
-
-      return &select->ref_pointer_array[counter];
+      DBUG_ASSERT((*select_ref)->fixed);
+      return (select->ref_pointer_array + counter);
     }
     if (group_by_ref)
       return group_by_ref;
@@ -5130,13 +4398,14 @@ Item_field::fix_outer_field(THD *thd, Field **from_field, Item **reference)
       if (*from_field)
       {
         if (thd->variables.sql_mode & MODE_ONLY_FULL_GROUP_BY &&
-            select->cur_pos_in_all_fields != SELECT_LEX::ALL_FIELDS_UNDEF_POS)
+            select->cur_pos_in_select_list != UNDEF_POS)
         {
           /*
             As this is an outer field it should be added to the list of
             non aggregated fields of the outer select.
           */
-          push_to_non_agg_fields(select);
+          marker= select->cur_pos_in_select_list;
+          select->non_agg_fields.push_back(this);
         }
         if (*from_field != view_ref_found)
         {
@@ -5188,10 +4457,8 @@ Item_field::fix_outer_field(THD *thd, Field **from_field, Item **reference)
         else
         {
           Item::Type ref_type= (*reference)->type();
-          Used_tables ut(select);
-          (void) (*reference)->walk(&Item::used_tables_for_level, true,
-                                    (uchar *)(&ut));
-          prev_subselect_item->used_tables_cache|= ut.used_tables;
+          prev_subselect_item->used_tables_cache|=
+            (*reference)->used_tables();
           prev_subselect_item->const_item_cache&=
             (*reference)->const_item();
           mark_as_dependent(thd, last_checked_context->select_lex,
@@ -5212,18 +4479,13 @@ Item_field::fix_outer_field(THD *thd, Field **from_field, Item **reference)
     }
 
     /* Search in SELECT and GROUP lists of the outer select. */
-    if (place != IN_WHERE && place != IN_ON &&
-        outer_context->resolve_in_select_list)
+    if (place != IN_WHERE && place != IN_ON)
     {
       if (!(ref= resolve_ref_in_select_and_group(thd, this, select)))
         return -1; /* Some error occurred (e.g. ambiguous names). */
       if (ref != not_found_item)
       {
-        /*
-          Either the item we found is already fixed, or it is an outer
-          reference that will be fixed later in fix_inner_refs().
-        */
-        DBUG_ASSERT(is_fixed_or_outer_ref(*ref));
+        DBUG_ASSERT(*ref && (*ref)->fixed);
         prev_subselect_item->used_tables_cache|= (*ref)->used_tables();
         prev_subselect_item->const_item_cache&= (*ref)->const_item();
         break;
@@ -5266,7 +4528,7 @@ Item_field::fix_outer_field(THD *thd, Field **from_field, Item **reference)
     Item_ref *rf;
 
     /* Should have been checked in resolve_ref_in_select_and_group(). */
-    DBUG_ASSERT(is_fixed_or_outer_ref(*ref));
+    DBUG_ASSERT(*ref && (*ref)->fixed);
     /*
       Here, a subset of actions performed by Item_ref::set_properties
       is not enough. So we pass ptr to NULL into Item_[direct]_ref
@@ -5334,21 +4596,6 @@ Item_field::fix_outer_field(THD *thd, Field **from_field, Item **reference)
 }
 
 
-bool Item_field::push_to_non_agg_fields(SELECT_LEX *select_lex)
-{
-  marker= select_lex->cur_pos_in_all_fields;
-  /*
-    Push expressions from the SELECT list to the back of the list, and
-    expressions from GROUP BY/ORDER BY to the front of the list
-    (non_agg_fields must have the same ordering as all_fields, see
-    match_exprs_for_only_full_group_by()).
-  */
-  return (marker < 0) ?
-    select_lex->non_agg_fields.push_front(this) :
-    select_lex->non_agg_fields.push_back(this);
-}
-
-
 /**
   Resolve the name of a column reference.
 
@@ -5407,17 +4654,16 @@ bool Item_field::fix_fields(THD *thd, Item **reference)
       expression to 'reference', i.e. it substitute that expression instead
       of this Item_field
     */
-    from_field= find_field_in_tables(thd, this,
-                                     context->first_name_resolution_table,
-                                     context->last_name_resolution_table,
-                                     reference,
-                                     thd->lex->use_only_table_context ?
-                                       REPORT_ALL_ERRORS : 
-                                       IGNORE_EXCEPT_NON_UNIQUE,
-                                     !any_privileges, TRUE);
-    if (thd->is_error())
-      goto error;
-    if (from_field == not_found_field)
+    if ((from_field= find_field_in_tables(thd, this,
+                                          context->first_name_resolution_table,
+                                          context->last_name_resolution_table,
+                                          reference,
+                                          thd->lex->use_only_table_context ?
+                                            REPORT_ALL_ERRORS : 
+                                            IGNORE_EXCEPT_NON_UNIQUE,
+                                          !any_privileges,
+                                          TRUE)) ==
+	not_found_field)
     {
       int ret;
       /* Look up in current select's item_list to find aliased fields */
@@ -5448,7 +4694,7 @@ bool Item_field::fix_fields(THD *thd, Item **reference)
             if (new_field == NULL)
             {
               /* The column to which we link isn't valid. */
-              my_error(ER_BAD_FIELD_ERROR, MYF(0), (*res)->item_name.ptr(),
+              my_error(ER_BAD_FIELD_ERROR, MYF(0), (*res)->name, 
                        current_thd->where);
               return(1);
             }
@@ -5501,15 +4747,8 @@ bool Item_field::fix_fields(THD *thd, Item **reference)
     else if (!from_field)
       goto error;
 
-    /*
-      We should resolve this as an outer field reference if
-      1. we haven't done it before, and
-      2. the select_lex of the table that contains this field is
-         different from the select_lex of the current name resolution
-         context.
-     */
-    if (!outer_fixed &&                                                    // 1
-        cached_table && cached_table->select_lex && context->select_lex && // 2
+    if (!outer_fixed && cached_table && cached_table->select_lex &&
+        context->select_lex &&
         cached_table->select_lex != context->select_lex)
     {
       int ret;
@@ -5586,30 +4825,19 @@ bool Item_field::fix_fields(THD *thd, Item **reference)
   }
 #endif
   fixed= 1;
-  if (!outer_fixed && !thd->lex->in_sum_func &&
-      thd->lex->current_select->cur_pos_in_all_fields !=
-      SELECT_LEX::ALL_FIELDS_UNDEF_POS)
+  if (thd->variables.sql_mode & MODE_ONLY_FULL_GROUP_BY &&
+      !outer_fixed && !thd->lex->in_sum_func &&
+      thd->lex->current_select->cur_pos_in_select_list != UNDEF_POS)
   {
-    // See same code in Field_iterator_table::create_item()
-    if (thd->variables.sql_mode & MODE_ONLY_FULL_GROUP_BY)
-      push_to_non_agg_fields(thd->lex->current_select);
-    /*
-      If (1) aggregation (2) without grouping, we may have to return a result
-      row even if the nested loop finds nothing; in this result row,
-      non-aggregated table columns present in the SELECT list will show a NULL
-      value even if the table column itself is not nullable.
-    */
-    if (thd->lex->current_select->with_sum_func && // (1)
-        !thd->lex->current_select->group_list.elements) // (2)
-      maybe_null= true;
+    thd->lex->current_select->non_agg_fields.push_back(this);
+    marker= thd->lex->current_select->cur_pos_in_select_list;
   }
-
 mark_non_agg_field:
   if (fixed && thd->variables.sql_mode & MODE_ONLY_FULL_GROUP_BY)
   {
     /*
-      Mark selects according to presence of non aggregated columns.
-      Columns from outer selects added to the aggregate function
+      Mark selects according to presence of non aggregated fields.
+      Fields from outer selects added to the aggregate function
       outer_fields list as its unknown at the moment whether it's
       aggregated or not.
       We're using either the select lex of the cached table (if present)
@@ -5637,7 +4865,8 @@ error:
   return TRUE;
 }
 
-Item *Item_field::safe_charset_converter(const CHARSET_INFO *tocs)
+
+Item *Item_field::safe_charset_converter(CHARSET_INFO *tocs)
 {
   no_const_subst= 1;
   return Item::safe_charset_converter(tocs);
@@ -5872,9 +5101,8 @@ Item *Item_field::replace_equal_field(uchar *arg)
         return this;
       return const_item;
     }
-    Item_field *subst= item_equal->get_subst_item(this);
-    DBUG_ASSERT(subst);
-    if (field->table != subst->field->table && !field->eq(subst->field))
+    Item_field *subst= item_equal->get_first();
+    if (subst && field->table != subst->field->table && !field->eq(subst->field))
       return subst;
   }
   return this;
@@ -5889,7 +5117,7 @@ void Item::init_make_field(Send_field *tmp_field,
   tmp_field->org_table_name=	empty_name;
   tmp_field->org_col_name=	empty_name;
   tmp_field->table_name=	empty_name;
-  tmp_field->col_name=		item_name.ptr();
+  tmp_field->col_name=		name;
   tmp_field->charsetnr=         collation.collation->number;
   tmp_field->flags=             (maybe_null ? 0 : NOT_NULL_FLAG) | 
                                 (my_binary_compare(charset_for_protocol()) ?
@@ -5958,7 +5186,7 @@ String *Item::check_well_formed_result(String *str,
                                        bool truncate)
 {
   /* Check whether we got a well-formed string */
-  const CHARSET_INFO *cs= str->charset();
+  CHARSET_INFO *cs= str->charset();
 
   size_t valid_length;
   bool length_error;
@@ -5981,7 +5209,8 @@ String *Item::check_well_formed_result(String *str,
     }
     if (truncate && length_error)
     {
-      if (thd->is_strict_mode())
+      if ((thd->variables.sql_mode &
+           (MODE_STRICT_TRANS_TABLES | MODE_STRICT_ALL_TABLES)))
       {
         null_value= 1;
         str= 0;
@@ -5991,7 +5220,7 @@ String *Item::check_well_formed_result(String *str,
         str->length(valid_length);
       }
     }
-    push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN, ER_INVALID_CHARACTER_STRING,
+    push_warning_printf(thd, MYSQL_ERROR::WARN_LEVEL_WARN, ER_INVALID_CHARACTER_STRING,
                         ER(ER_INVALID_CHARACTER_STRING), cs->csname, hexbuf);
   }
   return str;
@@ -6018,11 +5247,10 @@ String *Item::check_well_formed_result(String *str,
     0    otherwise
 */
 
-bool Item::eq_by_collation(Item *item, bool binary_cmp,
-                           const CHARSET_INFO *cs)
+bool Item::eq_by_collation(Item *item, bool binary_cmp, CHARSET_INFO *cs)
 {
-  const CHARSET_INFO *save_cs= 0;
-  const CHARSET_INFO *save_item_cs= 0;
+  CHARSET_INFO *save_cs= 0;
+  CHARSET_INFO *save_item_cs= 0;
   if (collation.collation != cs)
   {
     save_cs= collation.collation;
@@ -6043,34 +5271,6 @@ bool Item::eq_by_collation(Item *item, bool binary_cmp,
 
 
 /**
-  Check if it is OK to evaluate the item now.
-
-  @return true if the item can be evaluated in the current statement state.
-    @retval true  The item can be evaluated now.
-    @retval false The item can not be evaluated now,
-                  (i.e. depend on non locked table).
-
-  @note Help function to avoid optimize or exec call during prepare phase.
-*/
-
-bool Item::can_be_evaluated_now() const
-{
-  DBUG_ENTER("Item::can_be_evaluated_now");
-
-  if (tables_locked_cache)
-    DBUG_RETURN(true);
-
-  if (has_subquery() || has_stored_program())
-    const_cast<Item*>(this)->tables_locked_cache=
-                               current_thd->lex->is_query_tables_locked();
-  else
-    const_cast<Item*>(this)->tables_locked_cache= true;
-
-  DBUG_RETURN(tables_locked_cache);
-}
-
-
-/**
   Create a field to hold a string value from an item.
 
   If max_length > CONVERT_IF_BIGGER_TO_BLOB create a blob @n
@@ -6085,13 +5285,13 @@ Field *Item::make_string_field(TABLE *table)
   Field *field;
   DBUG_ASSERT(collation.collation);
   if (max_length/collation.collation->mbmaxlen > CONVERT_IF_BIGGER_TO_BLOB)
-    field= new Field_blob(max_length, maybe_null, item_name.ptr(),
+    field= new Field_blob(max_length, maybe_null, name,
                           collation.collation, TRUE);
   /* Item_type_holder holds the exact type, do not change it */
   else if (max_length > 0 &&
       (type() != Item::TYPE_HOLDER || field_type() != MYSQL_TYPE_STRING))
-    field= new Field_varstring(max_length, maybe_null, item_name.ptr(),
-                               table->s, collation.collation);
+    field= new Field_varstring(max_length, maybe_null, name, table->s,
+                               collation.collation);
   else
   {
     /*
@@ -6100,10 +5300,10 @@ Field *Item::make_string_field(TABLE *table)
     */
     if (max_length == 0 && marker == 4 && maybe_null &&
         field_type() == MYSQL_TYPE_VAR_STRING && type() != Item::TYPE_HOLDER)
-      field= new Field_varstring(max_length, maybe_null, item_name.ptr(),
-                                 table->s, collation.collation);
+      field= new Field_varstring(max_length, maybe_null, name, table->s,
+                                 collation.collation);
     else
-      field= new Field_string(max_length, maybe_null, item_name.ptr(),
+      field= new Field_string(max_length, maybe_null, name,
                               collation.collation);
   }
   if (field)
@@ -6139,54 +5339,54 @@ Field *Item::tmp_table_field_from_field_type(TABLE *table, bool fixed_length)
     break;
   case MYSQL_TYPE_TINY:
     field= new Field_tiny((uchar*) 0, max_length, null_ptr, 0, Field::NONE,
-			  item_name.ptr(), 0, unsigned_flag);
+			  name, 0, unsigned_flag);
     break;
   case MYSQL_TYPE_SHORT:
     field= new Field_short((uchar*) 0, max_length, null_ptr, 0, Field::NONE,
-			   item_name.ptr(), 0, unsigned_flag);
+			   name, 0, unsigned_flag);
     break;
   case MYSQL_TYPE_LONG:
     field= new Field_long((uchar*) 0, max_length, null_ptr, 0, Field::NONE,
-			  item_name.ptr(), 0, unsigned_flag);
+			  name, 0, unsigned_flag);
     break;
 #ifdef HAVE_LONG_LONG
   case MYSQL_TYPE_LONGLONG:
     field= new Field_longlong((uchar*) 0, max_length, null_ptr, 0, Field::NONE,
-			      item_name.ptr(), 0, unsigned_flag);
+			      name, 0, unsigned_flag);
     break;
 #endif
   case MYSQL_TYPE_FLOAT:
     field= new Field_float((uchar*) 0, max_length, null_ptr, 0, Field::NONE,
-			   item_name.ptr(), decimals, 0, unsigned_flag);
+			   name, decimals, 0, unsigned_flag);
     break;
   case MYSQL_TYPE_DOUBLE:
     field= new Field_double((uchar*) 0, max_length, null_ptr, 0, Field::NONE,
-			    item_name.ptr(), decimals, 0, unsigned_flag);
+			    name, decimals, 0, unsigned_flag);
     break;
   case MYSQL_TYPE_INT24:
     field= new Field_medium((uchar*) 0, max_length, null_ptr, 0, Field::NONE,
-			    item_name.ptr(), 0, unsigned_flag);
+			    name, 0, unsigned_flag);
     break;
-  case MYSQL_TYPE_DATE:
   case MYSQL_TYPE_NEWDATE:
-    field= new Field_newdate(maybe_null, item_name.ptr());
+  case MYSQL_TYPE_DATE:
+    field= new Field_newdate(maybe_null, name, &my_charset_bin);
     break;
   case MYSQL_TYPE_TIME:
-    field= new Field_timef(maybe_null, item_name.ptr(), decimals);
+    field= new Field_time(maybe_null, name, &my_charset_bin);
     break;
   case MYSQL_TYPE_TIMESTAMP:
-    field= new Field_timestampf(maybe_null, item_name.ptr(), decimals);
+    field= new Field_timestamp(maybe_null, name, &my_charset_bin);
     break;
   case MYSQL_TYPE_DATETIME:
-    field= new Field_datetimef(maybe_null, item_name.ptr(), decimals);
+    field= new Field_datetime(maybe_null, name, &my_charset_bin);
     break;
   case MYSQL_TYPE_YEAR:
     field= new Field_year((uchar*) 0, max_length, null_ptr, 0, Field::NONE,
-			  item_name.ptr());
+			  name);
     break;
   case MYSQL_TYPE_BIT:
     field= new Field_bit_as_char(NULL, max_length, null_ptr, 0,
-                                 Field::NONE, item_name.ptr());
+                                 Field::NONE, name);
     break;
   default:
     /* This case should never be chosen */
@@ -6194,9 +5394,9 @@ Field *Item::tmp_table_field_from_field_type(TABLE *table, bool fixed_length)
     /* If something goes awfully wrong, it's better to get a string than die */
   case MYSQL_TYPE_STRING:
   case MYSQL_TYPE_NULL:
-    if (fixed_length && max_length <= CONVERT_IF_BIGGER_TO_BLOB)
+    if (fixed_length && max_length < CONVERT_IF_BIGGER_TO_BLOB)
     {
-      field= new Field_string(max_length, maybe_null, item_name.ptr(),
+      field= new Field_string(max_length, maybe_null, name,
                               collation.collation);
       break;
     }
@@ -6211,15 +5411,15 @@ Field *Item::tmp_table_field_from_field_type(TABLE *table, bool fixed_length)
   case MYSQL_TYPE_LONG_BLOB:
   case MYSQL_TYPE_BLOB:
     if (this->type() == Item::TYPE_HOLDER)
-      field= new Field_blob(max_length, maybe_null, item_name.ptr(), collation.collation,
+      field= new Field_blob(max_length, maybe_null, name, collation.collation,
                             1);
     else
-      field= new Field_blob(max_length, maybe_null, item_name.ptr(), collation.collation);
+      field= new Field_blob(max_length, maybe_null, name, collation.collation);
     break;					// Blob handled outside of case
 #ifdef HAVE_SPATIAL
   case MYSQL_TYPE_GEOMETRY:
     field= new Field_geom(max_length, maybe_null,
-                          item_name.ptr(), table->s, get_geometry_type());
+                          name, table->s, get_geometry_type());
 #endif /* HAVE_SPATIAL */
   }
   if (field)
@@ -6233,8 +5433,8 @@ void Item_field::make_field(Send_field *tmp_field)
 {
   field->make_field(tmp_field);
   DBUG_ASSERT(tmp_field->table_name != 0);
-  if (item_name.is_set())
-    tmp_field->col_name= item_name.ptr();  // Use user supplied name
+  if (name)
+    tmp_field->col_name=name;			// Use user supplied name
   if (table_name)
     tmp_field->table_name= table_name;
   if (db_name)
@@ -6251,7 +5451,7 @@ void Item_field::save_org_in_field(Field *to)
   if (field->is_null())
   {
     null_value=1;
-    set_field_to_null_with_conversions(to, true);
+    set_field_to_null_with_conversions(to, 1);
   }
   else
   {
@@ -6261,15 +5461,13 @@ void Item_field::save_org_in_field(Field *to)
   }
 }
 
-type_conversion_status
-Item_field::save_in_field(Field *to, bool no_conversions)
+int Item_field::save_in_field(Field *to, bool no_conversions)
 {
-  type_conversion_status res;
-  DBUG_ENTER("Item_field::save_in_field");
+  int res;
   if (result_field->is_null())
   {
     null_value=1;
-    DBUG_RETURN(set_field_to_null_with_conversions(to, no_conversions));
+    return set_field_to_null_with_conversions(to, no_conversions);
   }
   to->set_notnull();
 
@@ -6280,12 +5478,12 @@ Item_field::save_in_field(Field *to, bool no_conversions)
   if (to == result_field)
   {
     null_value=0;
-    DBUG_RETURN(TYPE_OK);
+    return 0;
   }
 
   res= field_conv(to,result_field);
   null_value=0;
-  DBUG_RETURN(res);
+  return res;
 }
 
 
@@ -6303,8 +5501,7 @@ Item_field::save_in_field(Field *to, bool no_conversions)
     1   Field doesn't support NULL values and can't handle 'field = NULL'
 */
 
-type_conversion_status
-Item_null::save_in_field(Field *field, bool no_conversions)
+int Item_null::save_in_field(Field *field, bool no_conversions)
 {
   return set_field_to_null_with_conversions(field, no_conversions);
 }
@@ -6321,7 +5518,7 @@ Item_null::save_in_field(Field *field, bool no_conversions)
     1	 Field doesn't support NULL values
 */
 
-type_conversion_status Item_null::save_safe_in_field(Field *field)
+int Item_null::save_safe_in_field(Field *field)
 {
   return set_field_to_null(field);
 }
@@ -6336,14 +5533,13 @@ type_conversion_status Item_null::save_safe_in_field(Field *field)
   str != str_value. For example, see fix for bug #44743.
 */
 
-type_conversion_status
-Item::save_in_field(Field *field, bool no_conversions)
+int Item::save_in_field(Field *field, bool no_conversions)
 {
-  type_conversion_status error;
+  int error;
   if (result_type() == STRING_RESULT)
   {
     String *result;
-    const CHARSET_INFO *cs= collation.collation;
+    CHARSET_INFO *cs= collation.collation;
     char buff[MAX_FIELD_WIDTH];		// Alloc buffer for small columns
     str_value.set_quick(buff, sizeof(buff), cs);
     result=val_str(&str_value);
@@ -6393,13 +5589,11 @@ Item::save_in_field(Field *field, bool no_conversions)
     field->set_notnull();
     error=field->store(nr, unsigned_flag);
   }
-  return error ? error : (field->table->in_use->is_error() ?
-                          TYPE_ERR_BAD_VALUE : TYPE_OK);
+  return error ? error : (field->table->in_use->is_error() ? 1 : 0);
 }
 
 
-type_conversion_status
-Item_string::save_in_field(Field *field, bool no_conversions)
+int Item_string::save_in_field(Field *field, bool no_conversions)
 {
   String *result;
   result=val_str(&str_value);
@@ -6407,30 +5601,15 @@ Item_string::save_in_field(Field *field, bool no_conversions)
 }
 
 
-type_conversion_status
-Item_uint::save_in_field(Field *field, bool no_conversions)
+int Item_uint::save_in_field(Field *field, bool no_conversions)
 {
   /* Item_int::save_in_field handles both signed and unsigned. */
   return Item_int::save_in_field(field, no_conversions);
 }
 
-/**
-  Store an int in a field
-
-  @param field           The field where the int value is to be stored
-  @param nr              The value to store in field
-  @param null_value      True if the value to store is NULL, false otherwise
-  @param unsigned_flag   Whether or not the int value is signed or unsigned
-
-  @retval TYPE_OK   Storing of value went fine without warnings or errors
-  @retval !TYPE_OK  Warning/error as indicated by type_conversion_status enum
-                    value
-*/
-static type_conversion_status
-save_int_value_in_field (Field *field, longlong nr,
-                         bool null_value, bool unsigned_flag)
+static int save_int_value_in_field (Field *field, longlong nr, 
+                                    bool null_value, bool unsigned_flag)
 {
-  // TODO: call set_field_to_null_with_conversions below
   if (null_value)
     return set_field_to_null(field);
   field->set_notnull();
@@ -6438,47 +5617,13 @@ save_int_value_in_field (Field *field, longlong nr,
 }
 
 
-/**
-  Store this item's int-value in a field
-
-  @param field           The field where the int value is to be stored
-  @param no_conversions  Only applies if the value to store is NULL
-                         (null_value is true) and NULL is not allowed
-                         in field. In that case: if no_coversion is
-                         true, do nothing and return with error
-                         TYPE_ERR_NULL_CONSTRAINT_VIOLATION. If
-                         no_coversion is false, the field's default
-                         value is stored if one exists. Otherwise an
-                         error is returned.
-
-  @retval TYPE_OK   Storing of value went fine without warnings or errors
-  @retval !TYPE_OK  Warning/error as indicated by type_conversion_status enum
-                    value
-*/
-type_conversion_status
-Item_int::save_in_field(Field *field, bool no_conversions)
+int Item_int::save_in_field(Field *field, bool no_conversions)
 {
-  return save_int_value_in_field (field, val_int(), null_value,
-                                  unsigned_flag);
+  return save_int_value_in_field (field, val_int(), null_value, unsigned_flag);
 }
 
 
-type_conversion_status
-Item_temporal::save_in_field(Field *field, bool no_conversions)
-{
-  longlong nr= field->is_temporal_with_time() ?
-               val_temporal_with_round(field->type(), field->decimals()) :
-               val_date_temporal();
-  // TODO: call set_field_to_null_with_conversions below
-  if (null_value)
-    return set_field_to_null(field);
-  field->set_notnull();
-  return field->store_packed(nr);
-}
-
-
-type_conversion_status
-Item_decimal::save_in_field(Field *field, bool no_conversions)
+int Item_decimal::save_in_field(Field *field, bool no_conversions)
 {
   field->set_notnull();
   return field->store_decimal(&decimal_value);
@@ -6509,44 +5654,8 @@ Item *Item_int_with_ref::clone_item()
     parameter markers.
   */
   return (ref->unsigned_flag ?
-          new Item_uint(ref->item_name, ref->val_int(), ref->max_length) :
-          new Item_int(ref->item_name, ref->val_int(), ref->max_length));
-}
-
-
-Item *Item_time_with_ref::clone_item()
-{
-  DBUG_ASSERT(ref->const_item());
-  /*
-    We need to evaluate the constant to make sure it works with
-    parameter markers.
-  */
-  return new Item_temporal(MYSQL_TYPE_TIME, ref->item_name,
-                           ref->val_time_temporal(), ref->max_length);
-}
-
-
-Item *Item_datetime_with_ref::clone_item()
-{
-  DBUG_ASSERT(ref->const_item());
-  /*
-    We need to evaluate the constant to make sure it works with
-    parameter markers.
-  */
-  return new Item_temporal(MYSQL_TYPE_DATETIME, ref->item_name,
-                           ref->val_date_temporal(), ref->max_length);
-}
-
-
-void Item_temporal_with_ref::print(String *str, enum_query_type query_type)
-{
-  char buff[MAX_DATE_STRING_REP_LENGTH];
-  MYSQL_TIME ltime;
-  TIME_from_longlong_packed(&ltime, field_type(), value);
-  str->append("'");
-  my_TIME_to_str(&ltime, buff, decimals);
-  str->append(buff);
-  str->append('\'');
+          new Item_uint(ref->name, ref->val_int(), ref->max_length) :
+          new Item_int(ref->name, ref->val_int(), ref->max_length));
 }
 
 
@@ -6603,9 +5712,12 @@ static uint nr_of_decimals(const char *str, const char *end)
   - when parsing XPath query from item_xmlfunc.cc
   We will signal an error if value is not a true double value (overflow):
   eng: Illegal %s '%-.192s' value found during parsing
-
-  Note: str_arg does not necessarily have to be a null terminated string,
-  e.g. it is NOT when called from item_xmlfunc.cc or sql_yacc.yy.
+  
+  Note: the string is NOT null terminated when called from item_xmlfunc.cc,
+  so this->name will contain some SQL query tail behind the "length" bytes.
+  This is Ok for now, as this Item is never seen in SHOW,
+  or EXPLAIN, or anywhere else in metadata.
+  Item->name should be fixed to use LEX_STRING eventually.
 */
 
 Item_float::Item_float(const char *str_arg, uint length)
@@ -6620,19 +5732,16 @@ Item_float::Item_float(const char *str_arg, uint length)
     my_snprintf(tmp, sizeof(tmp), "%.*s", length, str_arg);
     my_error(ER_ILLEGAL_VALUE_FOR_TYPE, MYF(0), "double", tmp);
   }
-  presentation.copy(str_arg, length);
-  item_name.copy(str_arg, length);
+  presentation= name=(char*) str_arg;
   decimals=(uint8) nr_of_decimals(str_arg, str_arg+length);
   max_length=length;
   fixed= 1;
 }
 
 
-type_conversion_status
-Item_float::save_in_field(Field *field, bool no_conversions)
+int Item_float::save_in_field(Field *field, bool no_conversions)
 {
   double nr= val_real();
-  // TODO: call set_field_to_null_with_conversions below
   if (null_value)
     return set_field_to_null(field);
   field->set_notnull();
@@ -6642,9 +5751,9 @@ Item_float::save_in_field(Field *field, bool no_conversions)
 
 void Item_float::print(String *str, enum_query_type query_type)
 {
-  if (presentation.ptr())
+  if (presentation)
   {
-    str->append(presentation.ptr());
+    str->append(presentation);
     return;
   }
   char buffer[20];
@@ -6721,7 +5830,7 @@ longlong Item_hex_string::val_int()
   // following assert is redundant, because fixed=1 assigned in constructor
   DBUG_ASSERT(fixed == 1);
   char *end=(char*) str_value.ptr()+str_value.length(),
-       *ptr= end - min<size_t>(str_value.length(), sizeof(longlong));
+       *ptr=end-min(str_value.length(),sizeof(longlong));
 
   ulonglong value=0;
   for (; ptr != end ; ptr++)
@@ -6740,8 +5849,7 @@ my_decimal *Item_hex_string::val_decimal(my_decimal *decimal_value)
 }
 
 
-type_conversion_status
-Item_hex_string::save_in_field(Field *field, bool no_conversions)
+int Item_hex_string::save_in_field(Field *field, bool no_conversions)
 {
   field->set_notnull();
   if (field->result_type() == STRING_RESULT)
@@ -6751,10 +5859,8 @@ Item_hex_string::save_in_field(Field *field, bool no_conversions)
   ulonglong nr;
   uint32 length= str_value.length();
   if (!length)
-  {
-    field->reset();
-    return TYPE_WARN_OUT_OF_RANGE;
-  }
+    return 1;
+
   if (length > 8)
   {
     nr= field->flags & UNSIGNED_FLAG ? ULONGLONG_MAX : LONGLONG_MAX;
@@ -6769,18 +5875,17 @@ Item_hex_string::save_in_field(Field *field, bool no_conversions)
   return field->store((longlong) nr, TRUE);  // Assume hex numbers are unsigned
 
 warn:
-  const type_conversion_status res= field->store((longlong) nr, TRUE);
-  if (res == TYPE_OK)
-    field->set_warning(Sql_condition::WARN_LEVEL_WARN,
-                       ER_WARN_DATA_OUT_OF_RANGE, 1);
-  return res;
+  if (!field->store((longlong) nr, TRUE))
+    field->set_warning(MYSQL_ERROR::WARN_LEVEL_WARN, ER_WARN_DATA_OUT_OF_RANGE,
+                       1);
+  return 1;
 }
 
 
 void Item_hex_string::print(String *str, enum_query_type query_type)
 {
   char *end= (char*) str_value.ptr() + str_value.length(),
-       *ptr= end - min<size_t>(str_value.length(), sizeof(longlong));
+       *ptr= end - min(str_value.length(), sizeof(longlong));
   str->append("0x");
   for (; ptr != end ; ptr++)
   {
@@ -6802,7 +5907,7 @@ bool Item_hex_string::eq(const Item *arg, bool binary_cmp) const
 }
 
 
-Item *Item_hex_string::safe_charset_converter(const CHARSET_INFO *tocs)
+Item *Item_hex_string::safe_charset_converter(CHARSET_INFO *tocs)
 {
   Item_string *conv;
   String tmp, *str= val_str(&tmp);
@@ -6959,8 +6064,12 @@ bool Item::send(Protocol *protocol, String *buffer)
     MYSQL_TIME tm;
     get_date(&tm, TIME_FUZZY_DATE);
     if (!null_value)
-      result= (f_type == MYSQL_TYPE_DATE) ? protocol->store_date(&tm) :
-                                            protocol->store(&tm, decimals);
+    {
+      if (f_type == MYSQL_TYPE_DATE)
+	return protocol->store_date(&tm);
+      else
+	result= protocol->store(&tm);
+    }
     break;
   }
   case MYSQL_TYPE_TIME:
@@ -6968,7 +6077,7 @@ bool Item::send(Protocol *protocol, String *buffer)
     MYSQL_TIME tm;
     get_time(&tm);
     if (!null_value)
-      result= protocol->store_time(&tm, decimals);
+      result= protocol->store_time(&tm);
     break;
   }
   }
@@ -6981,7 +6090,7 @@ bool Item::send(Protocol *protocol, String *buffer)
 /**
   Check if an item is a constant one and can be cached.
 
-  @param arg [out] != NULL <=> Cache this item.
+  @param arg [out] TRUE <=> Cache this item.
 
   @return TRUE  Go deeper in item tree.
   @return FALSE Don't go deeper in item tree.
@@ -6989,19 +6098,18 @@ bool Item::send(Protocol *protocol, String *buffer)
 
 bool Item::cache_const_expr_analyzer(uchar **arg)
 {
-  Item **cache_item= (Item **)*arg;
-  if (!*cache_item)
+  bool *cache_flag= (bool*)*arg;
+  if (!*cache_flag)
   {
     Item *item= real_item();
     /*
       Cache constant items unless it's a basic constant, constant field or
-      a subquery (they use their own cache), or it is already cached.
+      a subselect (they use their own cache).
     */
     if (const_item() &&
         !(basic_const_item() || item->basic_const_item() ||
           item->type() == Item::FIELD_ITEM ||
           item->type() == SUBSELECT_ITEM ||
-          item->type() == CACHE_ITEM ||
            /*
              Do not cache GET_USER_VAR() function as its const_item() may
              return TRUE for the current thread but it still may change
@@ -7009,32 +6117,17 @@ bool Item::cache_const_expr_analyzer(uchar **arg)
            */
           (item->type() == Item::FUNC_ITEM &&
            ((Item_func*)item)->functype() == Item_func::GUSERVAR_FUNC)))
-      /*
-        Note that we use cache_item as a flag (NULL vs non-NULL), but we
-        are storing the pointer so that we can assert that we cache the
-        correct item in Item::cache_const_expr_transformer().
-      */
-      *cache_item= this;
-    /*
-      If this item will be cached, no need to explore items further down
-      in the tree, but the transformer must be called, so return 'true'.
-      If this item will not be cached, items further doen in the tree
-      must be explored, so return 'true'.
-    */
-    return true;
+      *cache_flag= TRUE;
+    return TRUE;
   }
-  /*
-    An item above in the tree is to be cached, so need to cache the present
-    item, and no need to go down the tree.
-  */
-  return false;
+  return FALSE;
 }
 
 
 /**
   Cache item if needed.
 
-  @param arg   != NULL <=> Cache this item.
+  @param arg   TRUE <=> Cache this item.
 
   @return cache if cache needed.
   @return this otherwise.
@@ -7042,15 +6135,9 @@ bool Item::cache_const_expr_analyzer(uchar **arg)
 
 Item* Item::cache_const_expr_transformer(uchar *arg)
 {
-  Item **item= (Item **)arg;
-  if (*item)            // Item is to be cached, note that it is used as a flag
+  if (*(bool*)arg)
   {
-    DBUG_ASSERT(*item == this);
-    /*
-      Flag applies to present item, must reset it so it does not affect
-      the parent item.
-    */
-    *((Item **)arg)= NULL;
+    *((bool*)arg)= FALSE;
     Item_cache *cache= Item_cache::get_cache(this);
     if (!cache)
       return NULL;
@@ -7059,25 +6146,6 @@ Item* Item::cache_const_expr_transformer(uchar *arg)
     return cache;
   }
   return this;
-}
-
-
-bool Item_field::item_field_by_name_analyzer(uchar **arg)
-{
-  const char *name= reinterpret_cast<char*>(*arg);
-  
-  if (strcmp(field_name, name) == 0)
-    return true;
-  else
-    return false;
-}
-
-
-Item* Item_field::item_field_by_name_transformer(uchar *arg)
-{
-  Item *item= reinterpret_cast<Item*>(arg);
-  item->item_name= item_name;
-  return item;
 }
 
 
@@ -7134,13 +6202,13 @@ Item *Item_field::update_value_transformer(uchar *select_arg)
       type() != Item::TRIGGER_FIELD_ITEM)
   {
     List<Item> *all_fields= &select->join->all_fields;
-    Ref_ptr_array &ref_pointer_array= select->ref_pointer_array;
+    Item **ref_pointer_array= select->ref_pointer_array;
     int el= all_fields->elements;
     Item_ref *ref;
 
     ref_pointer_array[el]= (Item*)this;
     all_fields->push_front((Item*)this);
-    ref= new Item_ref(&select->context, &ref_pointer_array[el],
+    ref= new Item_ref(&select->context, ref_pointer_array + el,
                       table_name, field_name);
     return ref;
   }
@@ -7166,11 +6234,7 @@ void Item_field::print(String *str, enum_query_type query_type)
     }
     return;
   }
-  if ((table_name == NULL || table_name[0] == 0) && field && field->orig_table)
-    Item_ident::print(str, query_type, field->orig_table->s->db.str,
-                      field->orig_table->alias);
-  else
-    Item_ident::print(str, query_type);
+  Item_ident::print(str, query_type);
 }
 
 
@@ -7184,6 +6248,20 @@ Item_ref::Item_ref(Name_resolution_context *context_arg,
   alias_name_used= alias_name_used_arg;
   /*
     This constructor used to create some internals references over fixed items
+  */
+  if (ref && *ref && (*ref)->fixed)
+    set_properties();
+}
+
+
+Item_ref::Item_ref(TABLE_LIST *view_arg, Item **item,
+                   const char *field_name_arg, bool alias_name_used_arg)
+  :Item_ident(view_arg, field_name_arg),
+   result_field(NULL), ref(item)
+{
+  alias_name_used= alias_name_used_arg;
+  /*
+    This constructor is used to create some internal references over fixed items
   */
   if (ref && *ref && (*ref)->fixed)
     set_properties();
@@ -7306,7 +6384,7 @@ bool Item_ref::fix_fields(THD *thd, Item **reference)
             goto error; /* Some error occurred (e.g. ambiguous names). */
           if (ref != not_found_item)
           {
-            DBUG_ASSERT(is_fixed_or_outer_ref(*ref));
+            DBUG_ASSERT(*ref && (*ref)->fixed);
             prev_subselect_item->used_tables_cache|= (*ref)->used_tables();
             prev_subselect_item->const_item_cache&= (*ref)->const_item();
             break;
@@ -7408,15 +6486,13 @@ bool Item_ref::fix_fields(THD *thd, Item **reference)
       if (from_field != not_found_field)
       {
         Item_field* fld;
-
-        {
-          Prepared_stmt_arena_holder ps_arena_holder(thd);
-          fld= new Item_field(thd, context, from_field);
-
-          if (!fld)
-            goto error;
-        }
-
+        Query_arena backup, *arena;
+        arena= thd->activate_stmt_arena_if_needed(&backup);
+        fld= new Item_field(thd, last_checked_context, from_field);
+        if (arena)
+          thd->restore_active_arena(arena, &backup);
+        if (!fld)
+          goto error;
         thd->change_item_tree(reference, fld);
         mark_as_dependent(thd, last_checked_context->select_lex,
                           thd->lex->current_select, this, fld);
@@ -7440,7 +6516,7 @@ bool Item_ref::fix_fields(THD *thd, Item **reference)
         goto error;
       }
       /* Should be checked in resolve_ref_in_select_and_group(). */
-      DBUG_ASSERT(is_fixed_or_outer_ref(*ref));
+      DBUG_ASSERT(*ref && (*ref)->fixed);
       mark_as_dependent(thd, last_checked_context->select_lex,
                         context->select_lex, this, this);
       /*
@@ -7465,13 +6541,13 @@ bool Item_ref::fix_fields(THD *thd, Item **reference)
   */
   if (!((*ref)->type() == REF_ITEM &&
        ((Item_ref *)(*ref))->ref_type() == OUTER_REF) &&
-      (((*ref)->with_sum_func && item_name.ptr() &&
+      (((*ref)->with_sum_func && name &&
         !(current_sel->linkage != GLOBAL_OPTIONS_TYPE &&
           current_sel->having_fix_field)) ||
        !(*ref)->fixed))
   {
     my_error(ER_ILLEGAL_REFERENCE, MYF(0),
-             item_name.ptr(), ((*ref)->with_sum_func?
+             name, ((*ref)->with_sum_func?
                     "reference to group function":
                     "forward reference in item list"));
     goto error;
@@ -7520,100 +6596,16 @@ void Item_ref::cleanup()
 }
 
 
-/**
-  Transform an Item_ref object with a transformer callback function.
-
-  The function first applies the transform function to the item
-  referenced by this Item_ref object. If this replaces the item with a
-  new one, this item object is returned as the result of the
-  transform. Otherwise the transform function is applied to the
-  Item_ref object itself.
-
-  @param transformer   the transformer callback function to be applied to
-                       the nodes of the tree of the object
-  @param argument      parameter to be passed to the transformer
-
-  @return Item returned as the result of transformation of the Item_ref object
-    @retval !NULL The transformation was successful
-    @retval NULL  Out of memory error
-*/
-
-Item* Item_ref::transform(Item_transformer transformer, uchar *arg)
-{
-  DBUG_ASSERT(!current_thd->stmt_arena->is_stmt_prepare());
-  DBUG_ASSERT((*ref) != NULL);
-
-  /* Transform the object we are referencing. */
-  Item *new_item= (*ref)->transform(transformer, arg);
-  if (!new_item)
-    return NULL;
-
-  /*
-    If the object is transformed into a new object, discard the Item_ref
-    object and return the new object as result.
-  */
-  if (new_item != *ref)
-    return new_item;
-
-  /* Transform the item ref object. */
-  Item *transformed_item= (this->*transformer)(arg);
-  DBUG_ASSERT(transformed_item == this);
-  return transformed_item;
-}
-
-
-/**
-  Compile an Item_ref object with a processor and a transformer
-  callback function.
-
-  First the function applies the analyzer to the Item_ref
-  object. Second it applies the compile function to the object the
-  Item_ref object is referencing. If this replaces the item with a new
-  one, this object is returned as the result of the compile.
-  Otherwise we apply the transformer to the Item_ref object itself.
-
-  @param analyzer      the analyzer callback function to be applied to the
-                       nodes of the tree of the object
-  @param[in,out] arg_p parameter to be passed to the processor
-  @param transformer   the transformer callback function to be applied to the
-                       nodes of the tree of the object
-  @param arg_t         parameter to be passed to the transformer
-
-  @return Item returned as the result of transformation of the Item_ref object,
-          or NULL if error.
-*/
-
-Item* Item_ref::compile(Item_analyzer analyzer, uchar **arg_p,
-                        Item_transformer transformer, uchar *arg_t)
-{
-  if (!(this->*analyzer)(arg_p))
-    return this;
-
-  DBUG_ASSERT((*ref) != NULL);
-  Item *new_item= (*ref)->compile(analyzer, arg_p, transformer, arg_t);
-  if (new_item == NULL)
-    return NULL;
-
-  /*
-    If the object is compiled into a new object, discard the Item_ref
-    object and return the new object as result.
-  */
-  if (new_item != *ref)
-    return new_item;
-  
-  return (this->*transformer)(arg_t);
-}
-
-
 void Item_ref::print(String *str, enum_query_type query_type)
 {
   if (ref)
   {
     if ((*ref)->type() != Item::CACHE_ITEM && ref_type() != VIEW_REF &&
-        !table_name && item_name.ptr() && alias_name_used)
+        !table_name && name && alias_name_used)
     {
       THD *thd= current_thd;
-      append_identifier(thd, str, (*ref)->real_item()->item_name);
+      append_identifier(thd, str, (*ref)->real_item()->name,
+                        strlen((*ref)->real_item()->name));
     }
     else
       (*ref)->print(str, query_type);
@@ -7736,26 +6728,6 @@ longlong Item_ref::val_int()
 }
 
 
-longlong Item_ref::val_time_temporal()
-{
-  DBUG_ASSERT(fixed);
-  DBUG_ASSERT((*ref)->is_temporal());
-  longlong tmp= (*ref)->val_time_temporal_result();
-  null_value= (*ref)->null_value;
-  return tmp;
-}
-
-
-longlong Item_ref::val_date_temporal()
-{
-  DBUG_ASSERT(fixed);
-  DBUG_ASSERT((*ref)->is_temporal());
-  longlong tmp= (*ref)->val_date_temporal_result();
-  null_value= (*ref)->null_value;
-  return tmp;
-}
-
-
 bool Item_ref::val_bool()
 {
   DBUG_ASSERT(fixed);
@@ -7796,23 +6768,10 @@ my_decimal *Item_ref::val_decimal(my_decimal *decimal_value)
   return val;
 }
 
-type_conversion_status
-Item_ref::save_in_field(Field *to, bool no_conversions)
+int Item_ref::save_in_field(Field *to, bool no_conversions)
 {
-  type_conversion_status res;
-  if (result_field)
-  {
-    if (result_field->is_null())
-    {
-      null_value= 1;
-      res= set_field_to_null_with_conversions(to, no_conversions);
-      return res;
-    }
-    to->set_notnull();
-    res= field_conv(to, result_field);
-    null_value= 0;
-    return res;
-  }
+  int res;
+  DBUG_ASSERT(!result_field);
   res= (*ref)->save_in_field(to, no_conversions);
   null_value= (*ref)->null_value;
   return res;
@@ -7829,8 +6788,8 @@ void Item_ref::make_field(Send_field *field)
 {
   (*ref)->make_field(field);
   /* Non-zero in case of a view */
-  if (item_name.is_set())
-    field->col_name= item_name.ptr();
+  if (name)
+    field->col_name= name;
   if (table_name)
     field->table_name= table_name;
   if (db_name)
@@ -7880,24 +6839,6 @@ longlong Item_direct_ref::val_int()
 {
   longlong tmp=(*ref)->val_int();
   null_value=(*ref)->null_value;
-  return tmp;
-}
-
-
-longlong Item_direct_ref::val_time_temporal()
-{
-  DBUG_ASSERT((*ref)->is_temporal());
-  longlong tmp= (*ref)->val_time_temporal();
-  null_value= (*ref)->null_value;
-  return tmp;
-}
-
-
-longlong Item_direct_ref::val_date_temporal()
-{
-  DBUG_ASSERT((*ref)->is_temporal());
-  longlong tmp= (*ref)->val_date_temporal();
-  null_value= (*ref)->null_value;
   return tmp;
 }
 
@@ -8007,26 +6948,6 @@ bool Item_outer_ref::fix_fields(THD *thd, Item **reference)
   return err;
 }
 
-void Item_outer_ref::fix_after_pullout(st_select_lex *parent_select,
-                                       st_select_lex *removed_select)
-{
-  /*
-    If this assertion holds, we need not call fix_after_pullout() on both
-    *ref and outer_ref, and Item_ref::fix_after_pullout() is sufficient.
-  */
-  DBUG_ASSERT(*ref == outer_ref);
-
-  Item_ref::fix_after_pullout(parent_select, removed_select);
-}
-
-void Item_ref::fix_after_pullout(st_select_lex *parent_select,
-                                 st_select_lex *removed_select)
-{
-  (*ref)->fix_after_pullout(parent_select, removed_select);
-
-  Item_ident::fix_after_pullout(parent_select, removed_select);
-}
-
 
 /**
   Compare two view column references for equality.
@@ -8085,7 +7006,7 @@ bool Item_default_value::fix_fields(THD *thd, Item **items)
   real_arg= arg->real_item();
   if (real_arg->type() != FIELD_ITEM)
   {
-    my_error(ER_NO_DEFAULT_FOR_FIELD, MYF(0), arg->item_name.ptr());
+    my_error(ER_NO_DEFAULT_FOR_FIELD, MYF(0), arg->name);
     goto error;
   }
 
@@ -8095,11 +7016,9 @@ bool Item_default_value::fix_fields(THD *thd, Item **items)
     my_error(ER_NO_DEFAULT_FOR_FIELD, MYF(0), field_arg->field->field_name);
     goto error;
   }
-
-  def_field= field_arg->field->clone();
-  if (def_field == NULL)
+  if (!(def_field= (Field*) sql_alloc(field_arg->field->size_of())))
     goto error;
-
+  memcpy(def_field, field_arg->field, field_arg->field->size_of());
   def_field->move_field_offset((my_ptrdiff_t)
                                (def_field->table->s->default_values -
                                 def_field->table->record[0]));
@@ -8125,8 +7044,7 @@ void Item_default_value::print(String *str, enum_query_type query_type)
 }
 
 
-type_conversion_status
-Item_default_value::save_in_field(Field *field_arg, bool no_conversions)
+int Item_default_value::save_in_field(Field *field_arg, bool no_conversions)
 {
   if (!arg)
   {
@@ -8137,14 +7055,14 @@ Item_default_value::save_in_field(Field *field_arg, bool no_conversions)
       {
         my_message(ER_CANT_CREATE_GEOMETRY_OBJECT,
                    ER(ER_CANT_CREATE_GEOMETRY_OBJECT), MYF(0));
-        return TYPE_ERR_BAD_VALUE;
+        return -1;
       }
 
       if (context->error_processor == &view_error_processor)
       {
         TABLE_LIST *view= cached_table->top_table();
         push_warning_printf(field_arg->table->in_use,
-                            Sql_condition::WARN_LEVEL_WARN,
+                            MYSQL_ERROR::WARN_LEVEL_WARN,
                             ER_NO_DEFAULT_FOR_VIEW_FIELD,
                             ER(ER_NO_DEFAULT_FOR_VIEW_FIELD),
                             view->view_db.str,
@@ -8153,15 +7071,15 @@ Item_default_value::save_in_field(Field *field_arg, bool no_conversions)
       else
       {
         push_warning_printf(field_arg->table->in_use,
-                            Sql_condition::WARN_LEVEL_WARN,
+                            MYSQL_ERROR::WARN_LEVEL_WARN,
                             ER_NO_DEFAULT_FOR_FIELD,
                             ER(ER_NO_DEFAULT_FOR_FIELD),
                             field_arg->field_name);
       }
-      return TYPE_ERR_BAD_VALUE;
+      return 1;
     }
     field_arg->set_default();
-    return field_arg->validate_stored_val(current_thd);
+    return 0;
   }
   return Item_field::save_in_field(field_arg, no_conversions);
 }
@@ -8202,11 +7120,11 @@ Item *Item_default_value::transform(Item_transformer transformer, uchar *args)
 bool Item_insert_value::eq(const Item *item, bool binary_cmp) const
 {
   return item->type() == INSERT_VALUE_ITEM &&
-    ((Item_default_value *)item)->arg->eq(arg, binary_cmp);
+    ((Item_insert_value *)item)->arg->eq(arg, binary_cmp);
 }
 
 
-bool Item_insert_value::fix_fields(THD *thd, Item **reference)
+bool Item_insert_value::fix_fields(THD *thd, Item **items)
 {
   DBUG_ASSERT(fixed == 0);
   /* We should only check that arg is in first table */
@@ -8232,12 +7150,12 @@ bool Item_insert_value::fix_fields(THD *thd, Item **reference)
   Item_field *field_arg= (Item_field *)arg;
 
   if (field_arg->field->table->insert_values &&
-      find_item_in_item_list(this, &thd->lex->value_list))
+      thd->lex->in_update_value_clause)
   {
-    Field *def_field= field_arg->field->clone();
+    Field *def_field= (Field*) sql_alloc(field_arg->field->size_of());
     if (!def_field)
-      return TRUE;
-
+      return true;
+    memcpy(def_field, field_arg->field, field_arg->field->size_of());
     def_field->move_field_offset((my_ptrdiff_t)
                                  (def_field->table->insert_values -
                                   def_field->table->record[0]));
@@ -8246,11 +7164,14 @@ bool Item_insert_value::fix_fields(THD *thd, Item **reference)
   else
   {
     // VALUES() is used out-of-scope - its value is always NULL
-    Prepared_stmt_arena_holder ps_arena_holder(thd);
-    Item *const item= new Item_null(this->item_name);
+    Query_arena backup;
+    Query_arena *const arena= thd->activate_stmt_arena_if_needed(&backup);
+    Item *const item= new Item_null(this->name);
+    if (arena)
+      thd->restore_active_arena(arena, &backup);
     if (!item)
-      return true;
-    *reference= item;
+      return TRUE;
+    *items= item;
   }
   return false;
 }
@@ -8439,6 +7360,8 @@ void resolve_const_item(THD *thd, Item **ref, Item *comp_item)
     return;                                     // Can't be better
   Item_result res_type=item_cmp_type(comp_item->result_type(),
 				     item->result_type());
+  char *name=item->name;			// Alloced by sql_alloc
+
   switch (res_type) {
   case STRING_RESULT:
   {
@@ -8446,19 +7369,12 @@ void resolve_const_item(THD *thd, Item **ref, Item *comp_item)
     String tmp(buff,sizeof(buff),&my_charset_bin),*result;
     result=item->val_str(&tmp);
     if (item->null_value)
-      new_item= new Item_null(item->item_name);
-    else if (item->is_temporal())
-    {
-      enum_field_types type= item->field_type() == MYSQL_TYPE_TIMESTAMP ?
-                              MYSQL_TYPE_DATETIME : item->field_type();
-      new_item= create_temporal_literal(thd, result->ptr(), result->length(),
-                                        result->charset(), type, true);
-    }
+      new_item= new Item_null(name);
     else
     {
       uint length= result->length();
       char *tmp_str= sql_strmake(result->ptr(), length);
-      new_item= new Item_string(item->item_name, tmp_str, length, result->charset());
+      new_item= new Item_string(name, tmp_str, length, result->charset());
     }
     break;
   }
@@ -8467,8 +7383,8 @@ void resolve_const_item(THD *thd, Item **ref, Item *comp_item)
     longlong result=item->val_int();
     uint length=item->max_length;
     bool null_value=item->null_value;
-    new_item= (null_value ? (Item*) new Item_null(item->item_name) :
-               (Item*) new Item_int(item->item_name, result, length));
+    new_item= (null_value ? (Item*) new Item_null(name) :
+               (Item*) new Item_int(name, result, length));
     break;
   }
   case ROW_RESULT:
@@ -8506,19 +7422,19 @@ void resolve_const_item(THD *thd, Item **ref, Item *comp_item)
     double result= item->val_real();
     uint length=item->max_length,decimals=item->decimals;
     bool null_value=item->null_value;
-    new_item= (null_value ? (Item*) new Item_null(item->item_name) : (Item*)
-               new Item_float(item->item_name, result, decimals, length));
+    new_item= (null_value ? (Item*) new Item_null(name) : (Item*)
+               new Item_float(name, result, decimals, length));
     break;
   }
   case DECIMAL_RESULT:
   {
     my_decimal decimal_value;
     my_decimal *result= item->val_decimal(&decimal_value);
+    uint length= item->max_length, decimals= item->decimals;
     bool null_value= item->null_value;
     new_item= (null_value ?
-               (Item*) new Item_null(item->item_name) :
-               (Item*) new Item_decimal(item->item_name, result,
-                                        item->max_length, item->decimals));
+               (Item*) new Item_null(name) :
+               (Item*) new Item_decimal(name, result, length, decimals));
     break;
   }
   default:
@@ -8552,26 +7468,6 @@ int stored_field_cmp_to_item(THD *thd, Field *field, Item *item)
 {
   Item_result res_type=item_cmp_type(field->result_type(),
 				     item->result_type());
-  if (field->type() == MYSQL_TYPE_TIME &&
-      item->field_type() == MYSQL_TYPE_TIME)
-  {
-    longlong field_value= field->val_time_temporal();
-    longlong item_value= item->val_time_temporal();
-    return field_value < item_value ? -1 : field_value > item_value ? 1 : 0;
-  }
-  if (field->is_temporal_with_date() && item->is_temporal())
-  {
-    /*
-      Note, in case of TIME data type we also go here
-      and call item->val_date_temporal(), because we want
-      TIME to be converted to DATE/DATETIME properly.
-      Only non-temporal data types go though get_mysql_time_from_str()
-      in the below code branch.
-    */
-    longlong field_value= field->val_date_temporal();
-    longlong item_value= item->val_date_temporal();
-    return field_value < item_value ? -1 : field_value > item_value ? 1 : 0;
-  }
   if (res_type == STRING_RESULT)
   {
     char item_buff[MAX_FIELD_WIDTH];
@@ -8588,10 +7484,20 @@ int stored_field_cmp_to_item(THD *thd, Field *field, Item *item)
       return 0;
     String *field_result= field->val_str(&field_tmp);
 
-    if (field->is_temporal_with_date())
+    enum_field_types field_type= field->type();
+
+    if (field_type == MYSQL_TYPE_DATE || field_type == MYSQL_TYPE_DATETIME ||
+        field_type == MYSQL_TYPE_TIMESTAMP)
     {
-      enum_mysql_timestamp_type type=
-        field_type_to_timestamp_type(field->type());
+      enum_mysql_timestamp_type type= MYSQL_TIMESTAMP_ERROR;
+
+      if (field_type == MYSQL_TYPE_DATE)
+        type= MYSQL_TIMESTAMP_DATE;
+
+      if (field_type == MYSQL_TYPE_DATETIME ||
+          field_type == MYSQL_TYPE_TIMESTAMP)
+        type= MYSQL_TIMESTAMP_DATETIME;
+        
       const char *field_name= field->field_name;
       MYSQL_TIME field_time, item_time;
       get_mysql_time_from_str(thd, field_result, type, field_name, &field_time);
@@ -8655,7 +7561,9 @@ Item_cache* Item_cache::get_cache(const Item *item, const Item_result type)
     return new Item_cache_decimal();
   case STRING_RESULT:
     /* Not all functions that return DATE/TIME are actually DATE/TIME funcs. */
-    if (item->is_temporal())
+    if ((item->is_datetime() ||
+         item->field_type() == MYSQL_TYPE_TIME) &&
+        (const_cast<Item*>(item))->result_as_longlong())
       return new Item_cache_datetime(item->field_type());
     return new Item_cache_str(item);
   case ROW_RESULT:
@@ -8683,14 +7591,6 @@ void Item_cache::print(String *str, enum_query_type query_type)
   else
     Item::print(str, query_type);
   str->append(')');
-}
-
-bool Item_cache::walk (Item_processor processor, bool walk_subquery,
-                     uchar *argument)
-{
-  if (example && example->walk(processor, walk_subquery, argument))
-    return 1;
-  return (this->*processor)(argument);
 }
 
 bool  Item_cache_int::cache_value()
@@ -8759,8 +7659,33 @@ bool  Item_cache_datetime::cache_value_int()
   // Mark cached string value obsolete
   str_value_cached= false;
 
-  DBUG_ASSERT(field_type() == example->field_type());
-  int_value= example->val_temporal_by_field_type();
+  MYSQL_TIME ltime;
+  const bool eval_error= 
+    (field_type() == MYSQL_TYPE_TIME) ?
+    example->get_time(&ltime) :
+    example->get_date(&ltime, TIME_FUZZY_DATE);
+
+  if (eval_error)
+    int_value= 0;
+  else
+  {
+    switch(field_type())
+    {
+    case MYSQL_TYPE_DATETIME:
+    case MYSQL_TYPE_TIMESTAMP:
+      int_value= TIME_to_ulonglong_datetime(&ltime);
+      break;
+    case MYSQL_TYPE_TIME:
+      int_value= TIME_to_ulonglong_time(&ltime);
+      break;
+    default:
+      int_value= TIME_to_ulonglong_date(&ltime);
+      break;
+    }
+    if (ltime.neg)
+      int_value= -int_value;
+  }
+
   null_value= example->null_value;
   unsigned_flag= example->unsigned_flag;
 
@@ -8785,6 +7710,33 @@ bool  Item_cache_datetime::cache_value()
     str_value.copy(*res);
   null_value= example->null_value;
   unsigned_flag= example->unsigned_flag;
+
+  if (!null_value)
+  {
+    switch(field_type())
+    {
+    case MYSQL_TYPE_DATETIME:
+    case MYSQL_TYPE_TIMESTAMP:
+      {
+        MYSQL_TIME ltime;
+        int was_cut;
+        const timestamp_type tt=
+          str_to_datetime(str_value.charset(),
+                          str_value.ptr(),
+                          str_value.length(),
+                          &ltime,
+                          TIME_DATETIME_ONLY,
+                          &was_cut);
+        if (tt != MYSQL_TIMESTAMP_DATETIME || was_cut)
+          null_value= true;
+        else
+          my_datetime_to_str(&ltime, const_cast<char*>(str_value.ptr()));
+      }
+    default:
+      {}
+    }
+  }
+
   return TRUE;
 }
 
@@ -8825,11 +7777,38 @@ String *Item_cache_datetime::val_str(String *str)
     if (value_cached)
     {
       MYSQL_TIME ltime;
-      TIME_from_longlong_packed(&ltime, cached_field_type, int_value);
-      if ((null_value= my_TIME_to_str(&ltime, &str_value,
-                                      MY_MIN(decimals, DATETIME_MAX_DECIMALS))))
+      /* Return NULL in case of OOM/conversion error. */
+      null_value= TRUE;
+      if (str_value.alloc(MAX_DATE_STRING_REP_LENGTH))
         return NULL;
+      if (cached_field_type == MYSQL_TYPE_TIME)
+      {
+        longlong time= int_value;
+        set_zero_time(&ltime, MYSQL_TIMESTAMP_TIME);
+        if (time < 0)
+        {
+          time= -time;
+          ltime.neg= TRUE;
+        }
+        DBUG_ASSERT(time <= TIME_MAX_VALUE);
+        ltime.second= time % 100;
+        time/= 100;
+        ltime.minute= time % 100;
+        time/= 100;
+        ltime.hour= time;
+      }
+      else
+      {
+        int was_cut;
+        longlong res;
+        res= number_to_datetime(int_value, &ltime, TIME_FUZZY_DATE, &was_cut);
+        if (res == -1)
+          return NULL;
+      }
+      str_value.length(my_TIME_to_str(&ltime,
+                                      const_cast<char*>(str_value.ptr())));
       str_value_cached= TRUE;
+      null_value= FALSE;
     }
     else if (!cache_value())
       return NULL;
@@ -8841,140 +7820,26 @@ String *Item_cache_datetime::val_str(String *str)
 my_decimal *Item_cache_datetime::val_decimal(my_decimal *decimal_val)
 {
   DBUG_ASSERT(fixed == 1);
-
-  if (str_value_cached)
-  {
-    switch (cached_field_type)
-    {
-    case MYSQL_TYPE_TIME:
-      return val_decimal_from_time(decimal_val);
-    case MYSQL_TYPE_DATETIME:
-    case MYSQL_TYPE_TIMESTAMP:
-    case MYSQL_TYPE_DATE:
-      return val_decimal_from_date(decimal_val);
-    default:
-      DBUG_ASSERT(0);
-      return NULL;
-    }
-  }
-
-  if ((!value_cached && !cache_value_int()) || null_value)
-    return 0;
-  return my_decimal_from_datetime_packed(decimal_val, field_type(), int_value);
+  if (!has_value())
+    return NULL;
+  int2my_decimal(E_DEC_FATAL_ERROR, int_value, unsigned_flag, decimal_val);
+  return decimal_val;
 }
-
-
-bool Item_cache_datetime::get_date(MYSQL_TIME *ltime, uint fuzzydate)
-{
-  if ((value_cached || str_value_cached) && null_value)
-    return true;
-
-  if (str_value_cached) // TS-TODO: reuse MYSQL_TIME_cache eventually.
-    return get_date_from_string(ltime, fuzzydate);
-
-  if ((!value_cached && !cache_value_int()) || null_value)
-    return (null_value= true);
-
-
-  switch (cached_field_type)
-  {
-  case MYSQL_TYPE_TIME:
-    {
-      MYSQL_TIME tm;
-      TIME_from_longlong_time_packed(&tm, int_value);
-      time_to_datetime(current_thd, &tm, ltime);
-      return false;
-    }
-  case MYSQL_TYPE_DATE:
-    {
-      int warnings= 0;
-      TIME_from_longlong_date_packed(ltime, int_value);
-      return check_date(ltime, non_zero_date(ltime), fuzzydate, &warnings);
-    }
-  case MYSQL_TYPE_DATETIME:
-  case MYSQL_TYPE_TIMESTAMP:
-    {
-      int warnings= 0;
-      TIME_from_longlong_datetime_packed(ltime, int_value);
-      return check_date(ltime, non_zero_date(ltime), fuzzydate, &warnings);
-    }
-  default:
-    DBUG_ASSERT(0);
-  }
-  return true;
-}
-
-
-bool Item_cache_datetime::get_time(MYSQL_TIME *ltime)
-{
-  if ((value_cached || str_value_cached) && null_value)
-    return true;
-
-  if (str_value_cached) // TS-TODO: reuse MYSQL_TIME_cache eventually.
-    return get_time_from_string(ltime);
-
-  if ((!value_cached && !cache_value_int()) || null_value)
-    return true;
-
-  switch (cached_field_type)
-  {
-  case MYSQL_TYPE_TIME:
-    TIME_from_longlong_time_packed(ltime, int_value);
-    return false;
-  case MYSQL_TYPE_DATE:
-    set_zero_time(ltime, MYSQL_TIMESTAMP_TIME);
-    return false;
-  case MYSQL_TYPE_DATETIME:
-  case MYSQL_TYPE_TIMESTAMP:
-    TIME_from_longlong_datetime_packed(ltime, int_value);
-    datetime_to_time(ltime);
-    return false;
-  default:
-    DBUG_ASSERT(0);
-  }
-  return true;
-}
-
 
 double Item_cache_datetime::val_real()
 {
-  return val_real_from_decimal();
-}
-
-longlong Item_cache_datetime::val_time_temporal()
-{
   DBUG_ASSERT(fixed == 1);
   if ((!value_cached && !cache_value_int()) || null_value)
-    return 0;
-  if (is_temporal_with_date())
-  {
-    /* Convert packed date to packed time */
-    MYSQL_TIME ltime;
-    return get_time_from_date(&ltime) ? 0 :
-           TIME_to_longlong_packed(&ltime, field_type());
-  }
-  return int_value;
-}
-
-longlong Item_cache_datetime::val_date_temporal()
-{
-  DBUG_ASSERT(fixed == 1);
-  if ((!value_cached && !cache_value_int()) || null_value)
-    return 0;
-  if (cached_field_type == MYSQL_TYPE_TIME)
-  {
-    /* Convert packed time to packed date */
-    MYSQL_TIME ltime;
-    return get_date_from_time(&ltime) ? 0 :
-           TIME_to_longlong_datetime_packed(&ltime);
-    
-  }
-  return int_value;
+    return 0.0;
+  return (double) int_value;
 }
 
 longlong Item_cache_datetime::val_int()
 {
-  return val_int_from_decimal();
+  DBUG_ASSERT(fixed == 1);
+  if ((!value_cached && !cache_value_int()) || null_value)
+    return 0;
+  return int_value;
 }
 
 bool Item_cache_real::cache_value()
@@ -9151,20 +8016,13 @@ my_decimal *Item_cache_str::val_decimal(my_decimal *decimal_val)
 }
 
 
-type_conversion_status
-Item_cache_str::save_in_field(Field *field, bool no_conversions)
+int Item_cache_str::save_in_field(Field *field, bool no_conversions)
 {
   if (!value_cached && !cache_value())
-    return TYPE_ERR_BAD_VALUE;               // Fatal: couldn't cache the value
-  if (null_value)
-    return set_field_to_null_with_conversions(field, no_conversions);
-  const type_conversion_status res= Item_cache::save_in_field(field,
-                                                              no_conversions);
-  if (is_varbinary && field->type() == MYSQL_TYPE_STRING && value != NULL &&
-      value->length() < field->field_length)
-    return TYPE_WARN_OUT_OF_RANGE;
-  return res;
-
+    return -1;                      // Fatal: couldn't cache the value
+  int res= Item_cache::save_in_field(field, no_conversions);
+  return (is_varbinary && field->type() == MYSQL_TYPE_STRING &&
+          value->length() < field->field_length) ? 1 : res;
 }
 
 
@@ -9394,7 +8252,7 @@ bool Item_type_holder::join_types(THD *thd, Item *item)
   DBUG_ENTER("Item_type_holder::join_types");
   DBUG_PRINT("info:", ("was type %d len %d, dec %d name %s",
                        fld_type, max_length, decimals,
-                       (item_name.is_set() ? item_name.ptr() : "<NULL>")));
+                       (name ? name : "<NULL>")));
   DBUG_PRINT("info:", ("in type %d len %d, dec %d",
                        get_real_type(item),
                        item->max_length, item->decimals));
@@ -9404,14 +8262,15 @@ bool Item_type_holder::join_types(THD *thd, Item *item)
     /* fix variable decimals which always is NOT_FIXED_DEC */
     if (Field::result_merge_type(fld_type) == INT_RESULT)
       item_decimals= 0;
-    decimals= max<int>(decimals, item_decimals);
+    decimals= max(decimals, item_decimals);
   }
   if (Field::result_merge_type(fld_type) == DECIMAL_RESULT)
   {
-    decimals= min<int>(max(decimals, item->decimals), DECIMAL_MAX_SCALE);
+    collation.set_numeric();
+    decimals= min(max(decimals, item->decimals), DECIMAL_MAX_SCALE);
     int item_int_part= item->decimal_int_part();
     int item_prec = max(prev_decimal_int_part, item_int_part) + decimals;
-    int precision= min<uint>(item_prec, DECIMAL_MAX_PRECISION);
+    int precision= min(item_prec, DECIMAL_MAX_PRECISION);
     unsigned_flag&= item->unsigned_flag;
     max_length= my_decimal_precision_to_length_no_truncation(precision,
                                                              decimals,
@@ -9575,7 +8434,7 @@ Field *Item_type_holder::make_field_by_type(TABLE *table)
   case MYSQL_TYPE_ENUM:
     DBUG_ASSERT(enum_set_typelib);
     field= new Field_enum((uchar *) 0, max_length, null_ptr, 0,
-                          Field::NONE, item_name.ptr(),
+                          Field::NONE, name,
                           get_enum_pack_length(enum_set_typelib->count),
                           enum_set_typelib, collation.collation);
     if (field)
@@ -9584,7 +8443,7 @@ Field *Item_type_holder::make_field_by_type(TABLE *table)
   case MYSQL_TYPE_SET:
     DBUG_ASSERT(enum_set_typelib);
     field= new Field_set((uchar *) 0, max_length, null_ptr, 0,
-                         Field::NONE, item_name.ptr(),
+                         Field::NONE, name,
                          get_set_pack_length(enum_set_typelib->count),
                          enum_set_typelib, collation.collation);
     if (field)
@@ -9688,3 +8547,15 @@ void view_error_processor(THD *thd, void *data)
 {
   ((TABLE_LIST *)data)->hide_view_error(thd);
 }
+
+/*****************************************************************************
+** Instantiate templates
+*****************************************************************************/
+
+#ifdef HAVE_EXPLICIT_TEMPLATE_INSTANTIATION
+template class List<Item>;
+template class List_iterator<Item>;
+template class List_iterator_fast<Item>;
+template class List_iterator_fast<Item_field>;
+template class List<List_item>;
+#endif

@@ -56,20 +56,28 @@ int az_open (azio_stream *s, const char *path, int Flags, File fd)
   int level = Z_DEFAULT_COMPRESSION; /* compression level */
   int strategy = Z_DEFAULT_STRATEGY; /* compression strategy */
 
-  memset(s, 0, sizeof(azio_stream));
+  s->stream.zalloc = (alloc_func)0;
+  s->stream.zfree = (free_func)0;
+  s->stream.opaque = (voidpf)0;
+  memset(s->inbuf, 0, AZ_BUFSIZE_READ);
+  memset(s->outbuf, 0, AZ_BUFSIZE_WRITE);
   s->stream.next_in = s->inbuf;
   s->stream.next_out = s->outbuf;
-  DBUG_ASSERT(s->z_err == Z_OK);
+  s->stream.avail_in = s->stream.avail_out = 0;
+  s->z_err = Z_OK;
+  s->z_eof = 0;
+  s->in = 0;
+  s->out = 0;
   s->back = EOF;
   s->crc = crc32(0L, Z_NULL, 0);
+  s->transparent = 0;
   s->mode = 'r';
-  /* this needs to be a define to version */
-  s->version = (unsigned char)az_magic[1];
+  s->version = (unsigned char)az_magic[1]; /* this needs to be a define to version */
   s->minor_version= (unsigned char) az_magic[2]; /* minor version */
-  DBUG_ASSERT(s->dirty == AZ_STATE_CLEAN);
+  s->dirty= AZ_STATE_CLEAN;
 
   /*
-    We do our own version of append by nature.
+    We do our own version of append by nature. 
     We must always have write access to take card of the header.
   */
   DBUG_ASSERT(Flags | O_APPEND);
@@ -126,8 +134,18 @@ int az_open (azio_stream *s, const char *path, int Flags, File fd)
     return Z_NULL;
   }
 
-  if (Flags & O_CREAT || Flags & O_TRUNC)
+  if (Flags & O_CREAT || Flags & O_TRUNC) 
   {
+    s->rows= 0;
+    s->forced_flushes= 0;
+    s->shortest_row= 0;
+    s->longest_row= 0;
+    s->auto_increment= 0;
+    s->check_point= 0;
+    s->comment_start_pos= 0;
+    s->comment_length= 0;
+    s->frm_start_pos= 0;
+    s->frm_length= 0;
     s->dirty= 1; /* We create the file dirty */
     s->start = AZHEADER_SIZE + AZMETA_BUFFER_SIZE;
     write_header(s);
@@ -154,9 +172,6 @@ int write_header(azio_stream *s)
 {
   char buffer[AZHEADER_SIZE + AZMETA_BUFFER_SIZE];
   char *ptr= buffer;
-
-  if (s->version == 1)
-    return 0;
 
   s->block_size= AZ_BUFSIZE_WRITE;
   s->version = (unsigned char)az_magic[1];
@@ -280,9 +295,9 @@ void check_header(azio_stream *s)
   /* Peek ahead to check the gzip magic header */
   if ( s->stream.next_in[0] == gz_magic[0]  && s->stream.next_in[1] == gz_magic[1])
   {
-    read_header(s, s->stream.next_in);
     s->stream.avail_in -= 2;
     s->stream.next_in += 2;
+    s->version= (unsigned char)2;
 
     /* Check the rest of the gzip header */
     method = get_byte(s);
@@ -311,8 +326,7 @@ void check_header(azio_stream *s)
       for (len = 0; len < 2; len++) (void)get_byte(s);
     }
     s->z_err = s->z_eof ? Z_DATA_ERROR : Z_OK;
-    if (!s->start)
-      s->start= my_tell(s->file, MYF(0)) - s->stream.avail_in;
+    s->start = my_tell(s->file, MYF(0)) - s->stream.avail_in;
   }
   else if ( s->stream.next_in[0] == az_magic[0]  && s->stream.next_in[1] == az_magic[1])
   {
@@ -356,11 +370,9 @@ void read_header(azio_stream *s, unsigned char *buffer)
   else if (buffer[0] == gz_magic[0]  && buffer[1] == gz_magic[1])
   {
     /*
-      Set version number to previous version (1).
+      Set version number to previous version (2).
     */
-    s->version= 1;
-    s->auto_increment= 0;
-    s->frm_length= 0;
+    s->version= (unsigned char) 2;
   } else {
     /*
       Unknown version.
@@ -544,7 +556,7 @@ unsigned int azwrite (azio_stream *s, const voidp buf, unsigned int len)
 
       s->stream.next_out = s->outbuf;
       if (mysql_file_write(s->file, (uchar *)s->outbuf, AZ_BUFSIZE_WRITE, 
-                   MYF(0)) != AZ_BUFSIZE_WRITE) 
+                           MYF(0)) != AZ_BUFSIZE_WRITE) 
       {
         s->z_err = Z_ERRNO;
         break;

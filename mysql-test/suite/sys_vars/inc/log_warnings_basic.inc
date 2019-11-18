@@ -1,7 +1,7 @@
 ############## mysql-test\t\log_warnings_basic.test ###############
 #                                                                             #
 # Variable Name: log_warnings                                                 #
-# Scope: GLOBAL                                                     #
+# Scope: GLOBAL | SESSION                                                     #
 # Access Type: Dynamic                                                        #
 # Data Type: numeric                                                          #
 # Default Value: 1                                                            #
@@ -36,6 +36,8 @@
 
 SET @start_global_value = @@global.log_warnings;
 SELECT @start_global_value;
+SET @start_session_value = @@session.log_warnings;
+SELECT @start_session_value;
 
 
 --echo '#--------------------FN_DYNVARS_067_01-------------------------#'
@@ -47,6 +49,10 @@ SET @@global.log_warnings = 100;
 SET @@global.log_warnings = DEFAULT;
 SELECT @@global.log_warnings;
 
+SET @@session.log_warnings = 200;
+SET @@session.log_warnings = DEFAULT;
+SELECT @@session.log_warnings;
+
 
 --echo '#--------------------FN_DYNVARS_067_02-------------------------#'
 ########################################################################
@@ -55,6 +61,9 @@ SELECT @@global.log_warnings;
 
 SET @@global.log_warnings = DEFAULT;
 SELECT @@global.log_warnings = 1;
+
+SET @@session.log_warnings = DEFAULT;
+SELECT @@session.log_warnings = 1;
 
 
 --echo '#--------------------FN_DYNVARS_067_03-------------------------#'
@@ -74,7 +83,24 @@ SET @@global.log_warnings = 65536;
 SELECT @@global.log_warnings;
 
 
---echo '#------------------FN_DYNVARS_067_04-----------------------#'
+--echo '#--------------------FN_DYNVARS_067_04-------------------------#'
+#######################################################################
+# Change the value of log_warnings to a valid value for SESSION Scope #
+#######################################################################
+ 
+SET @@session.log_warnings = 0;
+SELECT @@session.log_warnings;
+SET @@session.log_warnings = 1;
+SELECT @@session.log_warnings;
+SET @@session.log_warnings = 50050;
+SELECT @@session.log_warnings;
+SET @@session.log_warnings = 65535;
+SELECT @@session.log_warnings;
+SET @@session.log_warnings = 65550;
+SELECT @@session.log_warnings;
+
+
+--echo '#------------------FN_DYNVARS_067_05-----------------------#'
 ########################################################
 # Change the value of log_warnings to an invalid value #
 ########################################################
@@ -90,18 +116,39 @@ SELECT @@global.log_warnings;
 SET @@global.log_warnings = test;
 SELECT @@global.log_warnings;
 
+SET @@session.log_warnings = 100000000000;
+SELECT @@session.log_warnings;
+SET @@session.log_warnings = -2;
+SELECT @@session.log_warnings;
+--Error ER_WRONG_TYPE_FOR_VAR
+SET @@session.log_warnings = 65530.34;
 
---echo '#------------------FN_DYNVARS_067_05-----------------------#'
+--Error ER_WRONG_TYPE_FOR_VAR
+SET @@session.log_warnings = test;
+SELECT @@session.log_warnings;
+
+
+--echo '#------------------FN_DYNVARS_067_06-----------------------#'
 ####################################################################
 #   Check if the value in GLOBAL Table matches value in variable   #
 ####################################################################
+
 
 SELECT @@global.log_warnings = VARIABLE_VALUE 
 FROM INFORMATION_SCHEMA.GLOBAL_VARIABLES 
 WHERE VARIABLE_NAME='log_warnings';
 
+--echo '#------------------FN_DYNVARS_067_07-----------------------#'
+####################################################################
+#  Check if the value in SESSION Table matches value in variable   #
+####################################################################
 
---echo '#------------------FN_DYNVARS_067_06-----------------------#'
+SELECT @@session.log_warnings = VARIABLE_VALUE 
+FROM INFORMATION_SCHEMA.SESSION_VARIABLES 
+WHERE VARIABLE_NAME='log_warnings';
+
+
+--echo '#------------------FN_DYNVARS_067_08-----------------------#'
 ####################################################################
 #     Check if TRUE and FALSE values can be used on variable       #
 ####################################################################
@@ -112,7 +159,7 @@ SET @@global.log_warnings = FALSE;
 SELECT @@global.log_warnings;
 
 
---echo '#---------------------FN_DYNVARS_067_07----------------------#'
+--echo '#---------------------FN_DYNVARS_067_09----------------------#'
 #################################################################################
 #  Check if accessing variable with and without GLOBAL point to same variable   #
 #################################################################################
@@ -121,12 +168,39 @@ SET @@global.log_warnings = 10;
 SELECT @@log_warnings = @@global.log_warnings;
 
 
+--echo '#---------------------FN_DYNVARS_067_10----------------------#'
+########################################################################################################
+#    Check if accessing variable with SESSION,LOCAL and without SCOPE points to same session variable  #
+########################################################################################################
+
+SET @@log_warnings = 100;
+SELECT @@log_warnings = @@local.log_warnings;
+SELECT @@local.log_warnings = @@session.log_warnings;
+
+
+--echo '#---------------------FN_DYNVARS_067_11----------------------#'
+#######################################################################
+#   Check if log_warnings can be accessed with and without @@ sign    #
+#######################################################################
+
+SET log_warnings = 1;
+SELECT @@log_warnings;
+--Error ER_UNKNOWN_TABLE
+SELECT local.log_warnings;
+--Error ER_UNKNOWN_TABLE
+SELECT session.log_warnings;
+--Error ER_BAD_FIELD_ERROR
+SELECT log_warnings = @@session.log_warnings;
+
+
 ####################################
 #     Restore initial value        #
 ####################################
 
 SET @@global.log_warnings = @start_global_value;
 SELECT @@global.log_warnings;
+SET @@session.log_warnings = @start_session_value;
+SELECT @@session.log_warnings;
 
 
 #############################################################

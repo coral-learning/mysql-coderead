@@ -1,4 +1,4 @@
-/* Copyright (c) 2004, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2004, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 /* get time since epoc in 100 nanosec units */
 /* thus to get the current time we should use the system function
@@ -83,8 +83,6 @@ time_t my_time(myf flags)
 }
 
 
-#define OFFSET_TO_EPOCH 116444736000000000ULL
-
 /**
   Return time in microseconds.
 
@@ -101,7 +99,6 @@ ulonglong my_micro_time()
 #ifdef _WIN32
   ulonglong newtime;
   GetSystemTimeAsFileTime((FILETIME*)&newtime);
-  newtime-= OFFSET_TO_EPOCH;
   return (newtime/10);
 #else
   ulonglong newtime;
@@ -135,6 +132,7 @@ ulonglong my_micro_time()
 */
 
 /* Difference between GetSystemTimeAsFileTime() and now() */
+#define OFFSET_TO_EPOCH 116444736000000000ULL
 
 ulonglong my_micro_time_and_time(time_t *time_arg)
 {
@@ -170,7 +168,7 @@ ulonglong my_micro_time_and_time(time_t *time_arg)
   @retval current time.
 */
 
-time_t my_time_possible_from_micro(ulonglong microtime MY_ATTRIBUTE((unused)))
+time_t my_time_possible_from_micro(ulonglong microtime __attribute__((unused)))
 {
 #ifdef _WIN32
   time_t t;

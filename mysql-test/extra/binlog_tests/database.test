@@ -31,7 +31,7 @@ source include/show_binlog_events.inc;
 
 FLUSH STATUS;
 
---echo 
+--echo
 --echo # 'DROP TABLE IF EXISTS <deleted tables>' is binlogged
 --echo # when 'DROP DATABASE' fails and at least one table is deleted
 --echo # from the database.

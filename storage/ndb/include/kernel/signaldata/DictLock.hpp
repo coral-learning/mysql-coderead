@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2006-2008 MySQL AB, 2008 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef DICT_LOCK_HPP
 #define DICT_LOCK_HPP
@@ -26,21 +24,11 @@
 class DictLockReq {
   friend class Dbdict;
   friend class Dbdih;
-  friend class Suma;
 public:
   STATIC_CONST( SignalLength = 3 );
   enum LockType {
-    NoLock = 0
-    ,NodeRestartLock = 1 // S-lock
-    ,NodeFailureLock = 2 // S-lock
-    ,SchemaTransLock = 3
-    // non-trans op locks
-    ,CreateFileLock  = 8
-    ,CreateFilegroupLock = 9
-    ,DropFileLock    = 10
-    ,DropFilegroupLock = 11
-    ,SumaStartMe = 12
-    ,SumaHandOver = 13
+    NoLock = 0,
+    NodeRestartLock = 1
   };
 private:
   Uint32 userPtr;
@@ -51,7 +39,6 @@ private:
 class DictLockConf {
   friend class Dbdict;
   friend class Dbdih;
-  friend class Suma;
 public:
   STATIC_CONST( SignalLength = 3 );
 private:
@@ -63,7 +50,6 @@ private:
 class DictLockRef {
   friend class Dbdict;
   friend class Dbdih;
-  friend class Suma;
 public:
   STATIC_CONST( SignalLength = 3 );
   enum ErrorCode {
@@ -82,14 +68,11 @@ private:
 class DictUnlockOrd {
   friend class Dbdict;
   friend class Dbdih;
-  friend class Suma;
 public:
-  STATIC_CONST( SignalLength = 4 );
-
+  STATIC_CONST( SignalLength = 2 );
+private:
   Uint32 lockPtr;
   Uint32 lockType;
-  Uint32 senderData;
-  Uint32 senderRef;
 };
 
 #endif

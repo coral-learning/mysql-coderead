@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003-2006, 2008 MySQL AB, 2009 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef InitConfigFileParser_H
 #define InitConfigFileParser_H
@@ -36,11 +34,12 @@ class ConfigInfo;
  * object if the config file has correct syntax and semantic. 
  */
 class InitConfigFileParser {
+  FILE * m_errstream;
 public:
   /**
    *   Constructor
    */
-  InitConfigFileParser();
+  InitConfigFileParser(FILE * errstream = stdout);
   ~InitConfigFileParser();
 
   /**
@@ -63,7 +62,7 @@ public:
    *   Context = Which section in init config file we are currently parsing
    */
   struct Context {
-    Context(const ConfigInfo *);
+    Context(const ConfigInfo *, FILE * out);
     ~Context();
 
     ContextSectionType  type; ///< Section type (e.g. default section,section)
@@ -85,10 +84,9 @@ public:
     ConfigValuesFactory m_configValues;  //
 
   public:
-    void reportError(const char * msg, ...)
-      ATTRIBUTE_FORMAT(printf, 2, 3);
-    void reportWarning(const char * msg, ...)
-      ATTRIBUTE_FORMAT(printf, 2, 3);
+    FILE * m_errstream;
+    void reportError(const char * msg, ...);
+    void reportWarning(const char * msg, ...);
   };
 
   static bool convertStringToUint64(const char* s, Uint64& val, Uint32 log10base = 0);

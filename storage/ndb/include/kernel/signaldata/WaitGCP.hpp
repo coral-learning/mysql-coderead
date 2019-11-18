@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003, 2005, 2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef WAIT_GCP_HPP
 #define WAIT_GCP_HPP
@@ -38,7 +37,7 @@ class WaitGCPReq {
   friend class Ndbcntr;
   friend class Dbdict;
   friend class Backup;
-  friend class Trix;
+  //friend class Grep::PSCoord;
 
 public:
   STATIC_CONST( SignalLength = 3 );
@@ -49,9 +48,7 @@ public:
     CompleteIfRunning = 3,  ///< Wait for ongoing GCP
     CurrentGCI        = 8,  ///< Immediately return current GCI
     BlockStartGcp     = 9,
-    UnblockStartGcp   = 10,
-    WaitEpoch         = 11, // If GCP is blocked, wait for epoch to not start
-    RestartGCI        = 12  // Return restart GCI
+    UnblockStartGcp   = 10
   };
 
   Uint32 senderRef;
@@ -72,16 +69,15 @@ class WaitGCPConf {
   friend class Ndbcntr;
   friend class Dbdict;
   friend class Backup;
-  friend class Trix;
+  //friend class Grep::PSCoord;
 
 public:
-  STATIC_CONST( SignalLength = 4 );
+  STATIC_CONST( SignalLength = 3 );
   
 public:
   Uint32 senderData;
-  Uint32 gci_hi;
+  Uint32 gcp;
   Uint32 blockStatus;
-  Uint32 gci_lo;
 };
 
 class WaitGCPRef {
@@ -97,8 +93,7 @@ class WaitGCPRef {
   friend class Ndbcntr;
   friend class Dbdict;
   friend class Backup;
-  friend class Trix;
-  friend class NdbDictInterface;
+  friend class Grep;
 
 public:
   STATIC_CONST( SignalLength = 2 );
@@ -106,8 +101,7 @@ public:
   enum ErrorCode {
     StopOK = 0,
     NF_CausedAbortOfProcedure = 1,
-    NoWaitGCPRecords = 2,
-    NF_MasterTakeOverInProgress = 3
+    NoWaitGCPRecords = 2
   };
   
 private:

@@ -1252,7 +1252,8 @@ void SSL_CTX_set_default_passwd_cb_userdata(SSL_CTX* ctx, void* userdata)
 
 X509* SSL_get_certificate(SSL* ssl)
 {
-    return ssl->getCrypto().get_certManager().get_selfX509();
+    // only used to pass to get_privatekey which isn't used
+    return 0;
 }
 
 
@@ -1382,10 +1383,10 @@ int X509_NAME_get_index_by_NID(X509_NAME* name,int nid, int lastpos)
 
     switch (nid) {
     case NID_commonName:
-         cnPos = name->GetCnPosition();
-         if (lastpos < cnPos)
-           idx = cnPos;
-         break;
+        cnPos = name->GetCnPosition();
+        if (lastpos < cnPos)
+            idx = cnPos;
+        break;
     }
 
     return idx;
@@ -1742,39 +1743,6 @@ unsigned long ERR_get_error()
 
     // end stunnel needs
 
-    char *yaSSL_ASN1_TIME_to_string(ASN1_TIME *time, char *buf, size_t len)
-    {
-      tm t;
-      static const char *month_names[12]=
-      {
-        "Jan","Feb","Mar","Apr","May","Jun",
-        "Jul","Aug","Sep","Oct","Nov","Dec"
-      };
-
-      TaoCrypt::ASN1_TIME_extract(time->data, time->type, &t);
-      snprintf(buf, len, "%s %2d %02d:%02d:%02d %d GMT",
-               month_names[t.tm_mon], t.tm_mday, t.tm_hour, t.tm_min, 
-               t.tm_sec, t.tm_year + 1900);
-      return buf;
-    }
-
-
-    void yaSSL_transport_set_ptr(SSL *ssl, void *ptr)
-    {
-      ssl->useSocket().set_transport_ptr(ptr);
-    }
-
-
-    void yaSSL_transport_set_recv_function(SSL *ssl, yaSSL_recv_func_t func)
-    {
-      ssl->useSocket().set_transport_recv_function(func);
-    }
-
-
-    void yaSSL_transport_set_send_function(SSL *ssl, yaSSL_send_func_t func)
-    {
-      ssl->useSocket().set_transport_send_function(func);
-    }
 
 } // extern "C"
 } // namespace

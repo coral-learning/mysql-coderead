@@ -20,6 +20,8 @@
 *.gcov
 *.idb
 *.ilk
+.idea
+.git
 *.la
 *.lai
 *.lib

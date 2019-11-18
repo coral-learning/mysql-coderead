@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2005, 2006, 2008 MySQL AB
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2005, 2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef DROP_FILEGROUP_IMPL_HPP
 #define DROP_FILEGROUP_IMPL_HPP
@@ -34,7 +32,7 @@ struct DropFilegroupImplReq {
    */
   friend bool printDROP_FILEGROUP_IMPL_REQ(FILE*, const Uint32*, Uint32, Uint16);
   
-  STATIC_CONST( SignalLength = 6 );
+  STATIC_CONST( SignalLength = 5 );
   
   enum RequestInfo {
     Prepare = 0x1,
@@ -48,7 +46,6 @@ struct DropFilegroupImplReq {
   Uint32 requestInfo;
   Uint32 filegroup_id;
   Uint32 filegroup_version;
-  Uint32 requestType;
 };
 
 struct DropFilegroupImplRef {
@@ -110,7 +107,7 @@ struct DropFileImplReq {
    */
   friend bool printDROP_FILE_IMPL_REQ(FILE*, const Uint32*, Uint32, Uint16);
   
-  STATIC_CONST( SignalLength = 8 );
+  STATIC_CONST( SignalLength = 6 );
   
   enum RequestInfo {
     Prepare = 0x1,
@@ -123,10 +120,8 @@ struct DropFileImplReq {
   
   Uint32 requestInfo;
   Uint32 file_id;
-  Uint32 file_version;
   Uint32 filegroup_id;
   Uint32 filegroup_version;
-  Uint32 requestType;
 };
 
 struct DropFileImplRef {

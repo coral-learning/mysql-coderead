@@ -10,8 +10,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 
 /**
@@ -36,17 +36,12 @@
 #include "sql_show.h"                     // schema_table_store_record
 #include "sql_class.h"                    // THD
 
-#include <algorithm>
-
-using std::min;
-using std::max;
-
 #define TIME_FLOAT_DIGITS 9
 /** two vals encoded: (dec*100)+len */
 #define TIME_I_S_DECIMAL_SIZE (TIME_FLOAT_DIGITS*100)+(TIME_FLOAT_DIGITS-3)
 
-#define MAX_QUERY_LENGTH 300U
-#define MAX_QUERY_HISTORY 101U
+#define MAX_QUERY_LENGTH 300
+#define MAX_QUERY_HISTORY 101
 
 /**
   Connects Information_Schema and Profiling.
@@ -125,7 +120,9 @@ int make_profile_table_for_show(THD *thd, ST_SCHEMA_TABLE *schema_table)
                                       NullS, NullS, field_info->field_name);
     if (field)
     {
-      field->item_name.copy(field_info->old_name);
+      field->set_name(field_info->old_name,
+                      (uint) strlen(field_info->old_name),
+                      system_charset_info);
       if (add_item_to_list(thd, field))
         return 1;
     }

@@ -1,4 +1,5 @@
-/* Copyright (c) 2000, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000-2007 MySQL AB, 2009 Sun Microsystems, Inc.
+   Use is subject to license terms.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -56,12 +57,10 @@ int mi_rnext_same(MI_INFO *info, uchar *buf)
 #endif
     case HA_KEY_ALG_BTREE:
     default:
-
-      if (info->set_rnext_same_key)
+      if (!(info->update & HA_STATE_RNEXT_SAME))
       {
-        /* First rnext_same and lastkey is filled in mi_rkey */
-        memcpy(info->rnext_same_key, info->lastkey, info->last_rkey_length);
-        info->set_rnext_same_key= FALSE;
+        /* First rnext_same; Store old key */
+        memcpy(info->lastkey2,info->lastkey,info->last_rkey_length);
       }
       for (;;)
       {
@@ -69,7 +68,7 @@ int mi_rnext_same(MI_INFO *info, uchar *buf)
 			       info->lastkey_length,SEARCH_BIGGER,
 			       info->s->state.key_root[inx])))
           break;
-        if (ha_key_cmp(keyinfo->seg, info->lastkey, info->rnext_same_key,
+        if (ha_key_cmp(keyinfo->seg, info->lastkey, info->lastkey2,
                        info->last_rkey_length, SEARCH_FIND, not_used))
         {
           error=1;
@@ -78,8 +77,7 @@ int mi_rnext_same(MI_INFO *info, uchar *buf)
           break;
         }
         /* Skip rows that are inserted by other threads since we got a lock */
-        if (info->lastpos < info->state->data_file_length && 
-            (!info->index_cond_func || mi_check_index_cond(info, inx, buf)))
+        if (info->lastpos < info->state->data_file_length)
           break;
       }
   }
@@ -87,7 +85,7 @@ int mi_rnext_same(MI_INFO *info, uchar *buf)
     mysql_rwlock_unlock(&info->s->key_root_lock[inx]);
 	/* Don't clear if database-changed */
   info->update&= (HA_STATE_CHANGED | HA_STATE_ROW_CHANGED);
-  info->update|= HA_STATE_NEXT_FOUND;
+  info->update|= HA_STATE_NEXT_FOUND | HA_STATE_RNEXT_SAME;
 
   if (error)
   {

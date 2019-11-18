@@ -8,7 +8,6 @@
 # ==== Usage ====
 #
 # [--let $rpl_only_running_threads= 1]
-# [--let $use_gtids= 1]
 # [--let $rpl_debug= 1]
 # [--let $slave_timeout= NUMBER]
 # --source include/rpl_sync.inc
@@ -23,9 +22,6 @@
 #      - If only IO thread is running, sync IO thread with master.
 #      - If only SQL thread is running, sync SQL thread with IO thread.
 #      - If no thread is running, don't sync.
-#
-#   $use_gtids
-#     If set, uses GTIDs instead of filename and offset for positions.
 #
 #   $slave_timeout
 #     Set the timeout when waiting for threads to sync. See
@@ -92,22 +88,30 @@ while ($_rpl_i) {
       {
         --echo Sync IO: $_rpl_slave_io_running; Sync SQL: $_rpl_slave_sql_running
       }
-      if ($_rpl_slave_io_running != No)
+      --let $_rpl_slave_io_running= `SELECT IF('$_rpl_slave_io_running' != 'No', 1, '')`
+      --let $_rpl_slave_sql_running= `SELECT IF('$_rpl_slave_sql_running' = 'Yes', 1, '')`
+      if ($_rpl_slave_io_running)
       {
         --connection server_$_rpl_prev_server
-        --let $sync_slave_connection= server_$_rpl_server
-        if ($_rpl_slave_sql_running != No)
+        if ($_rpl_slave_sql_running)
         {
-          --source include/sync_slave_sql_with_master.inc
+          if ($rpl_debug)
+          {
+            --let $_rpl_master_file= query_get_value("SHOW MASTER STATUS", File, 1)
+            --let $_rpl_master_pos= query_get_value("SHOW MASTER STATUS", Position, 1)
+            --echo syncing master_file='$_rpl_master_file' master_pos='$_rpl_master_pos'
+          }
+          --sync_slave_with_master server_$_rpl_server
         }
-        if ($_rpl_slave_sql_running == No)
+        if (!$_rpl_slave_sql_running)
         {
+          --let $sync_slave_connection= server_$_rpl_server
           --source include/sync_slave_io_with_master.inc
         }
       }
-      if ($_rpl_slave_io_running == No)
+      if (!$_rpl_slave_io_running)
       {
-        if ($_rpl_slave_sql_running != No)
+        if ($_rpl_slave_sql_running)
         {
           --source include/sync_slave_sql_with_io.inc
         }
@@ -116,10 +120,13 @@ while ($_rpl_i) {
     if (!$rpl_only_running_threads)
     {
       --connection server_$_rpl_prev_server
-      --let $saved_value= $sync_slave_connection
-      --let $sync_slave_connection= server_$_rpl_server
-      --source include/sync_slave_sql_with_master.inc
-      --let $sync_slave_connection= $saved_value
+      if ($rpl_debug)
+      {
+        --let $_rpl_master_file= query_get_value("SHOW MASTER STATUS", File, 1)
+        --let $_rpl_master_pos= query_get_value("SHOW MASTER STATUS", Position, 1)
+        --echo syncing master_file='$_rpl_master_file' master_pos='$_rpl_master_pos'
+      }
+      --sync_slave_with_master server_$_rpl_server
     }
   }
 

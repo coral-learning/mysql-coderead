@@ -1,4 +1,5 @@
-/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2001, 2003, 2006, 2008 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 /*
 ** Ask for a password from tty
@@ -22,7 +23,6 @@
 #include "mysql.h"
 #include <m_string.h>
 #include <m_ctype.h>
-#include <mysql/get_password.h>
 
 #if defined(HAVE_BROKEN_GETPASS) && !defined(HAVE_GETPASSPHRASE)
 #undef HAVE_GETPASS
@@ -64,13 +64,12 @@
 /* were just going to fake it here and get input from
    the keyboard */
 
-char *get_tty_password_ext(const char *opt_message,
-                           strdup_handler_t strdup_function)
+char *get_tty_password(const char *opt_message)
 {
   char to[80];
   char *pos=to,*end=to+sizeof(to)-1;
   int i=0;
-  DBUG_ENTER("get_tty_password_ext");
+  DBUG_ENTER("get_tty_password");
   _cputs(opt_message ? opt_message : "Enter password: ");
   for (;;)
   {
@@ -96,7 +95,7 @@ char *get_tty_password_ext(const char *opt_message,
     pos--;					/* Allow dummy space at end */
   *pos=0;
   _cputs("\n");
-  DBUG_RETURN(strdup_function(to,MYF(MY_FAE)));
+  DBUG_RETURN(my_strdup(to,MYF(MY_FAE)));
 }
 
 #else
@@ -151,8 +150,7 @@ static void get_password(char *to,uint length,int fd, my_bool echo)
 #endif /* ! HAVE_GETPASS */
 
 
-char *get_tty_password_ext(const char *opt_message,
-                           strdup_handler_t strdup_function)
+char *get_tty_password(const char *opt_message)
 {
 #ifdef HAVE_GETPASS
   char *passbuff;
@@ -161,7 +159,7 @@ char *get_tty_password_ext(const char *opt_message,
 #endif /* HAVE_GETPASS */
   char buff[80];
 
-  DBUG_ENTER("get_tty_password_ext");
+  DBUG_ENTER("get_tty_password");
 
 #ifdef HAVE_GETPASS
   passbuff = getpass(opt_message ? opt_message : "Enter password: ");
@@ -208,12 +206,7 @@ char *get_tty_password_ext(const char *opt_message,
     fputc('\n',stderr);
 #endif /* HAVE_GETPASS */
 
-  DBUG_RETURN(strdup_function(buff,MYF(MY_FAE)));
+  DBUG_RETURN(my_strdup(buff,MYF(MY_FAE)));
 }
 
 #endif /*__WIN__*/
-
-char *get_tty_password(const char *opt_message)
-{
-  return get_tty_password_ext(opt_message, my_strdup);
-}

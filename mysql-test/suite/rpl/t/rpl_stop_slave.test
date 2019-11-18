@@ -1,12 +1,8 @@
-#Want to skip this test from daily Valgrind execution
---source include/no_valgrind_without_big.inc
-
 source include/master-slave.inc;
 source include/have_innodb.inc;
 source include/have_debug.inc;
 source include/have_debug_sync.inc;
 source include/have_binlog_format_mixed_or_statement.inc;
-source include/not_gtid_enabled.inc;
 
 --echo
 --echo # BUG#56118 STOP SLAVE does not wait till trx with CREATE TMP TABLE ends
@@ -18,7 +14,7 @@ source include/not_gtid_enabled.inc;
 CREATE TABLE t1(c1 INT) ENGINE=InnoDB;
 CREATE TABLE t2(c1 INT) ENGINE=InnoDB;
 
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 SET DEBUG_SYNC= 'RESET';
 source include/stop_slave.inc;
 
@@ -53,7 +49,6 @@ source include/restart_slave_sql.inc;
 
 connection slave;
 call mtr.add_suppression("Slave SQL.*Request to stop slave SQL Thread received while applying a group that has non-transactional changes; waiting for completion of the group");
-call mtr.add_suppression("The slave coordinator and worker threads are stopped, possibly leaving data in inconsistent state");
 connection master;
 
 --source include/rpl_connection_master.inc
@@ -76,7 +71,7 @@ CREATE TABLE t1 (c1 INT KEY, c2 INT) ENGINE=InnoDB;
 CREATE TABLE t2 (c1 INT) ENGINE=MyISAM;
 INSERT INTO t1 VALUES(1, 1);
 
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 --source include/stop_slave.inc
 
 --source include/rpl_connection_master.inc

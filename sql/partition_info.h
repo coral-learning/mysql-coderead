@@ -14,14 +14,15 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA */
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface			/* gcc class implementation */
+#endif
 
 #include "partition_element.h"
-#include "sql_class.h"                        // enum_duplicates
 
 class partition_info;
-class COPY_INFO;
-struct TABLE_LIST;
 
 /* Some function typedefs */
 typedef int (*get_part_id_func)(partition_info *part_info,
@@ -43,7 +44,7 @@ public:
 
   List<char> part_field_list;
   List<char> subpart_field_list;
-
+  
   /* 
     If there is no subpartitioning, use only this func to get partition ids.
     If there is subpartitioning, use the this func to get partition id when
@@ -110,30 +111,14 @@ public:
   struct st_ddl_log_memory_entry *frm_log_entry;
 
   /* 
-    Bitmaps of partitions used by the current query. 
-    * read_partitions  - partitions to be used for reading.
-    * lock_partitions  - partitions that must be locked (read or write).
-    Usually read_partitions is the same set as lock_partitions, but
-    in case of UPDATE the WHERE clause can limit the read_partitions set,
-    but not neccesarily the lock_partitions set.
+    A bitmap of partitions used by the current query. 
     Usage pattern:
-    * Initialized in ha_partition::open().
-    * read+lock_partitions is set  according to explicit PARTITION,
-      WL#5217, in open_and_lock_tables().
-    * Bits in read_partitions can be cleared in prune_partitions()
-      in the optimizing step.
-      (WL#4443 is about allowing prune_partitions() to affect lock_partitions
-      and be done before locking too).
-    * When the partition enabled handler get an external_lock call it locks
-      all partitions in lock_partitions (and remembers which partitions it
-      locked, so that it can unlock them later). In case of LOCK TABLES it will
-      lock all partitions, and keep them locked while lock_partitions can
-      change for each statement under LOCK TABLES.
-    * Freed at the same time item_free_list is freed.
+    * The handler->extra(HA_EXTRA_RESET) call at query start/end sets all
+      partitions to be unused.
+    * Before index/rnd_init(), partition pruning code sets the bits for used
+      partitions.
   */
-  MY_BITMAP read_partitions;
-  MY_BITMAP lock_partitions;
-  bool bitmaps_are_initialized;
+  MY_BITMAP used_partitions;
 
   union {
     longlong *range_int_array;
@@ -166,13 +151,12 @@ public:
   char *part_func_string;
   char *subpart_func_string;
 
-  partition_element *curr_part_elem;     // part or sub part
-  partition_element *current_partition;  // partition
+  partition_element *curr_part_elem;
+  partition_element *current_partition;
   part_elem_value *curr_list_val;
   uint curr_list_object;
   uint num_columns;
 
-  TABLE *table;
   /*
     These key_map's are used for Partitioning to enable quick decisions
     on whether we can derive more information about which partition to
@@ -191,7 +175,9 @@ public:
 
   uint num_parts;
   uint num_subparts;
-  uint count_curr_subparts;                  // used during parsing
+  uint count_curr_subparts;
+
+  uint part_error_code;
 
   uint num_list_values;
 
@@ -220,30 +206,20 @@ public:
     };
   enum_key_algorithm key_algorithm;
 
-  /* Only the number of partitions defined (uses default names and options). */
   bool use_default_partitions;
   bool use_default_num_partitions;
-  /* Only the number of subpartitions defined (uses default names etc.). */
   bool use_default_subpartitions;
   bool use_default_num_subpartitions;
   bool default_partitions_setup;
   bool defined_max_value;
-  bool list_of_part_fields;                  // KEY or COLUMNS PARTITIONING
-  bool list_of_subpart_fields;               // KEY SUBPARTITIONING
-  bool linear_hash_ind;                      // LINEAR HASH/KEY
+  bool list_of_part_fields;
+  bool list_of_subpart_fields;
+  bool linear_hash_ind;
   bool fixed;
   bool is_auto_partitioned;
+  bool from_openfrm;
   bool has_null_value;
-  bool column_list;                          // COLUMNS PARTITIONING, 5.5+
-  /**
-    True if pruning has been completed and can not be pruned any further,
-    even if there are subqueries or stored programs in the condition.
-
-    Some times it is needed to run prune_partitions() a second time to prune
-    read partitions after tables are locked, when subquery and
-    stored functions might have been evaluated.
-  */
-  bool is_pruning_completed;
+  bool column_list;
 
   partition_info()
   : get_partition_id(NULL), get_part_partition_id(NULL),
@@ -256,18 +232,17 @@ public:
     restore_part_field_ptrs(NULL), restore_subpart_field_ptrs(NULL),
     part_expr(NULL), subpart_expr(NULL), item_free_list(NULL),
     first_log_entry(NULL), exec_log_entry(NULL), frm_log_entry(NULL),
-    bitmaps_are_initialized(FALSE),
     list_array(NULL), err_value(0),
     part_info_string(NULL),
     part_func_string(NULL), subpart_func_string(NULL),
     curr_part_elem(NULL), current_partition(NULL),
-    curr_list_object(0), num_columns(0), table(NULL),
+    curr_list_object(0), num_columns(0),
     default_engine_type(NULL),
     part_type(NOT_A_PARTITION), subpart_type(NOT_A_PARTITION),
     part_info_len(0),
     part_func_len(0), subpart_func_len(0),
     num_parts(0), num_subparts(0),
-    count_curr_subparts(0),
+    count_curr_subparts(0), part_error_code(0),
     num_list_values(0), num_part_fields(0), num_subpart_fields(0),
     num_full_part_fields(0), has_null_part_id(0), linear_hash_mask(0),
     key_algorithm(KEY_ALGORITHM_NONE),
@@ -276,9 +251,13 @@ public:
     default_partitions_setup(FALSE), defined_max_value(FALSE),
     list_of_part_fields(FALSE), list_of_subpart_fields(FALSE),
     linear_hash_ind(FALSE), fixed(FALSE),
-    is_auto_partitioned(FALSE),
-    has_null_value(FALSE), column_list(FALSE), is_pruning_completed(false)
+    is_auto_partitioned(FALSE), from_openfrm(FALSE),
+    has_null_value(FALSE), column_list(FALSE)
   {
+    all_fields_in_PF.clear_all();
+    all_fields_in_PPF.clear_all();
+    all_fields_in_SPF.clear_all();
+    some_fields_in_PF.clear_all();
     partitions.empty();
     temp_partitions.empty();
     part_field_list.empty();
@@ -287,9 +266,6 @@ public:
   ~partition_info() {}
 
   partition_info *get_clone(bool reset = false);
-  partition_info *get_full_clone();
-  bool set_named_partition_bitmap(const char *part_name, uint length);
-  bool set_partition_bitmaps(TABLE_LIST *table_list);
   /* Answers the question if subpartitioning is used for a certain table */
   bool is_sub_partitioned()
   {
@@ -304,8 +280,8 @@ public:
 
   bool set_up_defaults_for_partitioning(handler *file, HA_CREATE_INFO *info,
                                         uint start_no);
-  char *find_duplicate_field();
-  char *find_duplicate_name();
+  char *has_unique_fields();
+  char *has_unique_names();
   bool check_engine_mix(handlerton *engine_type, bool default_engine);
   bool check_range_constants(THD *thd);
   bool check_list_constants(THD *thd);
@@ -315,17 +291,17 @@ public:
   void print_no_partition_found(TABLE *table);
   void print_debug(const char *str, uint*);
   Item* get_column_item(Item *item, Field *field);
-  bool fix_partition_values(THD *thd,
-                            part_elem_value *val,
-                            partition_element *part_elem,
-                            uint part_id);
+  int fix_partition_values(THD *thd,
+                           part_elem_value *val,
+                           partition_element *part_elem,
+                           uint part_id);
   bool fix_column_value_functions(THD *thd,
                                   part_elem_value *val,
                                   uint part_id);
-  bool fix_parser_data(THD *thd);
-  bool add_max_value();
+  int fix_parser_data(THD *thd);
+  int add_max_value();
   void init_col_val(part_column_list_val *col_val, Item *item);
-  bool reorganize_into_single_field_col_val();
+  int reorganize_into_single_field_col_val();
   part_column_list_val *add_column_value();
   bool set_part_expr(char *start_token, Item *item_ptr,
                      char *end_token, bool is_subpart);
@@ -335,34 +311,7 @@ public:
   bool init_column_part();
   bool add_column_list_value(THD *thd, Item *item);
   void set_show_version_string(String *packet);
-  partition_element *get_part_elem(const char *partition_name,
-                                   char *file_name,
-                                   uint32 *part_id);
   void report_part_expr_error(bool use_subpart_expr);
-  bool set_used_partition(List<Item> &fields,
-                          List<Item> &values,
-                          COPY_INFO &info,
-                          bool copy_default_values,
-                          MY_BITMAP *used_partitions);
-  /**
-    PRUNE_NO - Unable to prune.
-    PRUNE_DEFAULTS - Partitioning field is only set to
-                     DEFAULT values, only need to check
-                     pruning for one row where the DEFAULTS
-                     values are set.
-    PRUNE_YES - Pruning is possible, calculate the used partition set
-                by evaluate the partition_id on row by row basis.
-  */
-  enum enum_can_prune {PRUNE_NO=0, PRUNE_DEFAULTS, PRUNE_YES};
-  bool can_prune_insert(THD *thd,
-                        enum_duplicates duplic,
-                        COPY_INFO &update,
-                        List<Item> &update_fields,
-                        List<Item> &fields,
-                        bool empty_values,
-                        enum_can_prune *can_prune_partitions,
-                        bool *prune_needs_default_values,
-                        MY_BITMAP *used_partitions);
   bool has_same_partitioning(partition_info *new_part_info);
 private:
   static int list_part_cmp(const void* a, const void* b);
@@ -371,12 +320,8 @@ private:
   bool set_up_default_subpartitions(handler *file, HA_CREATE_INFO *info);
   char *create_default_partition_names(uint part_no, uint num_parts,
                                        uint start_no);
-  char *create_default_subpartition_name(uint subpart_no,
-                                         const char *part_name);
-  bool prune_partition_bitmaps(TABLE_LIST *table_list);
-  bool add_named_partition(const char *part_name, uint length);
-  bool is_field_in_part_expr(List<Item> &fields);
-  bool is_full_part_expr_in_fields(List<Item> &fields);
+  char *create_subpartition_name(uint subpart_no, const char *part_name);
+  bool has_unique_name(partition_element *element);
 };
 
 uint32 get_next_partition_id_range(struct st_partition_iter* part_iter);

@@ -1,3 +1,2 @@
---general-log
---log-bin=mylog.log
+--log --log-bin=mylog.log
 

@@ -168,7 +168,7 @@ type_numeric numeric(5,2),
 empty_char char(0),
 type_char char(2),
 type_varchar varchar(10),
-type_timestamp timestamp not null default current_timestamp on update current_timestamp,
+type_timestamp timestamp not null,
 type_date date not null default '0000-00-00',
 type_time time not null default '00:00:00',
 type_datetime datetime not null default '0000-00-00 00:00:00',
@@ -424,7 +424,7 @@ flush tables;
 
 # Create a junk frm file on disk
 let $MYSQLD_DATADIR= `select @@datadir`;
-exec echo "this is a junk file for test" >> $MYSQLD_DATADIR/test/t1.frm ;
+system echo "this is a junk file for test" >> $MYSQLD_DATADIR/test/t1.frm ;
 --replace_column 6 # 7 # 8 # 9 # 12 #
 SHOW TABLE STATUS like 't1';
 --error ER_NOT_FORM_FILE
@@ -621,6 +621,8 @@ show columns in t1;
 show slave hosts;
 show keys in t1;
 show storage engines;
+show authors;
+show contributors;
 show privileges;
 show count(*) warnings;
 show count(*) errors;
@@ -971,6 +973,9 @@ drop table t1;
 
 --echo End of 5.0 tests
 
+--disable_result_log
+SHOW AUTHORS;
+--enable_result_log
 
 #
 # Bug#9785 SELECT privilege for the whole database is needed to do
@@ -1354,11 +1359,9 @@ let $wait_timeout= 10;
 let $wait_condition= SELECT COUNT(*) FROM INFORMATION_SCHEMA.PROCESSLIST WHERE INFO LIKE '%GET_LOCK%' AND ID != CONNECTION_ID();
 --source include/wait_condition.inc
 --replace_column 1 ### 3 ### 6 ### 7 ###
---sorted_result
 SHOW PROCESSLIST;
 SET NAMES utf8;
 --replace_column 1 ### 3 ### 6 ### 7 ###
---sorted_result
 SHOW PROCESSLIST;
 SELECT RELEASE_LOCK('t');
 --connection con1
@@ -1370,38 +1373,15 @@ SET NAMES latin1;
 
 
 --echo #
---echo # Bug#58996 SHOW CREATE TRIGGER fails when subject table is shadowed by
---echo #           a temporary table.
---echo #
-
---disable_warnings
-DROP TABLE IF EXISTS t1;
---enable_warnings
-
-CREATE TABLE t1 (a INT);
-CREATE TRIGGER t1_bi BEFORE INSERT ON t1 FOR EACH ROW BEGIN END;
-SHOW CREATE TRIGGER t1_bi;
-
-CREATE TEMPORARY TABLE t1 (b INT);
-# Should still work
-SHOW CREATE TRIGGER t1_bi;
-
-DROP TEMPORARY TABLE t1;
-DROP TABLE t1;
-
-
---echo #
 --echo # WL#6454: Deprecate SHOW AUTHORS and SHOW CONTRIBUTORS
 --echo #
 
---echo # These statements were deprecated in 5.5 and removed in 5.6.
---echo # They should therefore give ER_PARSE_ERROR here.
-
---error ER_PARSE_ERROR
+--disable_result_log
 SHOW AUTHORS;
---error ER_PARSE_ERROR
+--enable_result_log
+SHOW WARNINGS;
+
+--disable_result_log
 SHOW CONTRIBUTORS;
-
-
-# Wait till all disconnects are completed
---source include/wait_until_count_sessions.inc
+--enable_result_log
+SHOW WARNINGS;

@@ -11,12 +11,11 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 /* Describe, check and repair of MyISAM tables */
 
 #include "fulltext.h"
-#include "my_default.h"
 
 #include <m_ctype.h>
 #include <stdarg.h>
@@ -466,7 +465,7 @@ TYPELIB myisam_stats_method_typelib= {
 
 static my_bool
 get_one_option(int optid,
-	       const struct my_option *opt MY_ATTRIBUTE((unused)),
+	       const struct my_option *opt __attribute__((unused)),
 	       char *argument)
 {
   switch (optid) {
@@ -1122,7 +1121,7 @@ static int myisamchk(MI_CHECK *param, char * filename)
   if ((param->testflag & T_AUTO_INC) ||
       ((param->testflag & T_REP_ANY) && info->s->base.auto_key))
     update_auto_increment_key(param, info,
-			      (my_bool) !MY_TEST(param->testflag & T_AUTO_INC));
+			      (my_bool) !test(param->testflag & T_AUTO_INC));
 
   if (!(param->testflag & T_DESCRIPT))
   {
@@ -1459,8 +1458,8 @@ static int mi_sort_records(MI_CHECK *param,
   MI_SORT_PARAM sort_param;
   DBUG_ENTER("sort_records");
 
-  memset(&sort_info, 0, sizeof(sort_info));
-  memset(&sort_param, 0, sizeof(sort_param));
+  bzero((char*)&sort_info,sizeof(sort_info));
+  bzero((char*)&sort_param,sizeof(sort_param));
   sort_param.sort_info=&sort_info;
   sort_info.param=param;
   keyinfo= &share->keyinfo[sort_key];
@@ -1689,7 +1688,7 @@ static int sort_record_index(MI_SORT_PARAM *sort_param,MI_INFO *info,
       goto err;
   }
   /* Clear end of block to get better compression if the table is backuped */
-  memset(buff+used_length, 0, keyinfo->block_length-used_length);
+  bzero((uchar*) buff+used_length,keyinfo->block_length-used_length);
   if (my_pwrite(info->s->kfile,(uchar*) buff,(uint) keyinfo->block_length,
 		page,param->myf_rw))
   {
@@ -1715,7 +1714,7 @@ err:
 
 static int not_killed= 0;
 
-volatile int *killed_ptr(MI_CHECK *param MY_ATTRIBUTE((unused)))
+volatile int *killed_ptr(MI_CHECK *param __attribute__((unused)))
 {
   return &not_killed;			/* always NULL */
 }
@@ -1723,7 +1722,7 @@ volatile int *killed_ptr(MI_CHECK *param MY_ATTRIBUTE((unused)))
 	/* print warnings and errors */
 	/* VARARGS */
 
-void mi_check_print_info(MI_CHECK *param MY_ATTRIBUTE((unused)),
+void mi_check_print_info(MI_CHECK *param __attribute__((unused)),
 			 const char *fmt,...)
 {
   va_list args;

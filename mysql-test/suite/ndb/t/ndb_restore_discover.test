@@ -5,8 +5,8 @@
 --echo # 18075170 - sql node restart required to avoid deadlock after
 --echo #            restore
 --echo #
-# Test Auto Discover option within a transaction and make sure the transaction
-# is not broken.
+# Test Auto Discover option within a transaction
+# and make sure the transaction is not broken.
 CREATE TABLE t1 (id INT) ENGINE=NDBCluster;
 CREATE TABLE t2 (id INT) ENGINE=NDBCluster;
 

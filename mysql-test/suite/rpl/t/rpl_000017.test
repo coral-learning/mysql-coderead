@@ -8,7 +8,6 @@
 # --skip-slave-start.
 
 --source include/not_windows.inc
---source include/not_master_info_table.inc
 
 --let $rpl_skip_start_slave= 1
 --source include/master-slave.inc
@@ -37,7 +36,7 @@ connection slave;
 connection master;
 create table t1(n int);
 insert into t1 values(24);
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 select * from t1;
 connection master;
 drop table t1;

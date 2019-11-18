@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2011, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2011, 2015, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -323,7 +323,7 @@ static int get_default_values()
   int ret= 0;
   FILE *file= 0;
 
-  memset(tool_path, 0, FN_REFLEN);
+  bzero(tool_path, FN_REFLEN);
   if ((error= find_tool("my_print_defaults" FN_EXEEXT, tool_path)))
     goto exit;
   else
@@ -406,7 +406,7 @@ exit:
 static void usage(void)
 {
   PRINT_VERSION;
-  puts("Copyright (c) 2011, 2016, Oracle and/or its affiliates. "
+  puts("Copyright (c) 2011, 2015, Oracle and/or its affiliates. "
        "All rights reserved.\n");
   puts("Enable or disable plugins.");
   printf("\nUsage: %s [options] <plugin> ENABLE|DISABLE\n\nOptions:\n",
@@ -471,7 +471,7 @@ static void print_default_values(void)
 
 static my_bool
 get_one_option(int optid,
-               const struct my_option *opt MY_ATTRIBUTE((unused)),
+               const struct my_option *opt __attribute__((unused)),
                char *argument)
 {
   switch(optid) {
@@ -552,52 +552,16 @@ static int search_dir(const char * base_path, const char *tool_name,
 {
   char new_path[FN_REFLEN];
   char source_path[FN_REFLEN];
-#if __WIN__
-  char win_abs_path[FN_REFLEN];
-  char self_name[FN_REFLEN];
-  const char *last_fn_libchar;
-#endif
 
-  if ((strlen(base_path) + strlen(subdir) + 1) > FN_REFLEN)
-  {
-    fprintf(stderr, "WARNING: Search path is too long\n");
-    return 1;
-  }
   strcpy(source_path, base_path);
   strcat(source_path, subdir);
   fn_format(new_path, tool_name, source_path, "", MY_UNPACK_FILENAME);
   if (file_exists(new_path))
   {
     strcpy(tool_path, new_path);
-    return 0;
-  }  
-
-#if __WIN__
-  /*
-    On Windows above code will not be able to find the file since
-    path names are not absolute and file_exists works only with 
-    absolute path names. Try to get the absolute path of current 
-    exe and see if the file exists relative to the path of exe.
-  */
-  if (GetModuleFileName(NULL, self_name, FN_REFLEN -1) == 0)
-    strncpy(self_name, my_progname, FN_REFLEN - 1);
-  self_name[FN_REFLEN - 1]= '\0';
-
-  last_fn_libchar= strrchr(self_name, FN_LIBCHAR);
-  if (NULL != last_fn_libchar)
-  {
-    strncpy(win_abs_path, self_name, last_fn_libchar - self_name + 1 );
-    win_abs_path[(last_fn_libchar - self_name + 1)]= 0;
-    strncat(win_abs_path, new_path, 
-            sizeof(win_abs_path) - strlen(win_abs_path) - 1);
-    if (file_exists(win_abs_path))
-    {
-      strcpy(tool_path, win_abs_path);
-      return 0;
-    }
+    return 1;
   }
-#endif
-  return 1;
+  return 0;
 }
 
 
@@ -622,12 +586,12 @@ static int search_paths(const char *base_path, const char *tool_name,
   };
   for (i = 0 ; i < (int)array_elements(paths); i++)
   {
-    if (!search_dir(base_path, tool_name, paths[i], tool_path))
+    if (search_dir(base_path, tool_name, paths[i], tool_path))
     {
-      return 0;
+      return 1;
     }
   }
-  return 1;
+  return 0;
 }
 
 
@@ -1009,15 +973,13 @@ static int find_tool(const char *tool_name, char *tool_path)
   int i= 0;
 
   const char *paths[]= {
-    opt_mysqld, opt_basedir, opt_my_print_defaults, "", 
-    "/usr", "/usr/local/mysql", "/usr/sbin", "/usr/share", 
-    "/extra", "/extra/debug", "/../../extra/debug", 
-    "/release/", "/extra/release", "/../../extra/release",
-    "/bin", "/usr/bin", "/mysql/bin"
+    opt_mysqld, opt_basedir, opt_my_print_defaults, "/usr",
+    "/usr/local/mysql", "/usr/sbin", "/usr/share", "/extra", "/extra/debug",
+    "/extra/release", "/bin", "/usr/bin", "/mysql/bin"
   };
   for (i= 0; i < (int)array_elements(paths); i++)
   {
-    if (paths[i] && !(search_paths(paths[i], tool_name, tool_path)))
+    if (paths[i] && (search_paths(paths[i], tool_name, tool_path)))
       goto found;
   }
   fprintf(stderr, "WARNING: Cannot find %s.\n", tool_name);

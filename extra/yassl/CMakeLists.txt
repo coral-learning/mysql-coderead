@@ -20,15 +20,19 @@ INCLUDE_DIRECTORIES(
  ${CMAKE_SOURCE_DIR}/extra/yassl/taocrypt/mySTL)
 
 ADD_DEFINITIONS(${SSL_DEFINES})
-
-# rename get_tty_password to avoid collisions with the main binary
-ADD_DEFINITIONS(-Dget_tty_password_ext=yassl_mysql_get_tty_password_ext)
-ADD_DEFINITIONS(-Dget_tty_password=yassl_mysql_get_tty_password)
-
+IF(CMAKE_COMPILER_IS_GNUXX)
+  #Remove -fno-implicit-templates 
+  #(yassl sources cannot  be compiled with  it)
+  STRING(REPLACE "-fno-implicit-templates" "" CMAKE_CXX_FLAGS
+${CMAKE_CXX_FLAGS})
+ENDIF()
 SET(YASSL_SOURCES  src/buffer.cpp src/cert_wrapper.cpp src/crypto_wrapper.cpp src/handshake.cpp src/lock.cpp 
 				src/log.cpp src/socket_wrapper.cpp src/ssl.cpp src/timer.cpp src/yassl_error.cpp 
-				src/yassl_imp.cpp src/yassl_int.cpp
-                                ../../client/get_password.c )
+				src/yassl_imp.cpp src/yassl_int.cpp)
+
+IF(HAVE_EXPLICIT_TEMPLATE_INSTANTIATION)
+  SET(YASSL_SOURCES ${YASSL_SOURCES} src/template_instnt.cpp)
+ENDIF()
 
 ADD_CONVENIENCE_LIBRARY(yassl ${YASSL_SOURCES})
 RESTRICT_SYMBOL_EXPORTS(yassl)
@@ -36,3 +40,5 @@ RESTRICT_SYMBOL_EXPORTS(yassl)
 IF(MSVC)
    INSTALL_DEBUG_TARGET(yassl DESTINATION ${INSTALL_LIBDIR}/debug)
 ENDIF()
+
+

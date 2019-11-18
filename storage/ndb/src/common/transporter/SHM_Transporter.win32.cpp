@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003-2006, 2008 MySQL AB
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 
 #include <ndb_global.h>
@@ -143,7 +141,7 @@ SHM_Transporter::checkConnected(){
   volatile Uint32 * sharedCountAttached = 
     (volatile Uint32*)(shmBuf + 6*sizeof(Uint32*));
   if(*sharedCountAttached != 2) {
-    report_error(TE_SHM_DISCONNECT);
+    reportError(callbackObj, remoteNodeId, TE_SHM_DISCONNECT);
     return false;
   }
   return true;
@@ -158,7 +156,7 @@ SHM_Transporter::disconnectImpl(){
     --*sharedCountAttached;
 
     if(!UnmapViewOfFile(shmBuf)) {
-      report_error(TE_SHM_UNABLE_TO_REMOVE_SEGMENT);
+      reportError(callbackObj, remoteNodeId, TE_SHM_UNABLE_TO_REMOVE_SEGMENT);
       return;
     }
     
@@ -169,7 +167,7 @@ SHM_Transporter::disconnectImpl(){
   
   if(_shmSegCreated){
     if(!CloseHandle(hFileMapping)) {
-      report_error(TE_SHM_UNABLE_TO_REMOVE_SEGMENT);
+      reportError(callbackObj, remoteNodeId, TE_SHM_UNABLE_TO_REMOVE_SEGMENT);
       return;
     }
     _shmSegCreated = false;

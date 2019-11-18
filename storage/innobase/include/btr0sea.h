@@ -1,6 +1,6 @@
 /*****************************************************************************
 
-Copyright (c) 1996, 2016, Oracle and/or its affiliates. All Rights Reserved.
+Copyright (c) 1996, 2011, Oracle and/or its affiliates. All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -11,8 +11,8 @@ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
 FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
-this program; if not, write to the Free Software Foundation, Inc.,
-51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA
+this program; if not, write to the Free Software Foundation, Inc., 
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
 
 *****************************************************************************/
 
@@ -68,8 +68,7 @@ UNIV_INLINE
 btr_search_t*
 btr_search_get_info(
 /*================*/
-	dict_index_t*	index)	/*!< in: index */
-	MY_ATTRIBUTE((nonnull));
+	dict_index_t*	index);	/*!< in: index */
 /*****************************************************************//**
 Creates and initializes a search info struct.
 @return	own: search info struct */
@@ -192,7 +191,7 @@ btr_search_validate(void);
 #endif /* defined UNIV_AHI_DEBUG || defined UNIV_DEBUG */
 
 /** The search info struct in an index */
-struct btr_search_t{
+struct btr_search_struct{
 	ulint	ref_count;	/*!< Number of blocks in this index tree
 				that have search index built
 				i.e. block->index points to this index.
@@ -241,13 +240,16 @@ struct btr_search_t{
 #endif /* UNIV_SEARCH_PERF_STAT */
 #ifdef UNIV_DEBUG
 	ulint	magic_n;	/*!< magic number @see BTR_SEARCH_MAGIC_N */
-/** value of btr_search_t::magic_n, used in assertions */
+/** value of btr_search_struct::magic_n, used in assertions */
 # define BTR_SEARCH_MAGIC_N	1112765
 #endif /* UNIV_DEBUG */
 };
 
 /** The hash index system */
-struct btr_search_sys_t{
+typedef struct btr_search_sys_struct	btr_search_sys_t;
+
+/** The hash index system */
+struct btr_search_sys_struct{
 	hash_table_t*	hash_index;	/*!< the adaptive hash index,
 					mapping dtuple_fold values
 					to rec_t pointers on index pages */

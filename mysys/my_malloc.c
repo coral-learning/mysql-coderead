@@ -61,7 +61,7 @@ void *my_malloc(size_t size, myf my_flags)
       exit(1);
   }
   else if (my_flags & MY_ZEROFILL)
-    memset(point, 0, size);
+    bzero(point, size);
   DBUG_PRINT("exit",("ptr: %p", point));
   DBUG_RETURN(point);
 }
@@ -85,40 +85,34 @@ void *my_realloc(void *oldpoint, size_t size, myf my_flags)
                    (ulong) size, my_flags));
 
   DBUG_ASSERT(size > 0);
-  /* These flags are mutually exclusive. */
-  DBUG_ASSERT(!((my_flags & MY_FREE_ON_ERROR) &&
-                (my_flags & MY_HOLD_ON_ERROR)));
-  DBUG_EXECUTE_IF("simulate_out_of_memory",
-                  point= NULL;
-                  goto end;);
   if (!oldpoint && (my_flags & MY_ALLOW_ZERO_PTR))
     DBUG_RETURN(my_malloc(size, my_flags));
 #ifdef USE_HALLOC
-  point= malloc(size);
-#else
-  point= realloc(oldpoint, size);
-#endif
-#ifndef DBUG_OFF
-end:
-#endif
-  if (point == NULL)
+  if (!(point = malloc(size)))
   {
-    if (my_flags & MY_HOLD_ON_ERROR)
-      DBUG_RETURN(oldpoint);
     if (my_flags & MY_FREE_ON_ERROR)
       my_free(oldpoint);
+    if (my_flags & MY_HOLD_ON_ERROR)
+      DBUG_RETURN(oldpoint);
     my_errno=errno;
-    if (my_flags & (MY_FAE+MY_WME))
-      my_error(EE_OUTOFMEMORY, MYF(ME_BELL+ ME_WAITTANG + ME_FATALERROR),
-               size);
-    DBUG_EXECUTE_IF("simulate_out_of_memory",
-                    DBUG_SET("-d,simulate_out_of_memory"););
+    if (my_flags & MY_FAE+MY_WME)
+      my_error(EE_OUTOFMEMORY, MYF(ME_BELL + ME_WAITTANG + ME_FATALERROR),size);
   }
-#ifdef USE_HALLOC
   else
   {
     memcpy(point,oldpoint,size);
     free(oldpoint);
+  }
+#else
+  if ((point= realloc(oldpoint, size)) == NULL)
+  {
+    if (my_flags & MY_FREE_ON_ERROR)
+      my_free(oldpoint);
+    if (my_flags & MY_HOLD_ON_ERROR)
+      DBUG_RETURN(oldpoint);
+    my_errno=errno;
+    if (my_flags & (MY_FAE+MY_WME))
+      my_error(EE_OUTOFMEMORY, MYF(ME_BELL + ME_WAITTANG + ME_FATALERROR), size);
   }
 #endif
   DBUG_PRINT("exit",("ptr: %p", point));

@@ -1,6 +1,5 @@
 source include/have_binlog_format_statement.inc;
 source include/master-slave.inc;
-source include/have_innodb.inc;
 
 disable_query_log;
 call mtr.add_suppression("Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT");
@@ -18,8 +17,8 @@ enable_query_log;
 
 --echo **** On Master ****
 connection master;
-CREATE TABLE t1 (a INT) ENGINE = InnoDB;
-CREATE TABLE logtbl (sect INT, test INT, count INT) ENGINE = InnoDB;
+CREATE TABLE t1 (a INT);
+CREATE TABLE logtbl (sect INT, test INT, count INT);
 
 INSERT INTO t1 VALUES (1),(2),(3);
 INSERT INTO t1 SELECT 2*a+3 FROM t1;
@@ -49,7 +48,7 @@ INSERT INTO logtbl VALUES(1,2,@a);
 
 SELECT * FROM logtbl WHERE sect = 1 ORDER BY sect,test;
 --echo **** On Slave ****
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 SELECT * FROM logtbl WHERE sect = 1 ORDER BY sect,test;
 
 
@@ -87,7 +86,7 @@ CALL just_log(2,3,@found_rows);
 
 SELECT * FROM logtbl WHERE sect = 2 ORDER BY sect,test;
 --echo **** On Slave ****
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 SELECT * FROM logtbl WHERE sect = 2 ORDER BY sect,test;
 
 
@@ -109,7 +108,7 @@ SELECT log_rows(3,1,@found_rows), log_rows(3,2,@found_rows);
 
 SELECT * FROM logtbl WHERE sect = 3 ORDER BY sect,test;
 --echo **** On Slave ****
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 SELECT * FROM logtbl WHERE sect = 3 ORDER BY sect,test;
 
 

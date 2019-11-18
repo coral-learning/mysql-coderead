@@ -5,7 +5,7 @@
 #
 # The following is printed on the current connection:
 #
-#   SELECT NOW(), @@SERVER_ID, @@SERVER_UUID
+#   SELECT NOW()
 #   SHOW SLAVE STATUS
 #   SHOW MASTER STATUS
 #   SHOW PROCESSLIST
@@ -21,8 +21,6 @@
 # ==== Usage ====
 #
 # [--let $rpl_only_current_connection= 1]
-# [--let $extra_debug_info= some text]
-# [--let $extra_debug_eval= expression parsable by include/eval.inc]
 # --source include/show_rpl_debug_info.inc
 #
 # Parameters:
@@ -30,14 +28,7 @@
 #     By default, debug info is printed from all connections, starting
 #     with the current connection. If this variable is set, debug
 #     info is printed only for the current connection.
-#
-#   $extra_debug_info
-#     This text is printed verbatim to the output. Useful for helper
-#     scripts to supply extra diagnostic output.
-#
-#   $extra_debug_eval
-#     Expression in the form expected by include/eval.inc, which will
-#     be evaluated and printed to the output.
+#     
 #
 # ==== Side effects ====
 #
@@ -51,7 +42,6 @@
 --enable_query_log
 --enable_result_log
 --enable_warnings
---enable_connect_log
 --disable_abort_on_error
 --horizontal_results
 
@@ -59,15 +49,8 @@
 --let $_rpl_old_con= $CURRENT_CONNECTION
 --let $_rpl_is_first_server= 1
 --let $_rpl_server= $rpl_server_count
-if ($_rpl_server == '')
-{
-  --let $_rpl_server= 0
-}
 --inc $_rpl_server
 
---echo DO_NOT_CHECK_IN_THIS_LINE: include/show_rpl_debug_info.inc should only be used for debugging. Never check in a test that calls it on success.
-
---echo CURRENT_CONNECTION = '$_rpl_old_con'
 
 while ($_rpl_server)
 {
@@ -83,11 +66,7 @@ while ($_rpl_server)
   SHOW WARNINGS;
   --echo
   --echo **** SELECT replication-related variables on $CURRENT_CONNECTION ****
-  query_vertical SELECT NOW(), @@SERVER_ID, @@SERVER_UUID, @@PORT;
-  --echo
-  --echo **** GTID_* on $CURRENT_CONNECTION ****
-  query_vertical
-  SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_PURGED, @@GLOBAL.GTID_OWNED, @@SESSION.GTID_EXECUTED, @@SESSION.GTID_OWNED;
+  SELECT NOW(), @@SERVER_ID;
   --echo
   --echo **** SHOW SLAVE STATUS on $CURRENT_CONNECTION ****
   query_vertical SHOW SLAVE STATUS;
@@ -113,12 +92,7 @@ while ($_rpl_server)
   let $relaylog_name= query_get_value(SHOW SLAVE STATUS, Relay_Log_File, 1);
   --echo relaylog_name = '$relaylog_name'
   eval SHOW RELAYLOG EVENTS IN '$relaylog_name';
-  --echo
-  --echo **** slave_relay_info on $CURRENT_CONNECTION ****
-  SELECT * FROM mysql.slave_relay_log_info;
-  --echo
-  --echo **** slave_master_info on $CURRENT_CONNECTION ****
-  SELECT * FROM mysql.slave_master_info;
+
 
   --let $_rpl_is_first_server= 0
   --dec $_rpl_server
@@ -131,15 +105,6 @@ while ($_rpl_server)
       --let $_rpl_server= 0
     }
   }
-}
-
---echo rand_seed: '$rand_seed' _rand_state: '$_rand_state'
---echo extra debug info if any: '$extra_debug_info'
-if ($extra_debug_eval)
-{
-  --let $eval_expr= $extra_debug_eval
-  --source include/eval.inc
-  --echo extra evaluated debug info: '$eval_result'
 }
 
 --connection $_rpl_old_con

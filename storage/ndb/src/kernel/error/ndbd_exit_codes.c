@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003, 2005-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include <ndb_global.h>
 #include <ndbd_exit_codes.h>
@@ -95,9 +94,6 @@ static const ErrStruct errArray[] =
    {NDBD_EXIT_RESOURCE_ALLOC_ERROR, XCE,
     "Resource allocation error, please review the configuration"},
 
-   {NDBD_EXIT_NO_MORE_REDOLOG, XCR,
-    "Fatal error due to end of REDO log. Increase NoOfFragmentLogFiles or FragmentLogFileSize" },
-
    /* this error message is complemented by additional info when
       generated, such as signal, and text
    */
@@ -169,13 +165,6 @@ static const ErrStruct errArray[] =
    {NDBD_EXIT_INVALID_LCP_FILE, XFI, "Invalid LCP" },
    {NDBD_EXIT_INSUFFICENT_NODES, XRE, "Insufficent nodes for system restart" },
    
-   {NDBD_EXIT_UNSUPPORTED_VERSION, XRE, "Unsupported version" },
-   
-   {NDBD_EXIT_RESTORE_SCHEMA, XCR, "Failure to restore schema" },
-   
-   {NDBD_EXIT_GRACEFUL_SHUTDOWN_ERROR, XNE,
-    "Graceful shutdown not 100% possible due to mixed ndbd versions" },
-
    /* Sentinel */
    {0, XUE,
     "No message slogan found (please report a bug if you get this error code)"}

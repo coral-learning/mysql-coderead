@@ -1,4 +1,5 @@
-/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2001, 2005, 2006 MySQL AB, 2009 Sun Microsystems, Inc.
+   Use is subject to license terms.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -48,11 +49,14 @@ void init_myisammrg_psi_keys()
   const char* category= "myisammrg";
   int count;
 
+  if (PSI_server == NULL)
+    return;
+
   count= array_elements(all_myisammrg_mutexes);
-  mysql_mutex_register(category, all_myisammrg_mutexes, count);
+  PSI_server->register_mutex(category, all_myisammrg_mutexes, count);
 
   count= array_elements(all_myisammrg_files);
-  mysql_file_register(category, all_myisammrg_files, count);
+  PSI_server->register_file(category, all_myisammrg_files, count);
 }
 #endif /* HAVE_PSI_INTERFACE */
 

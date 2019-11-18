@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003, 2005-2007 MySQL AB
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,58 +12,27 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include <signaldata/AlterTable.hpp>
 
-bool
-printALTER_TABLE_REQ(FILE* output, const Uint32* theData, Uint32 len, Uint16)
+bool printALTER_TABLE_REQ(FILE * output, const Uint32 * theData, Uint32 len, Uint16 receiverBlockNo)
 {
-  const AlterTableReq* sig = (const AlterTableReq*)theData;
-  fprintf(output, " clientRef: 0x%x", sig->clientRef);
-  fprintf(output, " clientData: %u", sig->clientData);
-  fprintf(output, " transId: 0x%x", sig->transId);
-  fprintf(output, " transKey: %u", sig->transKey);
-  fprintf(output, " requestInfo: 0x%x", sig->requestInfo);
-  fprintf(output, "\n");
-  fprintf(output, " tableId: %u", sig->tableId);
-  fprintf(output, " tableVersion: 0x%x", sig->tableVersion);
-  fprintf(output, " changeMask: 0x%x", sig->changeMask);
-  fprintf(output, "\n");
-  return true;
+//  const AlterTableReq * const sig = (AlterTableReq *) theData;
+  
+  return false;
 }
 
-bool
-printALTER_TABLE_CONF(FILE* output, const Uint32* theData, Uint32 len, Uint16)
+bool printALTER_TABLE_CONF(FILE * output, const Uint32 * theData, Uint32 len, Uint16 receiverBlockNo)
 {
-  const AlterTableConf* sig = (const AlterTableConf*)theData;
-  fprintf(output, " senderRef: 0x%x", sig->senderRef);
-  fprintf(output, " clientData: %u", sig->clientData);
-  fprintf(output, " transId: 0x%x", sig->transId);
-  fprintf(output, "\n");
-  fprintf(output, " tableId: %u", sig->tableId);
-  fprintf(output, " tableVersion: 0x%x", sig->tableVersion);
-  fprintf(output, " newTableVersion: 0x%x", sig->newTableVersion);
-  fprintf(output, "\n");
-  return true;
+//  const AlterTableConf * const sig = (AlterTableConf *) theData;
+  
+  return false;
 }
 
-bool
-printALTER_TABLE_REF(FILE* output, const Uint32* theData, Uint32 len, Uint16)
+bool printALTER_TABLE_REF(FILE * output, const Uint32 * theData, Uint32 len, Uint16 receiverBlockNo)
 {
-  const AlterTableRef* sig = (const AlterTableRef*)theData;
-  fprintf(output, " senderRef: 0x%x", sig->senderRef);
-  fprintf(output, " clientData: %u", sig->clientData);
-  fprintf(output, " transId: 0x%x", sig->transId);
-  fprintf(output, "\n");
-  fprintf(output, " errorCode: %u", sig->errorCode);
-  fprintf(output, " errorLine: %u", sig-> errorLine);
-  fprintf(output, " errorNodeId: %u", sig->errorNodeId);
-  fprintf(output, " masterNodeId: %u", sig->masterNodeId);
-  fprintf(output, "\n");
-  fprintf(output, " errorStatus: %u", sig->errorStatus);
-  fprintf(output, " errorKey: %u", sig->errorKey);
-  fprintf(output, "\n");
-  return true;
+//  const AlterTableRef * const sig = (AlterTableRef *) theData;
+    
+  return false;
 }

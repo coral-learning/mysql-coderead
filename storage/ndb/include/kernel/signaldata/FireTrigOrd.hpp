@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003, 2005-2008 MySQL AB
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2005, 2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef FIRE_TRIG_ORD_HPP
 #define FIRE_TRIG_ORD_HPP
@@ -47,7 +45,6 @@ class FireTrigOrd {
   friend class Dbtc;
   friend class Backup;
   friend class SumaParticipant;
-  friend class Suma;
   
   /**
    * For printing
@@ -55,26 +52,20 @@ class FireTrigOrd {
   friend bool printFIRE_TRIG_ORD(FILE * output, const Uint32 * theData, Uint32 len, Uint16 receiverBlockNo);
 
 public:
-  STATIC_CONST( SignalLength = 11 );
+  STATIC_CONST( SignalLength = 8 );
   STATIC_CONST( SignalWithGCILength = 9 );
-  STATIC_CONST( SignalLengthSuma = 14 );
+  STATIC_CONST( SignalLengthSuma = 11 );
 
 private:
   Uint32 m_connectionPtr;
   Uint32 m_userRef;
   Uint32 m_triggerId;
-  Uint32 m_triggerEvent;
+  TriggerEvent::Value m_triggerEvent;
   Uint32 m_noPrimKeyWords;
   Uint32 m_noBeforeValueWords;
   Uint32 m_noAfterValueWords;
   Uint32 fragId;
-  union {
-    Uint32 m_gci_hi;
-    Uint32 m_triggerType;
-  };
-  Uint32 m_transId1;
-  Uint32 m_transId2;
-  Uint32 m_gci_lo;
+  Uint32 m_gci;
   Uint32 m_hashValue;
   Uint32 m_any_value;
   // Public methods
@@ -140,7 +131,7 @@ void FireTrigOrd::setTriggerId(Uint32 aTriggerId)
 inline
 TriggerEvent::Value FireTrigOrd::getTriggerEvent() const
 {
-  return (TriggerEvent::Value)m_triggerEvent;
+  return m_triggerEvent;
 }
 
 inline
@@ -188,13 +179,13 @@ void FireTrigOrd::setNoOfAfterValueWords(Uint32 noAfter)
 inline
 Uint32 FireTrigOrd::getGCI() const
 {
-  return m_gci_hi;
+  return m_gci;
 }
 
 inline
 void FireTrigOrd::setGCI(Uint32 aGCI)
 {
-  m_gci_hi = aGCI;
+  m_gci = aGCI;
 }
 
 inline
@@ -221,47 +212,5 @@ void FireTrigOrd::setAnyValue(Uint32 any_value)
   m_any_value = any_value;
 }
 
-struct FireTrigReq
-{
-  STATIC_CONST( SignalLength = 4 );
-
-  Uint32 tcOpRec;
-  Uint32 transId[2];
-  Uint32 pass;
-};
-
-struct FireTrigRef
-{
-  STATIC_CONST( SignalLength = 4 );
-
-  Uint32 tcOpRec;
-  Uint32 transId[2];
-  Uint32 errCode;
-
-  enum ErrorCode
-  {
-    FTR_UnknownOperation = 1235
-    ,FTR_IncorrectState = 1236
-  };
-};
-
-struct FireTrigConf
-{
-  STATIC_CONST( SignalLength = 4 );
-
-  Uint32 tcOpRec;
-  Uint32 transId[2];
-  Uint32 noFiredTriggers; // bit 31 defered trigger
-
-  static Uint32 getFiredCount(Uint32 v) {
-    return NoOfFiredTriggers::getFiredCount(v);
-  }
-  static Uint32 getDeferredBit(Uint32 v) {
-    return NoOfFiredTriggers::getDeferredBit(v);
-  }
-  static void setDeferredBit(Uint32 & v) {
-    NoOfFiredTriggers::setDeferredBit(v);
-  }
-};
 
 #endif

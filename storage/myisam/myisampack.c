@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -20,7 +20,6 @@
 #endif
 
 #include "myisamdef.h"
-#include "my_default.h"
 #include <queues.h>
 #include <my_tree.h>
 #include "mysys_err.h"
@@ -29,7 +28,6 @@
 #endif
 #include <my_getopt.h>
 #include <assert.h>
-#include <welcome_copyright_notice.h> // ORACLE_WELCOME_COPYRIGHT_NOTICE
 
 #if SIZEOF_LONG_LONG > 4
 #define BITS_SAVED 64
@@ -131,7 +129,7 @@ static void free_counts_and_tree_and_queue(HUFF_TREE *huff_trees,
 					   uint trees,
 					   HUFF_COUNTS *huff_counts,
 					   uint fields);
-static int compare_tree(void* cmp_arg MY_ATTRIBUTE((unused)),
+static int compare_tree(void* cmp_arg __attribute__((unused)),
 			const uchar *s,const uchar *t);
 static int get_statistic(PACK_MRG_INFO *mrg,HUFF_COUNTS *huff_counts);
 static void check_counts(HUFF_COUNTS *huff_counts,uint trees,
@@ -301,7 +299,9 @@ static void print_version(void)
 static void usage(void)
 {
   print_version();
-  puts(ORACLE_WELCOME_COPYRIGHT_NOTICE("2002"));
+  puts("Copyright 2002-2008 MySQL AB, 2008 Sun Microsystems, Inc.");
+  puts("This software comes with ABSOLUTELY NO WARRANTY. This is free software,");
+  puts("and you are welcome to modify and redistribute it under the GPL license\n");
 
   puts("Pack a MyISAM-table to take much less space.");
   puts("Keys are not updated, you must run myisamchk -rq on the datafile");
@@ -316,7 +316,7 @@ static void usage(void)
 
 
 static my_bool
-get_one_option(int optid, const struct my_option *opt MY_ATTRIBUTE((unused)),
+get_one_option(int optid, const struct my_option *opt __attribute__((unused)),
 	       char *argument)
 {
   uint length;
@@ -637,7 +637,7 @@ static int compress(PACK_MRG_INFO *mrg,char *result_table)
   if (!error && !test_only)
   {
     uchar buff[MEMMAP_EXTRA_MARGIN];		/* End marginal for memmap */
-    memset(buff, 0, sizeof(buff));
+    bzero(buff,sizeof(buff));
     error=my_write(file_buffer.file,buff,sizeof(buff),
 		   MYF(MY_WME | MY_NABP | MY_WAIT_IF_FULL)) != 0;
   }
@@ -783,7 +783,7 @@ static int create_dest_frm(char *source_table, char *dest_table)
   */
   (void) my_copy(source_name, dest_name, MYF(MY_DONT_OVERWRITE_FILE));
   
-  DBUG_RETURN(0);
+  return 0;
 }
 
 
@@ -1175,7 +1175,7 @@ static int get_statistic(PACK_MRG_INFO *mrg,HUFF_COUNTS *huff_counts)
   DBUG_RETURN(error != HA_ERR_END_OF_FILE);
 }
 
-static int compare_huff_elements(void *not_used MY_ATTRIBUTE((unused)),
+static int compare_huff_elements(void *not_used __attribute__((unused)),
 				 uchar *a, uchar *b)
 {
   return *((my_off_t*) a) < *((my_off_t*) b) ? -1 :
@@ -1192,7 +1192,7 @@ static void check_counts(HUFF_COUNTS *huff_counts, uint trees,
   my_off_t old_length,new_length,length;
   DBUG_ENTER("check_counts");
 
-  memset(field_count, 0, sizeof(field_count));
+  bzero((uchar*) field_count,sizeof(field_count));
   space_fields=fill_zero_fields=0;
 
   for (; trees-- ; huff_counts++)
@@ -1269,8 +1269,8 @@ static void check_counts(HUFF_COUNTS *huff_counts, uint trees,
     {
       if (huff_counts->field_length > 2 &&
 	  huff_counts->empty_fields + (records - huff_counts->empty_fields)*
-	  (1+max_bit(MY_MAX(huff_counts->max_pre_space,
-                            huff_counts->max_end_space))) <
+	  (1+max_bit(max(huff_counts->max_pre_space,
+			 huff_counts->max_end_space))) <
 	  records * max_bit(huff_counts->field_length))
       {
 	huff_counts->pack_type |= PACK_TYPE_SPACE_FIELDS;
@@ -1692,7 +1692,7 @@ static int make_huff_tree(HUFF_TREE *huff_tree, HUFF_COUNTS *huff_counts)
   return 0;
 }
 
-static int compare_tree(void* cmp_arg MY_ATTRIBUTE((unused)),
+static int compare_tree(void* cmp_arg __attribute__((unused)),
 			register const uchar *s, register const uchar *t)
 {
   uint length;
@@ -2039,7 +2039,7 @@ static int write_header(PACK_MRG_INFO *mrg,uint head_length,uint trees,
 {
   uchar *buff= (uchar*) file_buffer.pos;
 
-  memset(buff, 0, HEAD_LENGTH);
+  bzero(buff,HEAD_LENGTH);
   memcpy(buff,myisam_pack_file_magic,4);
   int4store(buff+4,head_length);
   int4store(buff+8, mrg->min_pack_length);
@@ -3031,7 +3031,7 @@ static int save_state_mrg(File file,PACK_MRG_INFO *mrg,my_off_t new_length,
   if (mrg->src_file_has_indexes_disabled)
   {
     isam_file->s->state.state.key_file_length=
-      MY_MAX(isam_file->s->state.state.key_file_length, new_length);
+      max(isam_file->s->state.state.key_file_length, new_length);
   }
   state.dellink= HA_OFFSET_ERROR;
   state.version=(ulong) time((time_t*) 0);

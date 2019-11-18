@@ -1,22 +1,26 @@
-# ==== Purpose ====
-#
-# Unknown (something related to replication + SF/SP)
-#
-# ==== References ====
-#
-# WL#2146
+##########################################
+# Change Author: JBM
+# Change Date: 2006-05-02
+# Change: Added Order By for NDB testing
+##########################################
 
 # Test of replication of stored procedures (WL#2146 for MySQL 5.0)
 -- source include/master-slave.inc
---source include/have_innodb.inc
---source include/not_gtid_enabled.inc
 
 # ****************************************************************
 connection master;
 
 SET @old_log_bin_trust_function_creators= @@global.log_bin_trust_function_creators;
 
-create table t1 (a int) engine = innodb;
+# cleanup
+--disable_warnings
+drop procedure if exists p1;
+drop procedure if exists p2;
+drop function if exists f1;
+drop table if exists t1,t2;
+drop view if exists v1;
+--enable_warnings
+create table t1 (a int);
 
 SET GLOBAL log_bin_trust_function_creators = 1;
 
@@ -34,7 +38,7 @@ delimiter ;//
 
 call p1();
 
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 connection slave;
 SELECT * FROM t1 ORDER BY a;
 connection master;
@@ -45,13 +49,13 @@ delimiter //;
 create procedure p2()
 begin
   declare a int default 4;
-  create table t2 engine = innodb as select a;
+  create table t2 as select a;
 end//
 delimiter ;//
 
 call p2();
 SELECT * FROM t2 ORDER BY a;
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 connection slave;
 SELECT * FROM t2 ORDER BY a;
 
@@ -86,7 +90,7 @@ delimiter ;//
 call p1(f1(1), f1(2));
 SELECT * FROM t1 ORDER BY a;
 
-create table t2(a int) engine = innodb;
+create table t2(a int);
 insert into t2 values (10),(11);
 SELECT a,f1(a) FROM t2 ORDER BY a;
 
@@ -94,7 +98,7 @@ SELECT a,f1(a) FROM t2 ORDER BY a;
 insert into t2 select f1(3);
 SELECT 'master:',a FROM t1 ORDER BY a;
 
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 connection slave;
 SELECT 'slave:',a FROM t1 ORDER BY a;
 
@@ -110,7 +114,7 @@ create view v1 as select f1(a) as f from t2;
 select * from v1 order by f;
 SELECT 'master:',a FROM t1 ORDER BY a;
 
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 connection slave;
 SELECT 'slave:',a FROM t1 ORDER BY a;
 
@@ -124,7 +128,7 @@ set @xx=123;
 execute s1 using @xx;
 SELECT 'master:',a FROM t1 ORDER BY a;
 
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 connection slave;
 SELECT 'slave:',a FROM t1 ORDER BY a;
 
@@ -147,7 +151,7 @@ end//
 delimiter ;//
 call p1(15);
 SELECT 'master:',a FROM t1 ORDER BY a;
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 connection slave;
 SELECT 'slave:',a FROM t1 ORDER BY a;
 
@@ -195,7 +199,7 @@ set @x=30;
 call p1();
 
 SELECT 'master', a FROM t1 ORDER BY a;
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 connection slave;
 SELECT 'slave', a FROM t1 ORDER BY a;
 
@@ -208,7 +212,7 @@ drop table t1;
 drop function f1;
 drop function f2;
 drop procedure p1;
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 
 #
 # bug#26199 Replication Failure on Slave when using stored procs
@@ -240,7 +244,7 @@ select sf_bug26199(b'101111111');
 select sf_bug26199('\'');
 select hex(b) from t2;
 
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 #connection slave;
 select hex(b) from t2;
 
@@ -254,7 +258,7 @@ drop function sf_bug26199;
 
 SET @@global.log_bin_trust_function_creators= @old_log_bin_trust_function_creators;
 
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 
 --echo end of the tests
 --source include/rpl_end.inc

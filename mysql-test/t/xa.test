@@ -119,8 +119,7 @@ xa rollback 'a','c';
 connect (con3,localhost,root,,);
 --connection con3
 xa start 'a','c';
---connection con1
---reap
+
 --disconnect con1
 --disconnect con3
 --connection default
@@ -228,11 +227,7 @@ XA START 'xid1';
 XA END 'xid1';
 XA ROLLBACK 'xid1';
 
-connection con1;
-REAP;
 disconnect con1;
-
-connection default;
 DROP TABLE t1;
 
 
@@ -356,16 +351,12 @@ XA START 'xid1';
 
 --echo # Connection default
 --connection default
---echo # Waiting for until a transaction with 'INSERT SELECT'
---echo # will be locked inside innodb subsystem.
-
 let $wait_condition=
-  SELECT COUNT(*) = 1 FROM information_schema.innodb_trx
-  WHERE trx_query = 'INSERT INTO t2 SELECT a FROM t1' AND
-  trx_operation_state = 'starting index read' AND
-  trx_state = 'LOCK WAIT';
+  SELECT COUNT(*) = 1 FROM information_schema.processlist
+  WHERE state = "Sending data"
+  AND info = "INSERT INTO t2 SELECT a FROM t1";
+--echo # Waiting until INSERT ... is blocked
 --source include/wait_condition.inc
-
 DELETE FROM t1;
 
 --echo # Connection con2

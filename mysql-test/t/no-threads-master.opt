@@ -1,1 +1,1 @@
---thread-handling=no-threads
+--one-thread --thread-handling=no-threads

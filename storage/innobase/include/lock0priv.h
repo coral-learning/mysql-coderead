@@ -1,6 +1,6 @@
 /*****************************************************************************
 
-Copyright (c) 2007, 2016, Oracle and/or its affiliates. All Rights Reserved.
+Copyright (c) 2007, 2009, Innobase Oy. All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -11,8 +11,8 @@ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
 FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
-this program; if not, write to the Free Software Foundation, Inc.,
-51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA
+this program; if not, write to the Free Software Foundation, Inc., 
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
 
 *****************************************************************************/
 
@@ -40,7 +40,9 @@ those functions in lock/ */
 #include "ut0lst.h"
 
 /** A table lock */
-struct lock_table_t {
+typedef struct lock_table_struct	lock_table_t;
+/** A table lock */
+struct lock_table_struct {
 	dict_table_t*	table;		/*!< database table in dictionary
 					cache */
 	UT_LIST_NODE_T(lock_t)
@@ -49,7 +51,9 @@ struct lock_table_t {
 };
 
 /** Record lock for a page */
-struct lock_rec_t {
+typedef struct lock_rec_struct		lock_rec_t;
+/** Record lock for a page */
+struct lock_rec_struct {
 	ulint	space;			/*!< space id */
 	ulint	page_no;		/*!< page number */
 	ulint	n_bits;			/*!< number of bits in the lock
@@ -58,8 +62,8 @@ struct lock_rec_t {
 					lock struct */
 };
 
-/** Lock struct; protected by lock_sys->mutex */
-struct lock_t {
+/** Lock struct */
+struct lock_struct {
 	trx_t*		trx;		/*!< transaction owning the
 					lock */
 	UT_LIST_NODE_T(lock_t)
@@ -96,28 +100,6 @@ lock_rec_get_prev(
 /*==============*/
 	const lock_t*	in_lock,/*!< in: record lock */
 	ulint		heap_no);/*!< in: heap number of the record */
-
-/*********************************************************************//**
-Cancels a waiting lock request and releases possible other transactions
-waiting behind it. */
-UNIV_INTERN
-void
-lock_cancel_waiting_and_release(
-/*============================*/
-	lock_t*	lock);	/*!< in/out: waiting lock request */
-
-/*********************************************************************//**
-Checks if some transaction has an implicit x-lock on a record in a clustered
-index.
-@return	transaction id of the transaction which has the x-lock, or 0 */
-UNIV_INLINE
-trx_id_t
-lock_clust_rec_some_has_impl(
-/*=========================*/
-	const rec_t*		rec,	/*!< in: user record */
-	const dict_index_t*	index,	/*!< in: clustered index */
-	const ulint*		offsets)/*!< in: rec_get_offsets(rec, index) */
-	MY_ATTRIBUTE((nonnull, warn_unused_result));
 
 #ifndef UNIV_NONINL
 #include "lock0priv.ic"

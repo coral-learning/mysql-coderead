@@ -1,4 +1,4 @@
-# Copyright (c) 2006, 2012, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2006, 2011, Oracle and/or its affiliates. All rights reserved.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -30,7 +30,6 @@ SET(HEADERS_ABI
   mysql/plugin.h
   mysql/plugin_audit.h
   mysql/plugin_ftparser.h
-  mysql/plugin_validate_password.h
 )
 
 SET(HEADERS 
@@ -55,20 +54,8 @@ SET(HEADERS
   m_ctype.h
   my_attribute.h 
   my_compiler.h
-  mysql_com_server.h
-  my_byteorder.h
-  byte_order_generic.h
-  byte_order_generic_x86.h
-  byte_order_generic_x86_64.h
-  little_endian.h
-  big_endian.h
   ${HEADERS_GEN_CONFIGURE}
 )
 
 INSTALL(FILES ${HEADERS} DESTINATION ${INSTALL_INCLUDEDIR} COMPONENT Development)
-INSTALL(DIRECTORY mysql/ DESTINATION ${INSTALL_INCLUDEDIR}/mysql COMPONENT Development 
- PATTERN "*.h"
- PATTERN "psi_abi*" EXCLUDE
-)
-
-
+INSTALL(DIRECTORY mysql/ DESTINATION ${INSTALL_INCLUDEDIR}/mysql COMPONENT Development FILES_MATCHING PATTERN "*.h")

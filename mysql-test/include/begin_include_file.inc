@@ -34,7 +34,6 @@
 #
 # # At the beginning of include/my_file.inc:
 # --let $include_filename= my_file.inc
-# [--let $include_silent= 1]
 # [--let $rpl_debug= 1]
 # --source include/begin_include_file.inc
 #
@@ -49,10 +48,10 @@
 #     must be provided both for begin_include_file.inc and
 #     end_include_file.inc.
 #
-#   $include_silent
-#     By default, the following string is printed to the result file:
-#       include/$include_filename
-#     If this variable is set, this printout is inhibited.
+#   $keep_include_silent
+#     This specifies whether it should be echoed to the result file
+#     the following string: include/$include_filename
+#     If not set, the string will be echoed.
 #
 #   $rpl_debug
 #     If set, this script will print the following text:
@@ -65,7 +64,7 @@
 # recursively.
 if (!$_include_file_depth)
 {
-  if (!$include_silent)
+  if (!$keep_include_silent)
   {
     --echo include/$include_filename
   }
@@ -75,13 +74,6 @@ if (!$_include_file_depth)
 if ($rpl_debug)
 {
   --echo $_include_file_indent==== BEGIN include/$include_filename ====
-  # Print this text (just once) to prevent checking in result files containing
-  # debug info.
-  if (!$printed_this_should_not_be_checked_in)
-  {
-    --echo DO_NOT_CHECK_IN_THIS_LINE: \$rpl_debug should only be used for debugging. Never check in a test that has $rpl_debug=1.
-    --let $printed_this_should_not_be_checked_in= 1
-  }
 }
 
 --let $_include_file_enabled_warnings= $ENABLED_WARNINGS$_include_file_enabled_warnings

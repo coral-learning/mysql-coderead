@@ -5,7 +5,7 @@ create table t2 (i int);
 connection: default
 lock tables t2 read;
 connection: con1
-set debug_sync='mdl_upgrade_lock SIGNAL parked WAIT_FOR go';
+set debug_sync='mdl_upgrade_shared_lock_to_exclusive SIGNAL parked WAIT_FOR go';
 alter table t1 rename t3;
 connection: default
 set debug_sync= 'now WAIT_FOR parked';
@@ -16,7 +16,7 @@ connection: con1
 connection: default
 unlock tables;
 connection: con2
-ERROR 42S02: Unknown table 'test.t1'
+ERROR 42S02: Unknown table 't1'
 drop table t3;
 SET DEBUG_SYNC= 'RESET';
 #
@@ -48,13 +48,8 @@ select count(*) from t1;
 count(*)
 0
 insert into t1 values (1), (1);
-# Check that SU lock is compatible with it. To do this use ALTER TABLE
-# which will fail when constructing .frm and thus obtaining SU metadata
-# lock.
-alter table t1 add index (not_exist);
-ERROR 42000: Key column 'not_exist' doesn't exist in table
 # Check that SNW lock is compatible with it. To do this use ALTER TABLE
-# which will fail during copying the table and thus obtaining SNW metadata
+# which will fail after opening the table and thus obtaining SNW metadata
 # lock.
 alter table t1 add primary key (c1);
 ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
@@ -144,13 +139,8 @@ select count(*) from t1;
 count(*)
 3
 insert into t1 values (1);
-# Check that SU lock is compatible with it. To do this use ALTER TABLE
-# which will fail when constructing .frm and thus obtaining SU metadata
-# lock.
-alter table t1 add index (not_exist);
-ERROR 42000: Key column 'not_exist' doesn't exist in table
 # Check that SNW lock is compatible with it. To do this use ALTER TABLE
-# which will fail during copying the table and thus obtaining SNW metadata
+# which will fail after opening the table and thus obtaining SNW metadata
 # lock.
 alter table t1 add primary key (c1);
 ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
@@ -254,13 +244,8 @@ select count(*) from t1;
 count(*)
 3
 insert into t1 values (1);
-# Check that SU lock is compatible with it. To do this use ALTER TABLE
-# which will fail when constructing .frm and thus obtaining SU metadata
-# lock.
-alter table t1 add index (not_exist);
-ERROR 42000: Key column 'not_exist' doesn't exist in table
 # Check that SNW lock is compatible with it. To do this use ALTER TABLE
-# which will fail during copying the table and thus obtaining SNW metadata
+# which will fail after opening the table and thus obtaining SNW metadata
 # lock.
 alter table t1 add primary key (c1);
 ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
@@ -349,13 +334,8 @@ c1
 # effects of concurrent insert.
 select * from t1;
 insert into t1 values (1);
-# Check that SU lock is compatible with it. To do this use ALTER TABLE
-# which will fail when constructing .frm and thus obtaining SU metadata
-# lock.
-alter table t1 add index (not_exist);
-ERROR 42000: Key column 'not_exist' doesn't exist in table
 # Check that SNW lock is not compatible with SW lock.
-# Again we use ALTER TABLE which fails during copying
+# Again we use ALTER TABLE which fails after opening
 # the table to avoid upgrade of SNW -> X.
 # Sending:
 alter table t1 add primary key (c1);;
@@ -417,108 +397,12 @@ rename table t2 to t1;
 # Switching to connection 'default'.
 #
 #
-# 5) Acquire SU lock on the table. We have to use DEBUG_SYNC for
-#    this, to prevent SU from being immediately upgraded to X.
-#
-set debug_sync= 'alter_opened_table SIGNAL locked WAIT_FOR finish';
-# Sending:
-alter table t1 add primary key (c1);;
-# 
-# Switching to connection 'mdl_con1'.
-set debug_sync= 'now WAIT_FOR locked';
-# Check that S, SH, SR and SW locks are compatible with it.
-handler t1 open;
-handler t1 close;
-select column_name from information_schema.columns where
-table_schema='test' and table_name='t1';
-column_name
-c1
-select count(*) from t1;
-count(*)
-5
-delete from t1 limit 1;
-# Check that SU lock is incompatible with SU lock.
-# Sending:
-alter table t1 add primary key (c1);;
-# 
-# Switching to connection 'mdl_con2'.
-# Check that the above ALTER is blocked because of SU lock.
-# Unblock ALTERs.
-set debug_sync= 'now SIGNAL finish';
-# 
-# Switching to connection 'default'.
-# Reaping first ALTER TABLE.
-ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
-# 
-# Switching to connection 'mdl_con1'.
-# Reaping another ALTER TABLE.
-ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
-# 
-# Switching to connection 'default'.
-set debug_sync= 'alter_opened_table SIGNAL locked WAIT_FOR finish';
-# Sending:
-alter table t1 add primary key (c1);;
-# 
-# Switching to connection 'mdl_con1'.
-set debug_sync= 'now WAIT_FOR locked';
-# Check that SNRW lock is incompatible with SU lock.
-# Sending:
-lock table t1 write;;
-# 
-# Switching to connection 'mdl_con2'.
-# Check that the above LOCK TABLES is blocked because of SU lock.
-# Unblock ALTER and thus LOCK TABLES.
-set debug_sync= 'now SIGNAL finish';
-# 
-# Switching to connection 'default'.
-# Reaping ALTER TABLE.
-ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
-# 
-# Switching to connection 'mdl_con1'.
-# Reaping LOCK TABLES
-insert into t1 values (1);
-unlock tables;
-# 
-# Switching to connection 'default'.
-set debug_sync= 'alter_opened_table SIGNAL locked WAIT_FOR finish';
-# Sending:
-alter table t1 add primary key (c1);;
-# 
-# Switching to connection 'mdl_con1'.
-set debug_sync= 'now WAIT_FOR locked';
-# Check that X lock is incompatible with SU lock.
-# Sending:
-rename table t1 to t2;;
-# 
-# Switching to connection 'mdl_con2'.
-# Check that the above RENAME is blocked because of SU lock.
-# Unblock ALTER and thus RENAME TABLE.
-set debug_sync= 'now SIGNAL finish';
-# 
-# Switching to connection 'default'.
-# Now we have ALTER TABLE with SU->SNW and RENAME TABLE with pending
-# X-lock. In this case ALTER TABLE should be chosen as victim.
-# Reaping ALTER TABLE.
-ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
-# 
-# Switching to connection 'mdl_con1'.
-# Reaping RENAME TABLE
-# Revert back to original state of things.
-rename table t2 to t1;
-#
-# There is no need to check that upgrade from SNW/SNRW to X is
-# blocked by presence of another SU lock because SNW/SNRW is
-# incompatible with SU anyway.
-# 
-# Switching to connection 'default'.
-#
-#
-# 6) Acquire SNW lock on the table. We have to use DEBUG_SYNC for
+# 5) Acquire SNW lock on the table. We have to use DEBUG_SYNC for
 #    this, to prevent SNW from being immediately upgraded to X.
 #
-set debug_sync= 'alter_table_copy_after_lock_upgrade SIGNAL locked WAIT_FOR finish';
+set debug_sync= 'after_open_table_mdl_shared SIGNAL locked WAIT_FOR finish';
 # Sending:
-alter table t1 add primary key (c1), lock=shared, algorithm=copy;;
+alter table t1 add primary key (c1);;
 # 
 # Switching to connection 'mdl_con1'.
 set debug_sync= 'now WAIT_FOR locked';
@@ -549,13 +433,13 @@ ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
 # Reaping DELETE.
 # 
 # Switching to connection 'default'.
-set debug_sync= 'alter_table_copy_after_lock_upgrade SIGNAL locked WAIT_FOR finish';
+set debug_sync= 'after_open_table_mdl_shared SIGNAL locked WAIT_FOR finish';
 # Sending:
-alter table t1 add primary key (c1), lock=shared, algorithm=copy;;
+alter table t1 add primary key (c1);;
 # 
 # Switching to connection 'mdl_con1'.
 set debug_sync= 'now WAIT_FOR locked';
-# Check that SU lock is incompatible with SNW lock.
+# Check that SNW lock is incompatible with SNW lock.
 # Sending:
 alter table t1 add primary key (c1);;
 # 
@@ -572,14 +456,10 @@ ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
 # Reaping another ALTER TABLE.
 ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
 # 
-# Note that we can't easily check SNW vs SNW locks since
-# SNW is only used by ALTER TABLE after upgrading from SU
-# and SU is also incompatible with SNW.
-#
 # Switching to connection 'default'.
-set debug_sync= 'alter_table_copy_after_lock_upgrade SIGNAL locked WAIT_FOR finish';
+set debug_sync= 'after_open_table_mdl_shared SIGNAL locked WAIT_FOR finish';
 # Sending:
-alter table t1 add primary key (c1), lock=shared, algorithm=copy;;
+alter table t1 add primary key (c1);;
 # 
 # Switching to connection 'mdl_con1'.
 set debug_sync= 'now WAIT_FOR locked';
@@ -602,9 +482,9 @@ insert into t1 values (1);
 unlock tables;
 # 
 # Switching to connection 'default'.
-set debug_sync= 'alter_table_copy_after_lock_upgrade SIGNAL locked WAIT_FOR finish';
+set debug_sync= 'after_open_table_mdl_shared SIGNAL locked WAIT_FOR finish';
 # Sending:
-alter table t1 add primary key (c1), algorithm=copy, lock=shared;;
+alter table t1 add primary key (c1);;
 # 
 # Switching to connection 'mdl_con1'.
 set debug_sync= 'now WAIT_FOR locked';
@@ -633,7 +513,7 @@ rename table t2 to t1;
 # Switching to connection 'default'.
 #
 #
-# 7) Acquire SNRW lock on the table. 
+# 6) Acquire SNRW lock on the table. 
 #
 #
 lock table t1 write;
@@ -680,12 +560,12 @@ unlock tables;
 lock table t1 write;
 # 
 # Switching to connection 'mdl_con1'.
-# Check that SU lock is incompatible with SNRW lock.
+# Check that SNW lock is incompatible with SNRW lock.
 # Sending:
 alter table t1 add primary key (c1);;
 # 
 # Switching to connection 'default'.
-# Check that the above ALTER is blocked because of SNRW lock.
+# Check that the above ALTER is blocked because of UNWR lock.
 # Unblock ALTER.
 unlock tables;
 # 
@@ -693,10 +573,6 @@ unlock tables;
 # Reaping ALTER TABLE.
 ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
 # 
-# Note that we can't easily check SNW vs SNRW locks since
-# SNW is only used by ALTER TABLE after upgrading from SU
-# and SU is also incompatible with SNRW.
-#
 # Switching to connection 'default'.
 lock table t1 write;
 # 
@@ -740,7 +616,7 @@ rename table t2 to t1;
 # Switching to connection 'default'.
 #
 #
-# 8) Now do the same round of tests for X lock. We use additional
+# 7) Now do the same round of tests for X lock. We use additional
 #    table to get long-lived lock of this type.
 #
 create table t2 (c1 int);
@@ -868,7 +744,7 @@ rename table t1 to t2;;
 # 
 # Switching to connection 'mdl_con1'.
 # Check that RENAME has acquired X lock on t1 and is waiting for t2.
-# Check that SU lock is incompatible with X lock.
+# Check that SNW lock is incompatible with X lock.
 # Sending:
 alter table t1 add primary key (c1);;
 # 
@@ -885,11 +761,7 @@ ERROR 42S01: Table 't2' already exists
 # Switching to connection 'mdl_con1'.
 # Reaping ALTER.
 ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
-#
-# Note that we can't easily check SNW vs X locks since
-# SNW is only used by ALTER TABLE after upgrading from SU
-# and SU is also incompatible with X.
-#
+# 
 # Switching to connection 'mdl_con2'.
 # Prepare for blocking RENAME TABLE.
 lock tables t2 read;
@@ -949,9 +821,6 @@ rename table t3 to t1;
 # B) Now let us test compatibility in cases when both locks
 #    are pending. I.e. let us test rules for priorities between
 #    different types of metadata locks.
-#
-#    Note: No tests for pending SU lock as this lock requires
-#          even stronger active or pending lock.
 #
 # 
 # Switching to connection 'mdl_con2'.
@@ -1269,9 +1138,6 @@ unlock tables;
 #    transactional context. Obviously we are mostly interested
 #    in conflicting types of locks.
 #
-#    Note: No tests for active/pending SU lock since
-#          ALTER TABLE is in its own transaction.
-#
 #
 # 1) Let us check how various locks used within transactional
 #    context interact with active/pending SNW lock.
@@ -1288,9 +1154,9 @@ count(*)
 # We have to use DEBUG_SYNC facility as otherwise SNW lock
 # will be immediately released (or upgraded to X lock).
 insert into t2 values (1), (1);
-set debug_sync= 'alter_table_copy_after_lock_upgrade SIGNAL locked WAIT_FOR finish';
+set debug_sync= 'after_open_table_mdl_shared SIGNAL locked WAIT_FOR finish';
 # Sending:
-alter table t2 add primary key (c1), algorithm=copy, lock=shared;;
+alter table t2 add primary key (c1);;
 # 
 # Switching to connection 'default'.
 set debug_sync= 'now WAIT_FOR locked';
@@ -1333,9 +1199,9 @@ count(*)
 # 
 # Switching to connection 'mdl_con1'.
 # Create an active SNW lock on t1.
-set debug_sync= 'alter_table_copy_after_lock_upgrade SIGNAL locked WAIT_FOR finish';
+set debug_sync= 'after_open_table_mdl_shared SIGNAL locked WAIT_FOR finish';
 # Sending:
-alter table t1 add primary key (c1), algorithm=copy, lock=shared;;
+alter table t1 add primary key (c1);;
 # 
 # Switching to connection 'default'.
 set debug_sync= 'now WAIT_FOR locked';
@@ -2106,7 +1972,7 @@ drop tables t1, t2;
 #
 create table t1 (i int);
 # Ensure that ALTER waits once it has acquired SNW lock.
-set debug_sync='alter_table_copy_after_lock_upgrade SIGNAL parked1 WAIT_FOR go1';
+set debug_sync='after_open_table_mdl_shared SIGNAL parked1 WAIT_FOR go1';
 # Sending:
 alter table t1 add column j int;
 #
@@ -2413,18 +2279,13 @@ set global log_output=@save_log_output;
 #
 drop tables if exists t1, t2;
 create table t1 (i int);
-insert into t1 values(1);
 # Let us check that we won't deadlock if during filling
 # of I_S table we encounter conflicting metadata lock
 # which owner is in its turn waiting for our connection.
 lock tables t1 read;
-# Switching to connection 'con46044_2'.
-# Sending:
-update t1 set i = 2;
 # Switching to connection 'con46044'.
-# Waiting until UPDATE t1 SET ... is blocked.
 # Sending:
-create table t2 select * from t1;;
+create table t2 select * from t1 for update;;
 # Switching to connection 'default'.
 # Waiting until CREATE TABLE ... SELECT ... is blocked.
 # First let us check that SHOW FIELDS/DESCRIBE doesn't
@@ -2454,7 +2315,6 @@ unlock tables;
 # Switching to connection 'con46044'.
 # Reaping CREATE TABLE ... SELECT ... .
 drop table t2;
-# Reaping UPDATE t1 statement
 #
 # Let us also check that queries to I_S wait for conflicting metadata
 # locks to go away instead of skipping table with a warning in cases
@@ -2464,13 +2324,9 @@ drop table t2;
 # We check same three queries to I_S in this new situation.
 # Switching to connection 'con46044_2'.
 lock tables t1 read;
-# Switching to connection 'con46044_3'.
-# Sending:
-update t1 set i = 3;
 # Switching to connection 'con46044'.
-# Waiting until UPDATE t1 SET ... is blocked.
 # Sending:
-create table t2 select * from t1;;
+create table t2 select * from t1 for update;;
 # Switching to connection 'default'.
 # Waiting until CREATE TABLE ... SELECT ... is blocked.
 # Let us check that SHOW FIELDS/DESCRIBE gets blocked.
@@ -2486,16 +2342,11 @@ unlock tables;
 Field	Type	Null	Key	Default	Extra
 i	int(11)	YES		NULL	
 drop table t2;
-# Reaping UPDATE t1 statement
 # Switching to connection 'con46044_2'.
 lock tables t1 read;
-# Switching to connection 'con46044_3'.
-# Sending:
-update t1 set i = 4;
 # Switching to connection 'con46044'.
-# Waiting until UPDATE t1 SET ... is blocked.
 # Sending:
-create table t2 select * from t1;;
+create table t2 select * from t1 for update;;
 # Switching to connection 'default'.
 # Waiting until CREATE TABLE ... SELECT ... is blocked.
 # Check that I_S query which reads only .FRMs gets blocked.
@@ -2511,16 +2362,11 @@ unlock tables;
 column_name
 i
 drop table t2;
-# Reaping UPDATE t1 statement
 # Switching to connection 'con46044_2'.
 lock tables t1 read;
-# Switching to connection 'con46044_3'.
-# Sending:
-update t1 set i = 5;
 # Switching to connection 'con46044'.
-# Waiting until UPDATE t1 SET ... is blocked.
 # Sending:
-create table t2 select * from t1;;
+create table t2 select * from t1 for update;;
 # Switching to connection 'default'.
 # Waiting until CREATE TABLE ... SELECT ... is blocked.
 # Finally, check that I_S query which does full-blown table open
@@ -2537,7 +2383,6 @@ unlock tables;
 table_name	table_type	auto_increment	table_comment
 t2	BASE TABLE	NULL	
 drop table t2;
-# Reaping UPDATE t1 statement
 # Switching to connection 'default'.
 # Clean-up.
 drop table t1;
@@ -2555,7 +2400,7 @@ c1	c2	c3
 3	3	0
 #
 # Switching to connection 'con46273'.
-set debug_sync='alter_table_copy_after_lock_upgrade SIGNAL alter_table_locked WAIT_FOR alter_go';
+set debug_sync='after_lock_tables_takes_lock SIGNAL alter_table_locked WAIT_FOR alter_go';
 alter table t1 add column e int, rename to t2;;
 #
 # Switching to connection 'default'.
@@ -2693,9 +2538,9 @@ drop table if exists t1;
 set debug_sync= 'RESET';
 create table t1 (i int) engine=InnoDB;
 # Switching to connection 'con50913_1'.
-set debug_sync= 'alter_table_copy_after_lock_upgrade SIGNAL parked WAIT_FOR go';
+set debug_sync= 'thr_multi_lock_after_thr_lock SIGNAL parked WAIT_FOR go';
 # Sending:
-alter table t1 add column j int, ALGORITHM=COPY;
+alter table t1 add column j int;
 # Switching to connection 'default'.
 # Wait until ALTER TABLE gets blocked on a sync point after
 # acquiring thr_lock.c lock.
@@ -2735,7 +2580,7 @@ i
 # Switching to connection 'default'.
 # Start ALTER TABLE which will acquire SNW lock and
 # table lock and get blocked on sync point.
-set debug_sync= 'alter_table_copy_after_lock_upgrade SIGNAL parked WAIT_FOR go';
+set debug_sync= 'thr_multi_lock_after_thr_lock SIGNAL parked WAIT_FOR go';
 # Sending:
 alter table t1 add column j int;
 # Switching to connection 'con1'.
@@ -3024,7 +2869,7 @@ SET DEBUG_SYNC= 'now SIGNAL blocked';
 # Reaping: DROP DATABASE db1
 # Connection con2
 # Reaping: DROP TABLE db1.t1
-ERROR 42S02: Unknown table 'db1.t1'
+ERROR 42S02: Unknown table 't1'
 # Connection default
 SET DEBUG_SYNC= 'RESET';
 #
@@ -3069,15 +2914,11 @@ CREATE TABLE m1(a INT) engine=MERGE UNION=(t1, t2);
 INSERT INTO t1 VALUES (1), (2);
 INSERT INTO t2 VALUES (3), (4);
 # Connection con1
-# We need EXECUTE 2 since ALTER TABLE does SU => SNW => X and we want
-# to stop at the second upgrade.
-SET DEBUG_SYNC= 'mdl_upgrade_lock SIGNAL upgrade WAIT_FOR continue EXECUTE 2';
+SET DEBUG_SYNC= 'mdl_upgrade_shared_lock_to_exclusive SIGNAL upgrade WAIT_FOR continue';
 # Sending:
 ALTER TABLE m1 engine=MERGE UNION=(t2, t1);
 # Connection con2
 # Waiting for ALTER TABLE to try lock upgrade
-SET DEBUG_SYNC= 'now WAIT_FOR upgrade';
-SET DEBUG_SYNC= 'now SIGNAL continue';
 SET DEBUG_SYNC= 'now WAIT_FOR upgrade';
 # Sending:
 DELETE FROM t2 WHERE a = 3;
@@ -3101,53 +2942,3 @@ SET DEBUG_SYNC= 'now SIGNAL continue';
 # Connection default
 DROP TABLE m1, t1, t2;
 SET DEBUG_SYNC= 'RESET';
-#
-# Bug#21021848 ASSERTION `M_STATUS == DA_ERROR' FAILED.
-#
-CREATE TABLE t1(c1 INT NOT NULL) ENGINE = csv;
-CREATE TABLE t2(c1 INT NOT NULL);
-# Emulate corruption of t1
-LOCK TABLES t1 WRITE;
-INSERT INTO t1 VALUES(0);
-CHECK TABLE t1;
-Table	Op	Msg_type	Msg_text
-test.t1	check	error	Corrupt
-UNLOCK TABLES;
-# Start XA txn on default
-XA START 'test2';
-# Acquire SR on t2
-SELECT * FROM t2;
-c1
-# Block IS query just before calling lock_table_names() (before X on t1)
-SET DEBUG_SYNC='recover_ot_repair SIGNAL parked WAIT_FOR go';
-SELECT COUNT(*)FROM information_schema.key_column_usage;
-# Create a new conncection which will compete for MDL lock
-# Wait until default becomes blocked
-SET DEBUG_SYNC='now WAIT_FOR parked';
-# Try to acquire X on t1 and t2, which will block while default
-# holds SR on t2
-DROP TABLES t1, t2;
-# Create control connection
-# Wait until con1 is blocked
-# Wake up XA txn/IS query on default
-SET DEBUG_SYNC='now SIGNAL go';
-# Disconnect control connection
-# Switch to default connection
-# Wait for IS query which will try repair t1 which requires X.
-# Previously that resulted in deadlock with con1 over t1,
-# but now t1 is skipped and a warning is issued
-COUNT(*)
-59
-Warnings:
-Warning	1194	Table 't1' is marked as crashed and should be repaired
-# Finish XA txn 'test2' to release SR on t2 so that con1
-# becomes unblocked
-XA END 'test2';
-XA PREPARE 'test2';
-XA COMMIT 'test2';
-# Cleanup
-SET DEBUG_SYNC= 'RESET';
-# Clean up con1 now that the XA txn has finished
-# Wait for the now unblocked DROP t1, t2 to complete
-# Disconnecting con1
-# Switching to back to default at end of test case

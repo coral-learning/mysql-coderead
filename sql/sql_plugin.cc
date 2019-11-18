@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2005, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2005, 2017, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,8 +11,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA */
 
 #include "sql_priv.h"                         // SHOW_MY_BOOL
 #include "unireg.h"
@@ -33,15 +33,7 @@
 #include "sql_audit.h"
 #include <mysql/plugin_auth.h>
 #include "lock.h"                               // MYSQL_LOCK_IGNORE_TIMEOUT
-#include <mysql/plugin_validate_password.h>
-#include "my_default.h"
 #include "debug_sync.h"
-
-#include <algorithm>
-
-using std::min;
-using std::max;
-
 #define REPORT_TO_LOG  1
 #define REPORT_TO_USER 2
 
@@ -58,8 +50,8 @@ static TYPELIB global_plugin_typelib=
   { array_elements(global_plugin_typelib_names)-1,
     "", global_plugin_typelib_names, NULL };
 
-static I_List<i_string> opt_plugin_load_list;
-I_List<i_string> *opt_plugin_load_list_ptr= &opt_plugin_load_list;
+
+char *opt_plugin_load= NULL;
 char *opt_plugin_dir_ptr;
 char opt_plugin_dir[FN_REFLEN];
 /*
@@ -75,8 +67,7 @@ const LEX_STRING plugin_type_names[MYSQL_MAX_PLUGIN_TYPE_NUM]=
   { C_STRING_WITH_LEN("INFORMATION SCHEMA") },
   { C_STRING_WITH_LEN("AUDIT") },
   { C_STRING_WITH_LEN("REPLICATION") },
-  { C_STRING_WITH_LEN("AUTHENTICATION") },
-  { C_STRING_WITH_LEN("VALIDATE PASSWORD") }
+  { C_STRING_WITH_LEN("AUTHENTICATION") }
 };
 
 extern int initialize_schema_table(st_plugin_int *plugin);
@@ -93,13 +84,13 @@ extern int finalize_audit_plugin(st_plugin_int *plugin);
 plugin_type_init plugin_type_initialize[MYSQL_MAX_PLUGIN_TYPE_NUM]=
 {
   0,ha_initialize_handlerton,0,0,initialize_schema_table,
-  initialize_audit_plugin,0,0,0
+  initialize_audit_plugin,0,0
 };
 
 plugin_type_init plugin_type_deinitialize[MYSQL_MAX_PLUGIN_TYPE_NUM]=
 {
   0,ha_finalize_handlerton,0,0,finalize_schema_table,
-  finalize_audit_plugin,0,0,0
+  finalize_audit_plugin,0,0
 };
 
 #ifdef HAVE_DLOPEN
@@ -110,8 +101,6 @@ static const char *sizeof_st_plugin_sym=
 static const char *plugin_declarations_sym= "_mysql_plugin_declarations_";
 static int min_plugin_interface_version= MYSQL_PLUGIN_INTERFACE_VERSION & ~0xFF;
 #endif
-
-static void*	innodb_callback_data;
 
 /* Note that 'int version' must be the first field of every plugin
    sub-structure (plugin->info).
@@ -125,8 +114,7 @@ static int min_plugin_info_interface_version[MYSQL_MAX_PLUGIN_TYPE_NUM]=
   MYSQL_INFORMATION_SCHEMA_INTERFACE_VERSION,
   MYSQL_AUDIT_INTERFACE_VERSION,
   MYSQL_REPLICATION_INTERFACE_VERSION,
-  MYSQL_AUTHENTICATION_INTERFACE_VERSION,
-  MYSQL_VALIDATE_PASSWORD_INTERFACE_VERSION
+  MYSQL_AUTHENTICATION_INTERFACE_VERSION
 };
 static int cur_plugin_info_interface_version[MYSQL_MAX_PLUGIN_TYPE_NUM]=
 {
@@ -137,8 +125,7 @@ static int cur_plugin_info_interface_version[MYSQL_MAX_PLUGIN_TYPE_NUM]=
   MYSQL_INFORMATION_SCHEMA_INTERFACE_VERSION,
   MYSQL_AUDIT_INTERFACE_VERSION,
   MYSQL_REPLICATION_INTERFACE_VERSION,
-  MYSQL_AUTHENTICATION_INTERFACE_VERSION,
-  MYSQL_VALIDATE_PASSWORD_INTERFACE_VERSION
+  MYSQL_AUTHENTICATION_INTERFACE_VERSION
 };
 
 /* support for Services */
@@ -268,9 +255,6 @@ public:
 static void plugin_load(MEM_ROOT *tmp_root, int *argc, char **argv);
 static bool plugin_load_list(MEM_ROOT *tmp_root, int *argc, char **argv,
                              const char *list);
-static my_bool check_if_option_is_deprecated(int optid,
-                                             const struct my_option *opt,
-                                             char *argument);
 static int test_plugin_options(MEM_ROOT *, struct st_plugin_int *,
                                int *, char **);
 static bool register_builtin(struct st_mysql_plugin *, struct st_plugin_int *,
@@ -428,7 +412,7 @@ static st_plugin_dl *plugin_dl_insert_or_reuse(struct st_plugin_dl *plugin_dl)
       DBUG_RETURN(tmp);
     }
   }
-  if (insert_dynamic(&plugin_dl_array, &plugin_dl))
+  if (insert_dynamic(&plugin_dl_array, (uchar*)&plugin_dl))
     DBUG_RETURN(0);
   tmp= *dynamic_element(&plugin_dl_array, plugin_dl_array.elements - 1,
                         struct st_plugin_dl **)=
@@ -481,7 +465,7 @@ static st_plugin_dl *plugin_dl_add(const LEX_STRING *dl, int report)
     tmp->ref_count++;
     DBUG_RETURN(tmp);
   }
-  memset(&plugin_dl, 0, sizeof(plugin_dl));
+  bzero(&plugin_dl, sizeof(plugin_dl));
   /* Compile dll path */
   dlpathlen=
     strxnmov(dlpath, sizeof(dlpath) - 1, opt_plugin_dir, "/", dl->str, NullS) -
@@ -528,9 +512,8 @@ static st_plugin_dl *plugin_dl_add(const LEX_STRING *dl, int report)
     if ((sym= dlsym(plugin_dl.handle, list_of_services[i].name)))
     {
       uint ver= (uint)(intptr)*(void**)sym;
-      if ((*(void**)sym) != list_of_services[i].service && /* already replaced */
-          (ver > list_of_services[i].version ||
-           (ver >> 8) < (list_of_services[i].version >> 8)))
+      if (ver > list_of_services[i].version ||
+        (ver >> 8) < (list_of_services[i].version >> 8))
       {
         char buf[MYSQL_ERRMSG_SIZE];
         my_snprintf(buf, sizeof(buf),
@@ -601,7 +584,7 @@ static st_plugin_dl *plugin_dl_add(const LEX_STRING *dl, int report)
     for (i=0;
          (old=(struct st_mysql_plugin *)(ptr+i*sizeof_st_plugin))->info;
          i++)
-      memcpy(cur+i, old, min<size_t>(sizeof(cur[i]), sizeof_st_plugin));
+      memcpy(cur+i, old, min(sizeof(cur[i]), sizeof_st_plugin));
 
     sym= cur;
   }
@@ -675,7 +658,7 @@ static void plugin_dl_del(const LEX_STRING *dl)
       if (! --tmp->ref_count)
       {
         free_plugin_mem(tmp);
-        memset(tmp, 0, sizeof(struct st_plugin_dl));
+        bzero(tmp, sizeof(struct st_plugin_dl));
       }
       break;
     }
@@ -773,10 +756,11 @@ static plugin_ref intern_plugin_lock(LEX *lex, plugin_ref rc)
     *plugin= pi;
 #endif
     pi->ref_count++;
-    DBUG_PRINT("info",("thd: %p, plugin: \"%s\", ref_count: %d",
-                       current_thd, pi->name.str, pi->ref_count));
+    DBUG_PRINT("info",("thd: 0x%lx, plugin: \"%s\", ref_count: %d",
+                       (long) current_thd, pi->name.str, pi->ref_count));
+
     if (lex)
-      insert_dynamic(&lex->plugins, &plugin);
+      insert_dynamic(&lex->plugins, (uchar*)&plugin);
     DBUG_RETURN(plugin);
   }
   DBUG_RETURN(NULL);
@@ -823,7 +807,7 @@ static st_plugin_int *plugin_insert_or_reuse(struct st_plugin_int *plugin)
       DBUG_RETURN(tmp);
     }
   }
-  if (insert_dynamic(&plugin_array, &plugin))
+  if (insert_dynamic(&plugin_array, (uchar*)&plugin))
     DBUG_RETURN(0);
   tmp= *dynamic_element(&plugin_array, plugin_array.elements - 1,
                         struct st_plugin_int **)=
@@ -850,7 +834,7 @@ static bool plugin_add(MEM_ROOT *tmp_root,
     DBUG_RETURN(TRUE);
   }
   /* Clear the whole struct to catch future extensions. */
-  memset(&tmp, 0, sizeof(tmp));
+  bzero((char*) &tmp, sizeof(tmp));
   if (! (tmp.plugin_dl= plugin_dl_add(dl, report)))
     DBUG_RETURN(TRUE);
   /* Find plugin by name */
@@ -1018,11 +1002,7 @@ static void reap_plugins(void)
 
   list= reap;
   while ((plugin= *(--list)))
-  {
-    if (!opt_bootstrap)
-      sql_print_information("Shutting down plugin '%s'", plugin->name.str);
     plugin_deinitialize(plugin, true);
-  }
 
   mysql_mutex_lock(&LOCK_plugin_delete);
   mysql_mutex_lock(&LOCK_plugin);
@@ -1107,14 +1087,6 @@ void plugin_unlock_list(THD *thd, plugin_ref *list, uint count)
   LEX *lex= thd ? thd->lex : 0;
   DBUG_ENTER("plugin_unlock_list");
   DBUG_ASSERT(list);
-
-  /*
-    In unit tests, LOCK_plugin may be uninitialized, so do not lock it.
-    Besides: there's no point in locking it, if there are no plugins to unlock.
-   */
-  if (count == 0)
-    DBUG_VOID_RETURN;
-
   mysql_mutex_lock(&LOCK_plugin);
   while (count--)
     intern_plugin_unlock(lex, *list++);
@@ -1122,6 +1094,7 @@ void plugin_unlock_list(THD *thd, plugin_ref *list, uint count)
   mysql_mutex_unlock(&LOCK_plugin);
   DBUG_VOID_RETURN;
 }
+
 
 static int plugin_initialize(struct st_plugin_int *plugin)
 {
@@ -1141,19 +1114,9 @@ static int plugin_initialize(struct st_plugin_int *plugin)
                       plugin->name.str, plugin_type_names[plugin->plugin->type].str);
       goto err;
     }
-
-    /* FIXME: Need better solution to transfer the callback function
-    array to memcached */
-    if (strcmp(plugin->name.str, "InnoDB") == 0) {
-      innodb_callback_data = ((handlerton*)plugin->data)->data;
-    }
   }
   else if (plugin->plugin->init)
   {
-    if (strcmp(plugin->name.str, "daemon_memcached") == 0) {
-       plugin->data = (void*)innodb_callback_data;
-    }
-
     if (plugin->plugin->init(plugin))
     {
       sql_print_error("Plugin '%s' init function returned error.",
@@ -1207,6 +1170,11 @@ err:
   mysql_mutex_lock(&LOCK_plugin);
   plugin->state= state;
 
+  /* maintain the obsolete @@have_innodb variable */
+  if (!my_strcasecmp(&my_charset_latin1, plugin->name.str, "InnoDB"))
+    have_innodb= state & PLUGIN_IS_READY ? SHOW_OPTION_YES
+                                         : SHOW_OPTION_DISABLED;
+
   DBUG_RETURN(ret);
 }
 
@@ -1216,7 +1184,7 @@ extern "C" uchar *get_bookmark_hash_key(const uchar *, size_t *, my_bool);
 
 
 uchar *get_plugin_hash_key(const uchar *buff, size_t *length,
-                           my_bool not_used MY_ATTRIBUTE((unused)))
+                           my_bool not_used __attribute__((unused)))
 {
   struct st_plugin_int *plugin= (st_plugin_int *)buff;
   *length= (uint)plugin->name.length;
@@ -1225,7 +1193,7 @@ uchar *get_plugin_hash_key(const uchar *buff, size_t *length,
 
 
 uchar *get_bookmark_hash_key(const uchar *buff, size_t *length,
-                             my_bool not_used MY_ATTRIBUTE((unused)))
+                             my_bool not_used __attribute__((unused)))
 {
   struct st_bookmark *var= (st_bookmark *)buff;
   *length= var->name_len + 1;
@@ -1261,8 +1229,11 @@ static void init_plugin_psi_keys(void)
   const char* category= "sql";
   int count;
 
+  if (PSI_server == NULL)
+    return;
+
   count= array_elements(all_plugin_mutexes);
-  mysql_mutex_register(category, all_plugin_mutexes, count);
+  PSI_server->register_mutex(category, all_plugin_mutexes, count);
 }
 #endif /* HAVE_PSI_INTERFACE */
 
@@ -1334,7 +1305,11 @@ int plugin_init(int *argc, char **argv, int flags)
     }
     for (plugin= *builtins; plugin->info; plugin++)
     {
-      memset(&tmp, 0, sizeof(tmp));
+      if (opt_ignore_builtin_innodb &&
+          !my_strnncoll(&my_charset_latin1, (const uchar*) plugin->name,
+                        6, (const uchar*) "InnoDB", 6))
+        continue;
+      bzero(&tmp, sizeof(tmp));
       tmp.plugin= plugin;
       tmp.name.str= (char *)plugin->name;
       tmp.name.length= strlen(plugin->name);
@@ -1385,30 +1360,23 @@ int plugin_init(int *argc, char **argv, int flags)
       if (is_myisam)
       {
         DBUG_ASSERT(!global_system_variables.table_plugin);
-        DBUG_ASSERT(!global_system_variables.temp_table_plugin);
         global_system_variables.table_plugin=
           my_intern_plugin_lock(NULL, plugin_int_to_ref(plugin_ptr));
-        global_system_variables.temp_table_plugin=
-          my_intern_plugin_lock(NULL, plugin_int_to_ref(plugin_ptr));
-        DBUG_ASSERT(plugin_ptr->ref_count == 2);
+        DBUG_ASSERT(plugin_ptr->ref_count == 1);
       }
     }
   }
 
   /* should now be set to MyISAM storage engine */
   DBUG_ASSERT(global_system_variables.table_plugin);
-  DBUG_ASSERT(global_system_variables.temp_table_plugin);
 
   mysql_mutex_unlock(&LOCK_plugin);
 
   /* Register all dynamic plugins */
   if (!(flags & PLUGIN_INIT_SKIP_DYNAMIC_LOADING))
   {
-    I_List_iterator<i_string> iter(opt_plugin_load_list);
-    i_string *item;
-    while (NULL != (item= iter++))
-      plugin_load_list(&tmp_root, argc, argv, item->ptr);
-
+    if (opt_plugin_load)
+      plugin_load_list(&tmp_root, argc, argv, opt_plugin_load);
     if (!(flags & PLUGIN_INIT_SKIP_PLUGIN_TABLE))
       plugin_load(&tmp_root, argc, argv);
   }
@@ -1479,7 +1447,7 @@ static bool register_builtin(struct st_mysql_plugin *plugin,
   tmp->ref_count= 0;
   tmp->plugin_dl= 0;
 
-  if (insert_dynamic(&plugin_array, &tmp))
+  if (insert_dynamic(&plugin_array, (uchar*)&tmp))
     DBUG_RETURN(1);
 
   *ptr= *dynamic_element(&plugin_array, plugin_array.elements - 1,
@@ -1515,7 +1483,7 @@ static void plugin_load(MEM_ROOT *tmp_root, int *argc, char **argv)
   new_thd->store_globals();
   new_thd->db= my_strdup("mysql", MYF(0));
   new_thd->db_length= 5;
-  memset(&thd.net, 0, sizeof(thd.net));
+  bzero((char*) &thd.net, sizeof(thd.net));
   tables.init_one_table("mysql", 5, "plugin", 6, "plugin", TL_READ);
 
 #ifdef EMBEDDED_LIBRARY
@@ -1542,8 +1510,7 @@ static void plugin_load(MEM_ROOT *tmp_root, int *argc, char **argv)
     goto end;
   }
   table= tables.table;
-  if (init_read_record(&read_record_info, new_thd, table, NULL, 1, 1, FALSE))
-    goto end;
+  init_read_record(&read_record_info, new_thd, table, NULL, 1, 0, FALSE);
   table->use_all_columns();
   /*
     there're no other threads running yet, so we don't need a mutex.
@@ -1667,41 +1634,12 @@ error:
   DBUG_RETURN(TRUE);
 }
 
-/*
-  Shutdown memcached plugin before binlog shuts down
-*/
-void memcached_shutdown(void)
-{
-  struct st_plugin_int *plugin;
-  if (initialized)
-  {
-
-    for (uint i= 0; i < plugin_array.elements; i++)
-    {
-      plugin= *dynamic_element(&plugin_array, i, struct st_plugin_int **);
-
-      if (plugin->state == PLUGIN_IS_READY
-	  && strcmp(plugin->name.str, "daemon_memcached") == 0)
-      {
-	plugin_deinitialize(plugin, true);
-
-        mysql_mutex_lock(&LOCK_plugin);
-	plugin->state= PLUGIN_IS_DYING;
-	plugin_del(plugin);
-        mysql_mutex_unlock(&LOCK_plugin);
-      }
-    }
-
-  }
-}
 
 void plugin_shutdown(void)
 {
   uint i, count= plugin_array.elements;
   struct st_plugin_int **plugins, *plugin;
   struct st_plugin_dl **dl;
-  bool skip_binlog = true;
-
   DBUG_ENTER("plugin_shutdown");
 
   if (initialized)
@@ -1723,13 +1661,7 @@ void plugin_shutdown(void)
       for (i= 0; i < count; i++)
       {
         plugin= *dynamic_element(&plugin_array, i, struct st_plugin_int **);
-
-	if (plugin->state == PLUGIN_IS_READY
-	    && strcmp(plugin->name.str, "binlog") == 0 && skip_binlog)
-	{
-		skip_binlog = false;
-
-	} else if (plugin->state == PLUGIN_IS_READY)
+        if (plugin->state == PLUGIN_IS_READY)
         {
           plugin->state= PLUGIN_IS_DELETED;
           reap_needed= true;
@@ -1887,7 +1819,6 @@ bool mysql_install_plugin(THD *thd, const LEX_STRING *name, const LEX_STRING *dl
 
   if (my_load_defaults(MYSQL_CONFIG_NAME, load_default_groups, &argc, &argv, NULL))
   {
-    mysql_rwlock_unlock(&LOCK_system_variables_hash);
     report_error(REPORT_TO_USER, ER_PLUGIN_IS_NOT_LOADED, name->str);
     goto err;
   }
@@ -1901,7 +1832,7 @@ bool mysql_install_plugin(THD *thd, const LEX_STRING *name, const LEX_STRING *dl
 
   if (tmp->state == PLUGIN_IS_DISABLED)
   {
-    push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+    push_warning_printf(thd, MYSQL_ERROR::WARN_LEVEL_WARN,
                         ER_CANT_INITIALIZE_UDF, ER(ER_CANT_INITIALIZE_UDF),
                         name->str, "Plugin is disabled");
   }
@@ -1970,8 +1901,11 @@ bool mysql_uninstall_plugin(THD *thd, const LEX_STRING *name)
 
   if (!table->key_info)
   {
-    my_error(ER_TABLE_CORRUPT, MYF(0), table->s->db.str,
-             table->s->table_name.str);
+    my_printf_error(ER_UNKNOWN_ERROR,
+                    "The table '%s.%s' does not have the necessary key(s) "
+                    "defined on it. Please check the table definition and "
+                    "create index(s) accordingly.", MYF(0),
+                    table->s->db.str, table->s->table_name.str);
     DBUG_RETURN(TRUE);
   }
 
@@ -2005,7 +1939,7 @@ bool mysql_uninstall_plugin(THD *thd, const LEX_STRING *name)
   }
   if (!plugin->plugin_dl)
   {
-    push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
+    push_warning(thd, MYSQL_ERROR::WARN_LEVEL_WARN,
                  WARN_PLUGIN_DELETE_BUILTIN, ER(WARN_PLUGIN_DELETE_BUILTIN));
     my_error(ER_SP_DOES_NOT_EXIST, MYF(0), "PLUGIN", name->str);
     goto err;
@@ -2044,8 +1978,10 @@ bool mysql_uninstall_plugin(THD *thd, const LEX_STRING *name)
                      "Rpl_semi_sync_master_clients",buff) &&
       strcmp(buff,"0") )
   {
-    my_error(ER_PLUGIN_CANNOT_BE_UNINSTALLED, MYF(0), name->str,
-             "Stop any active semisynchronous slaves of this master first.");
+    sql_print_error("Plugin 'rpl_semi_sync_master' cannot be uninstalled now. "
+                    "Stop any active semisynchronous slaves of this master "
+                    "first.\n");
+    my_error(ER_UNKNOWN_ERROR, MYF(0), name->str);
     goto err;
   }
   /* Slave: If there is semi sync enabled IO thread active on this Slave,
@@ -2059,15 +1995,17 @@ bool mysql_uninstall_plugin(THD *thd, const LEX_STRING *name)
                      "Rpl_semi_sync_slave_status", buff) &&
       !strcmp(buff,"ON") )
   {
-    my_error(ER_PLUGIN_CANNOT_BE_UNINSTALLED, MYF(0), name->str,
-             "Stop any active semisynchronous I/O threads on this slave first.");
+    sql_print_error("Plugin 'rpl_semi_sync_slave' cannot be uninstalled now. "
+                    "Stop any active semisynchronous I/O threads on this slave "
+                    "first.\n");
+    my_error(ER_UNKNOWN_ERROR, MYF(0), name->str);
     goto err;
   }
 #endif
 
   plugin->state= PLUGIN_IS_DELETED;
   if (plugin->ref_count)
-    push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
+    push_warning(thd, MYSQL_ERROR::WARN_LEVEL_WARN,
                  WARN_PLUGIN_BUSY, ER(WARN_PLUGIN_BUSY));
   else
     reap_needed= true;
@@ -2079,8 +2017,8 @@ bool mysql_uninstall_plugin(THD *thd, const LEX_STRING *name)
   table->field[0]->store(name->str, name->length, system_charset_info);
   key_copy(user_key, table->record[0], table->key_info,
            table->key_info->key_length);
-  if (! table->file->ha_index_read_idx_map(table->record[0], 0, user_key,
-                                           HA_WHOLE_KEY, HA_READ_KEY_EXACT))
+  if (! table->file->index_read_idx_map(table->record[0], 0, user_key,
+                                        HA_WHOLE_KEY, HA_READ_KEY_EXACT))
   {
     int error;
     /*
@@ -2232,7 +2170,7 @@ static int check_func_bool(THD *thd, struct st_mysql_sys_var *var,
       goto err;
     result= (int) tmp;
   }
-  *(my_bool *) save= result ? TRUE : FALSE;
+  *(my_bool *) save= -result;
   return 0;
 err:
   return 1;
@@ -2630,12 +2568,12 @@ static st_bookmark *register_var(const char *plugin, const char *name,
         variables. If their value is non-NULL, it must point to a valid
         string.
       */
-      memset(global_system_variables.dynamic_variables_ptr +
-             global_variables_dynamic_size, 0, 
-             new_size - global_variables_dynamic_size);
-      memset(max_system_variables.dynamic_variables_ptr +
-             global_variables_dynamic_size, 0,
-             new_size - global_variables_dynamic_size);
+      bzero(global_system_variables.dynamic_variables_ptr +
+            global_variables_dynamic_size,
+            new_size - global_variables_dynamic_size);
+      bzero(max_system_variables.dynamic_variables_ptr +
+            global_variables_dynamic_size,
+            new_size - global_variables_dynamic_size);
       global_variables_dynamic_size= new_size;
     }
 
@@ -2805,36 +2743,27 @@ static double *mysql_sys_var_double(THD* thd, int offset)
   return (double *) intern_sys_var_ptr(thd, offset, true);
 }
 
-void plugin_thdvar_init(THD *thd, bool enable_plugins)
+void plugin_thdvar_init(THD *thd)
 {
   plugin_ref old_table_plugin= thd->variables.table_plugin;
-  plugin_ref old_temp_table_plugin= thd->variables.temp_table_plugin;
   DBUG_ENTER("plugin_thdvar_init");
   
   thd->variables.table_plugin= NULL;
-  thd->variables.temp_table_plugin= NULL;
   cleanup_variables(thd, &thd->variables);
   
   thd->variables= global_system_variables;
   thd->variables.table_plugin= NULL;
-  thd->variables.temp_table_plugin= NULL;
 
   /* we are going to allocate these lazily */
   thd->variables.dynamic_variables_version= 0;
   thd->variables.dynamic_variables_size= 0;
   thd->variables.dynamic_variables_ptr= 0;
 
-  if (enable_plugins)
-  {
-    mysql_mutex_lock(&LOCK_plugin);
-    thd->variables.table_plugin=
-      my_intern_plugin_lock(NULL, global_system_variables.table_plugin);
-    intern_plugin_unlock(NULL, old_table_plugin);
-    thd->variables.temp_table_plugin=
-      my_intern_plugin_lock(NULL, global_system_variables.temp_table_plugin);
-    intern_plugin_unlock(NULL, old_temp_table_plugin);
-    mysql_mutex_unlock(&LOCK_plugin);
-  }
+  mysql_mutex_lock(&LOCK_plugin);
+  thd->variables.table_plugin=
+        my_intern_plugin_lock(NULL, global_system_variables.table_plugin);
+  intern_plugin_unlock(NULL, old_table_plugin);
+  mysql_mutex_unlock(&LOCK_plugin);
   DBUG_VOID_RETURN;
 }
 
@@ -2845,9 +2774,7 @@ void plugin_thdvar_init(THD *thd, bool enable_plugins)
 static void unlock_variables(THD *thd, struct system_variables *vars)
 {
   intern_plugin_unlock(NULL, vars->table_plugin);
-  intern_plugin_unlock(NULL, vars->temp_table_plugin);
   vars->table_plugin= NULL;
-  vars->temp_table_plugin= NULL;
 }
 
 
@@ -2863,7 +2790,6 @@ static void cleanup_variables(THD *thd, struct system_variables *vars)
     plugin_var_memalloc_free(&thd->variables);
 
   DBUG_ASSERT(vars->table_plugin == NULL);
-  DBUG_ASSERT(vars->temp_table_plugin == NULL);
 
   my_free(vars->dynamic_variables_ptr);
   vars->dynamic_variables_ptr= NULL;
@@ -2888,7 +2814,7 @@ void plugin_thdvar_cleanup(THD *thd)
     list= ((plugin_ref*) thd->lex->plugins.buffer) + idx - 1;
     DBUG_PRINT("info",("unlocking %d plugins", idx));
     while ((uchar*) list >= thd->lex->plugins.buffer)
-      intern_plugin_unlock(thd->lex, *list--);
+      intern_plugin_unlock(NULL, *list--);
   }
 
   reap_plugins();
@@ -3396,7 +3322,7 @@ static void plugin_opt_set_limits(struct my_option *options,
 extern "C" my_bool get_one_plugin_option(int optid, const struct my_option *,
                                          char *);
 
-my_bool get_one_plugin_option(int optid MY_ATTRIBUTE((unused)),
+my_bool get_one_plugin_option(int optid __attribute__((unused)),
                               const struct my_option *opt,
                               char *argument)
 {
@@ -3458,8 +3384,7 @@ static int construct_options(MEM_ROOT *mem_root, struct st_plugin_int *tmp,
     /* support --skip-plugin-foo syntax */
     options[0].name= plugin_name_ptr;
     options[1].name= plugin_name_with_prefix_ptr;
-    options[0].id= 0;
-    options[1].id= -1;
+    options[0].id= options[1].id= 0;
     options[0].var_type= options[1].var_type= GET_ENUM;
     options[0].arg_type= options[1].arg_type= OPT_ARG;
     options[0].def_value= options[1].def_value= 1; /* ON */
@@ -3655,7 +3580,6 @@ static int construct_options(MEM_ROOT *mem_root, struct st_plugin_int *tmp,
 
     char *option_name_ptr;
     options[1]= options[0];
-    options[1].id= -1;
     options[1].name= option_name_ptr= (char*) alloc_root(mem_root,
                                                         plugin_dash.length +
                                                         optnamelen + 1);
@@ -3683,7 +3607,7 @@ static my_option *construct_help_options(MEM_ROOT *mem_root,
   if (!(opts= (my_option*) alloc_root(mem_root, sizeof(my_option) * count)))
     DBUG_RETURN(NULL);
 
-  memset(opts, 0, sizeof(my_option) * count);
+  bzero(opts, sizeof(my_option) * count);
 
   /**
     some plugin variables (those that don't have PLUGIN_VAR_NOSYSVAR flag)
@@ -3698,40 +3622,6 @@ static my_option *construct_help_options(MEM_ROOT *mem_root,
 
   DBUG_RETURN(opts);
 }
-
-
-/**
-  Check option being used and raise deprecation warning if required.
-
-  @param optid ID of the option that was passed through command line
-  @param opt List of options
-  @argument Status of the option : Enable or Disable
-
-  A deprecation warning will be raised if --plugin-xxx type of option
-  is used.
-
-  @return Always returns success as purpose of the function is to raise
-  warning only.
-  @retval 0 Success
-*/
-
-static my_bool check_if_option_is_deprecated(int optid,
-                                             const struct my_option *opt,
-                                             char *argument MY_ATTRIBUTE((unused)))
-{
-  if (optid == -1)
-  {
-    WARN_DEPRECATED(NULL, opt->name, (opt->name + strlen("plugin-")));
-  }
-  else if (!my_strcasecmp(&my_charset_latin1, opt->name, "innodb"))
-  {
-    sql_print_warning("The option innodb (skip-innodb) is deprecated and "
-                      "will be removed in a future release");
-  }
-
-  return 0;
-}
-
 
 /**
   Create and register system variables supplied from the plugin and
@@ -3767,7 +3657,7 @@ static int test_plugin_options(MEM_ROOT *tmp_root, struct st_plugin_int *tmp,
   LEX_STRING plugin_name;
   char *varname;
   int error;
-  sys_var *v MY_ATTRIBUTE((unused));
+  sys_var *v __attribute__((unused));
   struct st_bookmark *var;
   uint len, count= EXTRA_OPTIONS;
   DBUG_ENTER("test_plugin_options");
@@ -3791,7 +3681,7 @@ static int test_plugin_options(MEM_ROOT *tmp_root, struct st_plugin_int *tmp,
       sql_print_error("Out of memory for plugin '%s'.", tmp->name.str);
       DBUG_RETURN(-1);
     }
-    memset(opts, 0, sizeof(my_option) * count);
+    bzero(opts, sizeof(my_option) * count);
 
     if (construct_options(tmp_root, tmp, opts))
     {
@@ -3807,7 +3697,7 @@ static int test_plugin_options(MEM_ROOT *tmp_root, struct st_plugin_int *tmp,
         tmp->load_option != PLUGIN_FORCE_PLUS_PERMANENT)
       opts[0].def_value= opts[1].def_value= plugin_load_option;
 
-    error= handle_options(argc, &argv, opts, check_if_option_is_deprecated);
+    error= handle_options(argc, &argv, opts, NULL);
     (*argc)++; /* add back one for the program name */
 
     if (error)
@@ -3833,7 +3723,7 @@ static int test_plugin_options(MEM_ROOT *tmp_root, struct st_plugin_int *tmp,
   */
   if (disable_plugin)
   {
-    if (log_warnings)
+    if (global_system_variables.log_warnings)
       sql_print_information("Plugin '%s' is disabled.",
                             tmp->name.str);
     if (opts)
@@ -3893,7 +3783,7 @@ err:
 ****************************************************************************/
 
 
-void add_plugin_options(std::vector<my_option> *options, MEM_ROOT *mem_root)
+void add_plugin_options(DYNAMIC_ARRAY *options, MEM_ROOT *mem_root)
 {
   struct st_plugin_int *p;
   my_option *opt;
@@ -3911,44 +3801,7 @@ void add_plugin_options(std::vector<my_option> *options, MEM_ROOT *mem_root)
     /* Only options with a non-NULL comment are displayed in help text */
     for (;opt->name; opt++)
       if (opt->comment)
-        options->push_back(*opt);
+        insert_dynamic(options, (uchar*) opt);
   }
 }
 
-/** 
-  Searches for a correctly loaded plugin of a particular type by name
-
-  @param plugin   the name of the plugin we're looking for
-  @param type     type of the plugin (0-MYSQL_MAX_PLUGIN_TYPE_NUM)
-  @return plugin, or NULL if not found
-*/
-struct st_plugin_int *plugin_find_by_type(LEX_STRING *plugin, int type)
-{
-  st_plugin_int *ret;
-  DBUG_ENTER("plugin_find_by_type");
-
-  ret= plugin_find_internal(plugin, type);
-  DBUG_RETURN(ret && ret->state == PLUGIN_IS_READY ? ret : NULL);
-}
-
-
-/** 
-  Locks the plugin strucutres so calls to plugin_find_inner can be issued.
-
-  Must be followed by unlock_plugin_data.
-*/
-int lock_plugin_data()
-{
-  DBUG_ENTER("lock_plugin_data");
-  DBUG_RETURN(mysql_mutex_lock(&LOCK_plugin));
-}
-
-
-/** 
-  Unlocks the plugin strucutres as locked by lock_plugin_data()
-*/
-int unlock_plugin_data()
-{
-  DBUG_ENTER("unlock_plugin_data");
-  DBUG_RETURN(mysql_mutex_unlock(&LOCK_plugin));
-}

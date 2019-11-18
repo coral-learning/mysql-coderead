@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 
 
@@ -34,9 +33,7 @@ printTCKEYREQ(FILE * output, const Uint32 * theData, Uint32 len, Uint16 receiver
 	  sig->getOperationType(requestInfo) == ZUPDATE  ? "Update" :
 	  sig->getOperationType(requestInfo) == ZINSERT  ? "Insert" :
 	  sig->getOperationType(requestInfo) == ZDELETE  ? "Delete" :
-	  sig->getOperationType(requestInfo) == ZWRITE   ? "Write"  :
-          sig->getOperationType(requestInfo) == ZUNLOCK  ? "Unlock" :
-          sig->getOperationType(requestInfo) == ZREFRESH ? "Refresh" :
+	  sig->getOperationType(requestInfo) == ZWRITE   ? "Write" :
 	  "Unknown");
   {
     if(sig->getDirtyFlag(requestInfo)){
@@ -51,6 +48,10 @@ printTCKEYREQ(FILE * output, const Uint32 * theData, Uint32 len, Uint16 receiver
     if(sig->getCommitFlag(requestInfo)){
       fprintf(output, "Commit ");
     }
+    if (sig->getExecutingTrigger(requestInfo)) {
+      fprintf(output, "Trigger ");
+    }
+
     if (sig->getNoDiskFlag(requestInfo)) {
       fprintf(output, "NoDisk ");
     }
@@ -72,17 +73,8 @@ printTCKEYREQ(FILE * output, const Uint32 * theData, Uint32 len, Uint16 receiver
       fprintf(output, "Interpreted ");
     }
     if(sig->getDistributionKeyFlag(sig->requestInfo)){
-      fprintf(output, "d-key ");
+      fprintf(output, " d-key");
     }
-    if(sig->getViaSPJFlag(sig->requestInfo)){
-      fprintf(output, " spj");
-    }
-    if(sig->getQueueOnRedoProblemFlag(sig->requestInfo))
-      fprintf(output, "Queue ");
-
-    if(sig->getDeferredConstraints(sig->requestInfo))
-      fprintf(output, "Deferred-constraints ");
-
     fprintf(output, "\n");
   }
   

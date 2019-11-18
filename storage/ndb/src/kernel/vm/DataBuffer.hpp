@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef DATA_BUFFER_HPP
 #define DATA_BUFFER_HPP
@@ -262,14 +261,10 @@ DataBuffer<sz>::append(const Uint32* src, Uint32 len){
     return false;
   }
   DataBufferIterator it;
-
-  bool b0, b1; 
-  if ((b0 = position(it, pos)) && (b1 = import(it, src, len)))
-  {
+  
+  if(position(it, pos) && import(it, src, len)){
     return true;
   }
-
-  ndbout_c("%u %u", b0, b1);
   abort();
   return false;
 }
@@ -314,60 +309,58 @@ DataBuffer<sz>::DataBuffer(DataBufferPool & p) : thePool(p){
 template<Uint32 sz>
 inline
 bool
-DataBuffer<sz>::seize(Uint32 n)
-{
-  Uint32 req = n;
-  Uint32 used = head.used;
-  Uint32 last = used % sz;            // (almost) used in last segment
-  Uint32 rest = last ? sz - last : 0; // Free in last segment
+DataBuffer<sz>::seize(Uint32 n){
+  Uint32 rest; // Free space in last segment (currently)
+  Segment* prevPtr;
 
-  if (rest >= n)
-  {
-    /**
-     * No extra allocation needed
-     */
-    head.used = used + n;
-    return true;
+  if(head.firstItem == RNIL){
+    rest = 0;
+    prevPtr = (Segment*)&head.firstItem;
+  } else {
+    rest = (sz - (head.used % sz)) % sz;
+    prevPtr = thePool.getPtr(head.lastItem);
   }
-
-  n -= rest;
-
+  
   /**
    * Check for space
    */
-  Uint32 free = thePool.getNoOfFree() * sz;
-  if (n > free)
-  {
+  Uint32 free = thePool.getNoOfFree() * sz + rest;
+  if(n > free){
+    release();
     return false;
   }
+    
+  Uint32 used = head.used + n;
+  Ptr<Segment> currPtr; 
+  currPtr.i = head.lastItem;
   
-  Ptr<Segment> firstPtr;
-  thePool.seize(firstPtr);
-  Ptr<Segment> lastPtr = firstPtr;
-  
-  while (n > sz)
-  {
-    Ptr<Segment> tmp;
-    thePool.seize(tmp);
-    lastPtr.p->nextPool = tmp.i;
-    lastPtr = tmp;
+  while(n >= sz){
+    if(0)
+      ndbout_c("n(%d) %c sz(%d)", n, (n>sz?'>':(n<sz?'<':'=')), sz);    
+
+    thePool.seize(currPtr); assert(currPtr.i != RNIL);
+    prevPtr->nextPool = currPtr.i;
+	     
+    prevPtr = currPtr.p;
+    prevPtr->nextPool = RNIL;
     n -= sz;
   }
-  lastPtr.p->nextPool = RNIL;
   
-  head.used = used + req;
-  if (head.firstItem == RNIL)
-  {
-    head.firstItem = firstPtr.i;
-    assert(head.lastItem == RNIL);
+  if(0){
+    Uint32 pos = rest + n;
+    ndbout_c("rest(%d), n(%d) pos=%d %c sz(%d)", 
+	     rest, n, pos, (pos>sz?'>':(pos<sz?'<':'=')), sz);
   }
-  else
-  {
-    Segment* tail = thePool.getPtr(head.lastItem);
-    assert(tail->nextPool == RNIL);
-    tail->nextPool = firstPtr.i;
+  
+  if(n > rest){
+    thePool.seize(currPtr);
+    assert(currPtr.i != RNIL);
+    prevPtr->nextPool = currPtr.i;
+    currPtr.p->nextPool = RNIL;
   }
-  head.lastItem = lastPtr.i;
+  
+  head.used = used;
+  head.lastItem = currPtr.i;
   
 #if 0
   {
@@ -416,89 +409,21 @@ template<Uint32 sz>
 inline
 bool
 DataBuffer<sz>::first(DataBufferIterator & it){
-  it.curr.i = head.firstItem;
-  if(it.curr.i == RNIL){
-    it.setNull();
-    return false;
-  }
-  thePool.getPtr(it.curr);
-  it.data = &it.curr.p->data[0];
-  it.ind = 0;
-  it.pos = 0;
-  return true;
+  return first((ConstDataBufferIterator&)it);
 }
 
 template<Uint32 sz>
 inline
 bool
 DataBuffer<sz>::next(DataBufferIterator & it){
-  it.ind ++;
-  it.data ++;
-  it.pos ++;
-  if(it.ind < sz && it.pos < head.used){
-    return true;
-  }
-
-  if(it.pos < head.used){
-    it.curr.i = it.curr.p->nextPool;
-#ifdef ARRAY_GUARD
-    if(it.curr.i == RNIL){
-      /**
-       * This is actually "internal error"
-       * pos can't be less than head.used and at the same time we can't
-       * find next segment
-       *
-       * Note this must not "really" be checked since thePool.getPtr will
-       *  abort when trying to get RNIL. That's why the check is within
-       *  ARRAY_GUARD
-       */
-      ErrorReporter::handleAssert("DataBuffer<sz>::next", __FILE__, __LINE__);
-    }
-#endif
-    thePool.getPtr(it.curr);
-    it.data = &it.curr.p->data[0];
-    it.ind = 0;
-    return true;
-  }
-  it.setNull();
-  return false;
+  return next((ConstDataBufferIterator&)it);
 }
 
 template<Uint32 sz>
 inline
 bool
 DataBuffer<sz>::next(DataBufferIterator & it, Uint32 hops){
-#if 0
-  for (Uint32 i=0; i<hops; i++) {
-    if (!this->next(it))
-      return false;
-  }
-  return true;
-#else
-  if(it.pos + hops < head.used){
-    while(hops >= sz){
-      it.curr.i = it.curr.p->nextPool;
-      thePool.getPtr(it.curr);
-      hops -= sz;
-      it.pos += sz;
-    }
-
-    it.ind += hops;
-    it.pos += hops;
-    if(it.ind < sz){
-      it.data = &it.curr.p->data[it.ind];
-      return true;
-    }
-
-    it.curr.i = it.curr.p->nextPool;
-    thePool.getPtr(it.curr);
-    it.ind -= sz;
-    it.data = &it.curr.p->data[it.ind];
-    return true;
-  }
-  it.setNull();
-  return false;
-#endif
+  return next((ConstDataBufferIterator&)it, hops);
 }
 
 template<Uint32 sz>

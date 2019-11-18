@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
   a shared library
 */
 
-#ifndef MY_GLOBAL_INCLUDED
+#ifndef _global_h
 #include "myisamdef.h"
 #endif
 
@@ -41,7 +41,7 @@ ulonglong myisam_max_temp_length= MAX_FILE_SIZE;
 ulong    myisam_data_pointer_size=4;
 ulonglong    myisam_mmap_size= SIZE_T_MAX, myisam_mmap_used= 0;
 
-static int always_valid(const char *filename MY_ATTRIBUTE((unused)))
+static int always_valid(const char *filename __attribute__((unused)))
 {
   return 0;
 }
@@ -118,20 +118,23 @@ void init_myisam_psi_keys()
   const char* category= "myisam";
   int count;
 
+  if (PSI_server == NULL)
+    return;
+
   count= array_elements(all_myisam_mutexes);
-  mysql_mutex_register(category, all_myisam_mutexes, count);
+  PSI_server->register_mutex(category, all_myisam_mutexes, count);
 
   count= array_elements(all_myisam_rwlocks);
-  mysql_rwlock_register(category, all_myisam_rwlocks, count);
+  PSI_server->register_rwlock(category, all_myisam_rwlocks, count);
 
   count= array_elements(all_myisam_conds);
-  mysql_cond_register(category, all_myisam_conds, count);
+  PSI_server->register_cond(category, all_myisam_conds, count);
 
   count= array_elements(all_myisam_files);
-  mysql_file_register(category, all_myisam_files, count);
+  PSI_server->register_file(category, all_myisam_files, count);
 
   count= array_elements(all_myisam_threads);
-  mysql_thread_register(category, all_myisam_threads, count);
+  PSI_server->register_thread(category, all_myisam_threads, count);
 }
 #endif /* HAVE_PSI_INTERFACE */
 

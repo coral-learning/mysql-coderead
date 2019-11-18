@@ -2,14 +2,11 @@
 # This test cases evaluates the mixture of non-transactional and transcational
 # tables. For further details, please, read WL#2687 and WL#5072.
 ###################################################################################
---source include/big_test.inc
 --source include/have_binlog_format_statement.inc
 --source include/master-slave.inc
 --source include/have_innodb.inc
---source include/not_gtid_enabled.inc
 
 let $engine_type=Innodb;
-let $database_name=test;
 --source extra/rpl_tests/rpl_mixing_engines.test
 
 #
@@ -27,7 +24,7 @@ CREATE TABLE `t1` (
   `c5` int(10) unsigned DEFAULT NULL, 
   PRIMARY KEY (`c1`)) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
---source include/sync_slave_sql_with_master.inc
+-- sync_slave_with_master
 ALTER TABLE `t1` Engine=InnoDB;
 
 -- connection master
@@ -38,13 +35,13 @@ COMMIT;
 ROLLBACK;
 SET AUTOCOMMIT=1;
 
---source include/sync_slave_sql_with_master.inc
+-- sync_slave_with_master
 
 -- let $diff_tables= master:t1, slave:t1
 -- source include/diff_tables.inc
 
 -- connection master
 DROP TABLE `t1`;
---source include/sync_slave_sql_with_master.inc
+-- sync_slave_with_master
 
 --source include/rpl_end.inc

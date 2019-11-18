@@ -2,7 +2,6 @@
 # Test for persistent corrupt bit for corrupted index and table
 #
 -- source include/have_innodb.inc
--- source include/have_innodb_16k.inc
 
 # Issues with innodb_change_buffering_debug on Windows, so the test scenario
 # cannot be created on windows
@@ -12,7 +11,6 @@
 --source include/have_debug.inc
 
 -- disable_query_log
-call mtr.add_suppression("Flagged corruption of idx.*in CHECK TABLE");
 # This test setup is extracted from bug56680.test:
 # The flag innodb_change_buffering_debug is only available in debug builds.
 # It instructs InnoDB to try to evict pages from the buffer pool when
@@ -25,10 +23,10 @@ SET GLOBAL innodb_change_buffering_debug = 1;
 SET UNIQUE_CHECKS=0;
 
 CREATE DATABASE pad;
-let $i=338;
+let $i=345;
 while ($i)
 {
---eval CREATE TABLE pad.t$i(a INT PRIMARY KEY)ENGINE=InnoDB STATS_PERSISTENT=0;
+  --eval CREATE TABLE pad.t$i (a INT PRIMARY KEY) ENGINE=InnoDB;
   dec $i;
 }
 
@@ -42,7 +40,7 @@ CREATE TABLE corrupt_bit_test_ā(
        c INT,
        z INT,
        INDEX(b))
-ENGINE=InnoDB STATS_PERSISTENT=0;
+ENGINE=InnoDB;
 
 INSERT INTO corrupt_bit_test_ā VALUES(0,'x',1, 1);
 

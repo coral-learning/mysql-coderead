@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2000, 2012, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,8 +11,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 /**
   @file
@@ -46,7 +46,7 @@ for this structure, presented program generate next searching-structure:
        +----------+-+-+-+--+
        |    1 char|a|b|c|d |
        +----------+-+-+-+--+
-       |first_char|d|0|0|0 |
+       |first_char|b|0|0|0 |
        |last_char |n|0|0|-1|
        |link      |+|0|0|+ |
                    |     |
@@ -229,21 +229,6 @@ void generate_find_structs()
   insert_sql_functions();
 }
 
-struct hash_map_cleanup
-{
-  hash_map_cleanup(char **buffer, int *sz)
-    : m_buffer(buffer), m_sz(sz)
-  {}
-  ~hash_map_cleanup()
-  {
-    free(*m_buffer);
-    *m_buffer= NULL;
-    *m_sz= 0;
-  }
-  char **m_buffer;
-  int   *m_sz;
-};
-
 char *hash_map= 0;
 int size_hash_map= 0;
 
@@ -322,22 +307,20 @@ void print_hash_map(const char *name)
 
 void print_find_structs()
 {
-  {
-    hash_map_cleanup cleanup(&hash_map, &size_hash_map);
-    add_structs_to_map(root_by_len,max_len);
-    set_links(root_by_len,max_len);
-    print_hash_map("sql_functions_map");
-  }
+  add_structs_to_map(root_by_len,max_len);
+  set_links(root_by_len,max_len);
+  print_hash_map("sql_functions_map");
+
+  hash_map= 0;
+  size_hash_map= 0;
 
   printf("\n");
 
-  {
-    hash_map_cleanup cleanup(&hash_map, &size_hash_map);
-    add_structs_to_map(root_by_len2,max_len2);
-    set_links(root_by_len2,max_len2);
-    print_hash_map("symbols_map");
-  }
+  add_structs_to_map(root_by_len2,max_len2);
+  set_links(root_by_len2,max_len2);
+  print_hash_map("symbols_map");
 }
+
 
 int check_dup_symbols(SYMBOL *s1, SYMBOL *s2)
 {

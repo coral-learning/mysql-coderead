@@ -1,5 +1,4 @@
-/*
-   Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,26 +11,23 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include <ndb_global.h>
+#include <my_sys.h>
 #include <mgmapi.h>
-#include <mgmapi_internal.h>
 
 #include <NdbOut.hpp>
 #include <Properties.hpp>
+#include <socket_io.h>
 #include <InputStream.hpp>
-#include <NdbTick.h>
 
 #include <debugger/EventLogger.hpp>
-#include <kernel/NodeBitmask.hpp>
 
 #include "ndb_logevent.hpp"
 
 extern
-int ndb_mgm_listen_event_internal(NdbMgmHandle, const int filter[],
-                                  int, NDB_SOCKET_TYPE*);
+int ndb_mgm_listen_event_internal(NdbMgmHandle, const int filter[], int);
 
 struct ndb_logevent_error_msg {
   enum ndb_logevent_handle_error code;
@@ -52,60 +48,30 @@ struct ndb_logevent_handle {
   enum ndb_logevent_handle_error m_error;
 };
 
-/*
-  Create a new NdbLogEventHandle for reading events from
-  the same socket as the NdbMgmHandle
-*/
-
-NdbLogEventHandle
-ndb_mgm_create_logevent_handle_same_socket(NdbMgmHandle mh)
-{
-  NdbLogEventHandle h=
-    (NdbLogEventHandle)malloc(sizeof(ndb_logevent_handle));
-  if (!h)
-    return NULL;
-
-  h->socket= _ndb_mgm_get_socket(mh);
-
-  return h;
-}
-
 extern "C"
 NdbLogEventHandle
 ndb_mgm_create_logevent_handle(NdbMgmHandle mh,
 			       const int filter[])
 {
-  NdbLogEventHandle h=
-    (NdbLogEventHandle)malloc(sizeof(ndb_logevent_handle));
-  if (!h)
-    return NULL;
+  int fd= ndb_mgm_listen_event_internal(mh, filter, 1);
 
-  NDB_SOCKET_TYPE sock;
-  if(ndb_mgm_listen_event_internal(mh, filter, 1, &sock) < 0)
-  {
-    free(h);
+  if (fd == -1)
     return 0;
-  }
 
-  h->socket= sock;
+  NdbLogEventHandle h=
+    (NdbLogEventHandle)my_malloc(sizeof(ndb_logevent_handle),MYF(MY_WME));
+
+  h->socket= fd;
 
   return h;
 }
 
 extern "C"
-#ifdef NDB_WIN
-SOCKET
-ndb_logevent_get_fd(const NdbLogEventHandle h)
-{
-  return h->socket.s;
-}
-#else
 int
 ndb_logevent_get_fd(const NdbLogEventHandle h)
 {
-  return h->socket.fd;
+  return h->socket;
 }
-#endif
 
 extern "C"
 void ndb_mgm_destroy_logevent_handle(NdbLogEventHandle * h)
@@ -114,9 +80,9 @@ void ndb_mgm_destroy_logevent_handle(NdbLogEventHandle * h)
     return;
 
   if ( *h )
-    my_socket_close((*h)->socket);
+    close((*h)->socket);
 
-  free(*h);
+  my_free(* h);
   * h = 0;
 }
 
@@ -295,12 +261,6 @@ struct Ndb_logevent_body_row ndb_logevent_body[]= {
   ROW( MemoryUsage, "pages_total",  4, pages_total),
   ROW( MemoryUsage, "block",        5, block),
 
-  ROW( MTSignalStatistics, "mt_deliver_thread", 1, thr_no),
-  ROW( MTSignalStatistics, "mt_prioa_count", 2, prioa_count),
-  ROW( MTSignalStatistics, "mt_prioa_size", 3, prioa_size),
-  ROW( MTSignalStatistics, "mt_priob_count", 4, priob_count),
-  ROW( MTSignalStatistics, "mt_priob_size", 5, priob_size),
-
       /* ERROR */
   ROW( TransporterError, "to_node", 1, to_node),
   ROW( TransporterError, "code",    2, code),
@@ -347,63 +307,13 @@ struct Ndb_logevent_body_row ndb_logevent_body[]= {
   ROW( BackupCompleted,     "n_records",     6, n_records), 
   ROW( BackupCompleted,     "n_log_bytes",   7, n_log_bytes),
   ROW( BackupCompleted,     "n_log_records", 8, n_log_records),
-  ROW( BackupCompleted,     "n_bytes_hi",    9+NdbNodeBitmask::Size, n_bytes_hi),
-  ROW( BackupCompleted,     "n_records_hi", 10+NdbNodeBitmask::Size, n_records_hi), 
-  ROW( BackupCompleted,     "n_log_bytes_hi",   11+NdbNodeBitmask::Size, n_log_bytes_hi),
-  ROW( BackupCompleted,     "n_log_records_hi", 12+NdbNodeBitmask::Size, n_log_records_hi), 
-
-  ROW_FN( BackupStatus,     "starting_node",    1, starting_node, ref_to_node),
-  ROW( BackupStatus,        "backup_id",        2, backup_id), 
-  ROW( BackupStatus,        "n_bytes_lo",       3, n_bytes_lo),
-  ROW( BackupStatus,        "n_bytes_hi",       4, n_bytes_hi),
-  ROW( BackupStatus,        "n_records_lo",     5, n_records_lo), 
-  ROW( BackupStatus,        "n_records_hi",     6, n_records_hi), 
-  ROW( BackupStatus,        "n_log_bytes_lo",   7, n_log_bytes_lo),
-  ROW( BackupStatus,        "n_log_bytes_hi",   8, n_log_bytes_hi),
-  ROW( BackupStatus,        "n_log_records_lo", 9, n_log_records_lo),
-  ROW( BackupStatus,        "n_log_records_hi",10, n_log_records_hi),
 
   ROW_FN( BackupAborted,    "starting_node", 1, starting_node, ref_to_node),
   ROW( BackupAborted,       "backup_id",     2, backup_id),
   ROW( BackupAborted,       "error",         3, error),
 
-  ROW( RestoreStarted,      "backup_id",     1, backup_id),
-  ROW( RestoreStarted,      "node_id",       2, node_id),
-
-  ROW( RestoreMetaData,     "backup_id",     1, backup_id),
-  ROW( RestoreMetaData,     "node_id",       2, node_id),
-  ROW( RestoreMetaData,     "n_tables",      3, n_tables),
-  ROW( RestoreMetaData,     "n_tablespaces", 4, n_tablespaces),
-  ROW( RestoreMetaData,     "n_logfilegroups", 5, n_logfilegroups),
-  ROW( RestoreMetaData,     "n_datafiles",   6, n_datafiles),
-  ROW( RestoreMetaData,     "n_undofiles",   7, n_undofiles),
-
-  ROW( RestoreData,         "backup_id",     1, backup_id),
-  ROW( RestoreData,         "node_id",       2, node_id),
-  ROW( RestoreData,         "n_records_lo",  3, n_records_lo),
-  ROW( RestoreData,         "n_records_hi",  4, n_records_hi),
-  ROW( RestoreData,         "n_bytes_lo",    5, n_bytes_lo),
-  ROW( RestoreData,         "n_bytes_hi",    6, n_bytes_hi),
-
-  ROW( RestoreLog,          "backup_id",     1, backup_id),
-  ROW( RestoreLog,          "node_id",       2, node_id),
-  ROW( RestoreLog,          "n_records_lo",  3, n_records_lo),
-  ROW( RestoreLog,          "n_records_hi",  4, n_records_hi),
-  ROW( RestoreLog,          "n_bytes_lo",    5, n_bytes_lo),
-  ROW( RestoreLog,          "n_bytes_hi",    6, n_bytes_hi),
-
-  ROW( RestoreCompleted,    "backup_id",     1, backup_id),
-  ROW( RestoreCompleted,    "node_id",       2, node_id),
-
   ROW( SingleUser,          "type",	     1, type),
   ROW( SingleUser,          "node_id",	     2, node_id),
-
-  ROW( LogFileInitStatus,   "node_id",       1, node_id ),
-  ROW( LogFileInitStatus,   "total_files",   2, total_files),
-  ROW( LogFileInitStatus,   "file_done",     3, file_done),
-  ROW( LogFileInitStatus,   "total_mbytes",  4, total_mbytes),
-  ROW( LogFileInitStatus,   "mbytes_done",   5, mbytes_done),
-
   { NDB_LE_ILLEGAL_TYPE, 0, 0, 0, 0, 0}
 };
 
@@ -488,15 +398,11 @@ int ndb_logevent_get_next(const NdbLogEventHandle h,
 
   SocketInputStream in(h->socket, timeout_in_milliseconds);
 
-  /*
-    Read log event header until header received
-    or timeout expired. The MGM server will continusly
-    send <PING>'s that should be ignored.
-  */
-  char buf[1024];
-  NDB_TICKS start = NdbTick_CurrentMillisecond();
-  while(1)
-  {
+  Properties p;
+  char buf[256];
+
+  /* header */
+  while (1) {
     if (in.gets(buf,sizeof(buf)) == 0)
     {
       h->m_error= NDB_LEH_READ_ERROR;
@@ -516,14 +422,9 @@ int ndb_logevent_get_next(const NdbLogEventHandle h,
 
     if(in.timedout())
         return 0;
+  }
 
-    if ((NdbTick_CurrentMillisecond() - start) > timeout_in_milliseconds)
-      return 0;
-
-  };
-
-  /* Read name-value pairs until empty new line */
-  Properties p;
+  /* read name-value pairs into properties object */
   while (1)
   {
     if (in.gets(buf,sizeof(buf)) == 0)
@@ -585,40 +486,18 @@ int ndb_logevent_get_next(const NdbLogEventHandle h,
   /* fill in header info from p */
   for (i= 0; ndb_logevent_body[i].token; i++)
   {
-    if ( ndb_logevent_body[i].type == dst->type )
-      break;
-  }
-
-  if (ndb_logevent_body[i].token)
-  {
-    do {
-
-      if ( p.get(ndb_logevent_body[i].token, &val) == 0 )
-      {
-        h->m_error= NDB_LEH_UNKNOWN_EVENT_VARIABLE;
-        return -1;
-      }
-      if ( memcpy_atoi((char *)dst+ndb_logevent_body[i].offset, val,
-                       ndb_logevent_body[i].size) )
-      {
-        h->m_error= NDB_LEH_INTERNAL_ERROR;
-        return -1;
-      }
-    } while (ndb_logevent_body[++i].type == dst->type);
-  }
-  else
-  {
-    if (!p.get("data", &val))
+    if ( ndb_logevent_body[i].type != dst->type )
+      continue;
+    if ( p.get(ndb_logevent_body[i].token, &val) == 0 )
     {
       h->m_error= NDB_LEH_UNKNOWN_EVENT_VARIABLE;
       return -1;
     }
-    BaseString tmp(val);
-    Vector<BaseString> list;
-    tmp.split(list);
-    for (size_t j = 0; j<list.size(); j++)
+    if ( memcpy_atoi((char *)dst+ndb_logevent_body[i].offset, val,
+		     ndb_logevent_body[i].size) )
     {
-      dst->Data[j] = atoi(list[j].c_str());
+      h->m_error= NDB_LEH_INTERNAL_ERROR;
+      return -1;
     }
   }
   return 1;

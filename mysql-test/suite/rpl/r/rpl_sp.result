@@ -1,13 +1,9 @@
 include/master-slave.inc
-Warnings:
-Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
 [connection master]
 drop database if exists mysqltest1;
 create database mysqltest1;
 use mysqltest1;
 create table t1 (a varchar(100));
-include/sync_slave_sql_with_master.inc
 use mysqltest1;
 create procedure foo()
 begin
@@ -23,13 +19,12 @@ declare b int;
 set b = 8;
 insert into t1 values (b);
 insert into t1 values (unix_timestamp());
-end	root@localhost	#	#	NO_ENGINE_SUBSTITUTION		latin1	latin1_swedish_ci	latin1_swedish_ci	begin
+end	root@localhost	#	#			latin1	latin1_swedish_ci	latin1_swedish_ci	begin
 declare b int;
 set b = 8;
 insert into t1 values (b);
 insert into t1 values (unix_timestamp());
 end
-include/sync_slave_sql_with_master.inc
 select * from mysql.proc where name='foo' and db='mysqltest1';
 db	name	type	specific_name	language	sql_data_access	is_deterministic	security_type	param_list	returns	body	definer	created	modified	sql_mode	comment	character_set_client	collation_connection	db_collation	body_utf8
 mysqltest1	foo	PROCEDURE	foo	SQL	CONTAINS_SQL	NO	DEFINER			begin
@@ -37,7 +32,7 @@ declare b int;
 set b = 8;
 insert into t1 values (b);
 insert into t1 values (unix_timestamp());
-end	root@localhost	#	#	NO_ENGINE_SUBSTITUTION		latin1	latin1_swedish_ci	latin1_swedish_ci	begin
+end	root@localhost	#	#			latin1	latin1_swedish_ci	latin1_swedish_ci	begin
 declare b int;
 set b = 8;
 insert into t1 values (b);
@@ -49,7 +44,6 @@ select * from t1;
 a
 8
 1000000000
-include/sync_slave_sql_with_master.inc
 select * from t1;
 a
 8
@@ -98,7 +92,6 @@ a
 3
 3
 3
-include/sync_slave_sql_with_master.inc
 select * from t1;
 a
 15
@@ -125,7 +118,6 @@ Warning	1196	Some non-transactional changed tables couldn't be rolled back
 select * from t2;
 a
 20
-include/sync_slave_sql_with_master.inc
 select * from t2;
 a
 20
@@ -133,13 +125,12 @@ select * from mysql.proc where name="foo4" and db='mysqltest1';
 db	name	type	specific_name	language	sql_data_access	is_deterministic	security_type	param_list	returns	body	definer	created	modified	sql_mode	comment	character_set_client	collation_connection	db_collation	body_utf8
 mysqltest1	foo4	PROCEDURE	foo4	SQL	CONTAINS_SQL	YES	DEFINER			begin
 insert into t2 values(20),(20);
-end	root@localhost	#	#	NO_ENGINE_SUBSTITUTION		latin1	latin1_swedish_ci	latin1_swedish_ci	begin
+end	root@localhost	#	#			latin1	latin1_swedish_ci	latin1_swedish_ci	begin
 insert into t2 values(20),(20);
 end
 drop procedure foo4;
 select * from mysql.proc where name="foo4" and db='mysqltest1';
 db	name	type	specific_name	language	sql_data_access	is_deterministic	security_type	param_list	returns	body	definer	created	modified	sql_mode	comment	character_set_client	collation_connection	db_collation	body_utf8
-include/sync_slave_sql_with_master.inc
 select * from mysql.proc where name="foo4" and db='mysqltest1';
 db	name	type	specific_name	language	sql_data_access	is_deterministic	security_type	param_list	returns	body	definer	created	modified	sql_mode	comment	character_set_client	collation_connection	db_collation	body_utf8
 drop procedure foo;
@@ -171,7 +162,6 @@ a
 select * from t2;
 a
 23
-include/sync_slave_sql_with_master.inc
 select * from t1;
 a
 21
@@ -223,23 +213,22 @@ select * from mysql.proc where db='mysqltest1';
 db	name	type	specific_name	language	sql_data_access	is_deterministic	security_type	param_list	returns	body	definer	created	modified	sql_mode	comment	character_set_client	collation_connection	db_collation	body_utf8
 mysqltest1	fn1	FUNCTION	fn1	SQL	NO_SQL	NO	DEFINER		int(11)	begin
 return unix_timestamp();
-end	root@localhost	#	#	NO_ENGINE_SUBSTITUTION		latin1	latin1_swedish_ci	latin1_swedish_ci	begin
+end	root@localhost	#	#			latin1	latin1_swedish_ci	latin1_swedish_ci	begin
 return unix_timestamp();
 end
 mysqltest1	fn2	FUNCTION	fn2	SQL	NO_SQL	NO	DEFINER		int(11)	begin
 return unix_timestamp();
-end	zedjzlcsjhd@localhost	#	#	NO_ENGINE_SUBSTITUTION		latin1	latin1_swedish_ci	latin1_swedish_ci	begin
+end	zedjzlcsjhd@localhost	#	#			latin1	latin1_swedish_ci	latin1_swedish_ci	begin
 return unix_timestamp();
 end
 mysqltest1	fn3	FUNCTION	fn3	SQL	READS_SQL_DATA	NO	DEFINER		int(11)	begin
 return 0;
-end	root@localhost	#	#	NO_ENGINE_SUBSTITUTION		latin1	latin1_swedish_ci	latin1_swedish_ci	begin
+end	root@localhost	#	#			latin1	latin1_swedish_ci	latin1_swedish_ci	begin
 return 0;
 end
 select * from t1;
 a
 1000000000
-include/sync_slave_sql_with_master.inc
 use mysqltest1;
 select * from t1;
 a
@@ -248,23 +237,21 @@ select * from mysql.proc where db='mysqltest1';
 db	name	type	specific_name	language	sql_data_access	is_deterministic	security_type	param_list	returns	body	definer	created	modified	sql_mode	comment	character_set_client	collation_connection	db_collation	body_utf8
 mysqltest1	fn1	FUNCTION	fn1	SQL	NO_SQL	NO	DEFINER		int(11)	begin
 return unix_timestamp();
-end	root@localhost	#	#	NO_ENGINE_SUBSTITUTION		latin1	latin1_swedish_ci	latin1_swedish_ci	begin
+end	root@localhost	#	#			latin1	latin1_swedish_ci	latin1_swedish_ci	begin
 return unix_timestamp();
 end
 mysqltest1	fn2	FUNCTION	fn2	SQL	NO_SQL	NO	DEFINER		int(11)	begin
 return unix_timestamp();
-end	zedjzlcsjhd@localhost	#	#	NO_ENGINE_SUBSTITUTION		latin1	latin1_swedish_ci	latin1_swedish_ci	begin
+end	zedjzlcsjhd@localhost	#	#			latin1	latin1_swedish_ci	latin1_swedish_ci	begin
 return unix_timestamp();
 end
 mysqltest1	fn3	FUNCTION	fn3	SQL	READS_SQL_DATA	NO	DEFINER		int(11)	begin
 return 0;
-end	root@localhost	#	#	NO_ENGINE_SUBSTITUTION		latin1	latin1_swedish_ci	latin1_swedish_ci	begin
+end	root@localhost	#	#			latin1	latin1_swedish_ci	latin1_swedish_ci	begin
 return 0;
 end
 delete from t2;
 alter table t2 add unique (a);
-Warnings:
-Note	1831	Duplicate index 'a_2' defined on the table 'mysqltest1.t2'. This is deprecated and will be disallowed in a future release.
 drop function fn1;
 create function fn1(x int)
 returns int
@@ -282,7 +269,6 @@ select * from t2;
 a
 20
 100
-include/sync_slave_sql_with_master.inc
 select * from t2;
 a
 20
@@ -295,7 +281,6 @@ insert into t1 values (1);
 select * from t1;
 a
 10
-include/sync_slave_sql_with_master.inc
 select * from t1;
 a
 10
@@ -305,7 +290,6 @@ insert into t1 values (1);
 select * from t1;
 a
 1
-include/sync_slave_sql_with_master.inc
 select * from t1;
 a
 1
@@ -313,17 +297,14 @@ create procedure foo()
 not deterministic
 reads sql data
 select * from t1;
-include/sync_slave_sql_with_master.inc
 call foo();
 a
 1
 drop procedure foo;
-include/sync_slave_sql_with_master.inc
 drop function fn1;
 drop database mysqltest1;
 drop user "zedjzlcsjhd"@127.0.0.1;
 use test;
-include/sync_slave_sql_with_master.inc
 use test;
 drop function if exists f1;
 create function f1() returns int reads sql data
@@ -343,7 +324,6 @@ a
 1
 drop view v1;
 drop function f1;
-include/sync_slave_sql_with_master.inc
 select * from t1;
 a
 1
@@ -356,7 +336,6 @@ CALL p1('test');
 SELECT * FROM t1;
 col
 test
-include/sync_slave_sql_with_master.inc
 SELECT * FROM t1;
 col
 test
@@ -370,7 +349,6 @@ DROP PROCEDURE IF EXISTS p1;
 DROP FUNCTION IF EXISTS f1;
 
 ---> Synchronizing slave with master...
-include/sync_slave_sql_with_master.inc
 
 ---> connection: master
 
@@ -381,25 +359,24 @@ include/sync_slave_sql_with_master.inc
 ---> Checking on master...
 SHOW CREATE PROCEDURE p1;
 Procedure	sql_mode	Create Procedure	character_set_client	collation_connection	Database Collation
-p1	NO_ENGINE_SUBSTITUTION	CREATE DEFINER=`root`@`localhost` PROCEDURE `p1`()
+p1		CREATE DEFINER=`root`@`localhost` PROCEDURE `p1`()
 SET @a = 1	latin1	latin1_swedish_ci	latin1_swedish_ci
 SHOW CREATE FUNCTION f1;
 Function	sql_mode	Create Function	character_set_client	collation_connection	Database Collation
-f1	NO_ENGINE_SUBSTITUTION	CREATE DEFINER=`root`@`localhost` FUNCTION `f1`() RETURNS int(11)
+f1		CREATE DEFINER=`root`@`localhost` FUNCTION `f1`() RETURNS int(11)
 RETURN 0	latin1	latin1_swedish_ci	latin1_swedish_ci
 
 ---> Synchronizing slave with master...
-include/sync_slave_sql_with_master.inc
 ---> connection: master
 
 ---> Checking on slave...
 SHOW CREATE PROCEDURE p1;
 Procedure	sql_mode	Create Procedure	character_set_client	collation_connection	Database Collation
-p1	NO_ENGINE_SUBSTITUTION	CREATE DEFINER=`root`@`localhost` PROCEDURE `p1`()
+p1		CREATE DEFINER=`root`@`localhost` PROCEDURE `p1`()
 SET @a = 1	latin1	latin1_swedish_ci	latin1_swedish_ci
 SHOW CREATE FUNCTION f1;
 Function	sql_mode	Create Function	character_set_client	collation_connection	Database Collation
-f1	NO_ENGINE_SUBSTITUTION	CREATE DEFINER=`root`@`localhost` FUNCTION `f1`() RETURNS int(11)
+f1		CREATE DEFINER=`root`@`localhost` FUNCTION `f1`() RETURNS int(11)
 RETURN 0	latin1	latin1_swedish_ci	latin1_swedish_ci
 
 ---> connection: master
@@ -407,9 +384,7 @@ RETURN 0	latin1	latin1_swedish_ci	latin1_swedish_ci
 ---> Cleaning up...
 DROP PROCEDURE p1;
 DROP FUNCTION f1;
-include/sync_slave_sql_with_master.inc
 drop table t1;
-include/sync_slave_sql_with_master.inc
 drop database if exists mysqltest;
 drop database if exists mysqltest2;
 create database mysqltest;
@@ -425,11 +400,9 @@ begin
 insert into t values (1);
 return 0;
 end|
-include/sync_slave_sql_with_master.inc
 use mysqltest;
 set @a:= mysqltest2.f1();
-include/sync_slave_sql_with_master.inc
-include/show_binlog_events.inc
+show binlog events from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000001	#	Query	#	#	drop database if exists mysqltest1
 master-bin.000001	#	Query	#	#	create database mysqltest1
@@ -633,7 +606,6 @@ set @@global.log_bin_trust_function_creators= @old_log_bin_trust_function_creato
 set @@global.log_bin_trust_function_creators= @old_log_bin_trust_function_creators;
 drop database mysqltest;
 drop database mysqltest2;
-include/sync_slave_sql_with_master.inc
 use test;
 /*!50001 create procedure `mysqltestbug36570_p1`() */
 begin
@@ -657,19 +629,18 @@ test	 mysqltestbug36570_p2	PROCEDURE	root@localhost	t	t	DEFINER		latin1	latin1_s
 test	mysqltestbug36570_p1	PROCEDURE	root@localhost	t	t	DEFINER		latin1	latin1_swedish_ci	latin1_swedish_ci
 show create procedure ` mysqltestbug36570_p2`;
 Procedure	sql_mode	Create Procedure	character_set_client	collation_connection	Database Collation
- mysqltestbug36570_p2	NO_ENGINE_SUBSTITUTION	CREATE DEFINER=`root`@`localhost` PROCEDURE ` mysqltestbug36570_p2`( a int )
+ mysqltestbug36570_p2		CREATE DEFINER=`root`@`localhost` PROCEDURE ` mysqltestbug36570_p2`( a int)
 `label`:
 begin
 select a;
 end	latin1	latin1_swedish_ci	latin1_swedish_ci
-include/sync_slave_sql_with_master.inc
 show procedure status like '%mysqltestbug36570%';
 Db	Name	Type	Definer	Modified	Created	Security_type	Comment	character_set_client	collation_connection	Database Collation
 test	 mysqltestbug36570_p2	PROCEDURE	root@localhost	t	t	DEFINER		latin1	latin1_swedish_ci	latin1_swedish_ci
 test	mysqltestbug36570_p1	PROCEDURE	root@localhost	t	t	DEFINER		latin1	latin1_swedish_ci	latin1_swedish_ci
 show create procedure ` mysqltestbug36570_p2`;
 Procedure	sql_mode	Create Procedure	character_set_client	collation_connection	Database Collation
- mysqltestbug36570_p2	NO_ENGINE_SUBSTITUTION	CREATE DEFINER=`root`@`localhost` PROCEDURE ` mysqltestbug36570_p2`( a int )
+ mysqltestbug36570_p2		CREATE DEFINER=`root`@`localhost` PROCEDURE ` mysqltestbug36570_p2`( a int)
 `label`:
 begin
 select a;
@@ -689,7 +660,7 @@ ROLLBACK/*!*/;
 SET TIMESTAMP=t/*!*/;
 SET @@session.pseudo_thread_id=999999999/*!*/;
 SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
-SET @@session.sql_mode=1073741824/*!*/;
+SET @@session.sql_mode=0/*!*/;
 SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
 /*!\C latin1 *//*!*/;
 SET @@session.character_set_client=8,@@session.collation_connection=8,@@session.collation_server=8/*!*/;
@@ -1191,7 +1162,7 @@ end
 /*!*/;
 use `mysql`/*!*/;
 SET TIMESTAMP=t/*!*/;
-CREATE DEFINER=`root`@`localhost` PROCEDURE `test`.` mysqltestbug36570_p2`( a int )
+CREATE DEFINER=`root`@`localhost` PROCEDURE `test`.` mysqltestbug36570_p2`( a int)
 `label`:
 begin
 select a;
@@ -1256,7 +1227,6 @@ unlock tables;
 select * from t1;
 a
 1
-include/sync_slave_sql_with_master.inc
 select * from  t1;
 a
 1
@@ -1286,7 +1256,6 @@ c1
 8
 9
 10
-include/sync_slave_sql_with_master.inc
 select * from t1;
 c1
 7
@@ -1296,7 +1265,6 @@ c1
 call p1(-1);
 select * from t1;
 c1
-include/sync_slave_sql_with_master.inc
 select * from t1;
 c1
 # Cleanup
@@ -1304,5 +1272,4 @@ set @@session.binlog_format=@save_binlog_format;
 drop table t1;
 drop procedure p1;
 # End of 5.5 tests.
-include/sync_slave_sql_with_master.inc
 include/rpl_end.inc

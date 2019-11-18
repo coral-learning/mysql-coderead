@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2004-2008 MySQL AB, 2009 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 /**
  * @file ndb_constants.h
@@ -79,7 +77,6 @@
 #define NDB_ARRAYTYPE_FIXED             0 /* 0 length bytes */
 #define NDB_ARRAYTYPE_SHORT_VAR         1 /* 1 length bytes */
 #define NDB_ARRAYTYPE_MEDIUM_VAR        2 /* 2 length bytes */
-#define NDB_ARRAYTYPE_NONE_VAR          3 /* 0 length bytes */
 
 /*
  * Attribute storage type.
@@ -87,7 +84,6 @@
 
 #define NDB_STORAGETYPE_MEMORY          0
 #define NDB_STORAGETYPE_DISK            1
-#define NDB_STORAGETYPE_DEFAULT         2 /* not set */
 
 /*
  * Table temporary status.
@@ -101,28 +97,5 @@
 #define NDB_SUM_LOCKED       0
 #define NDB_SUM_READONLY     1
 #define NDB_SUM_READ_WRITE   2
-
-/**
- * *No* nodegroup
- */
-#define NDB_NO_NODEGROUP     65536
-
-/*
- * SYSTAB_0 reserved keys
- */
-#define NDB_BACKUP_SEQUENCE 0x1F000000
-
-/**
- * Defines for index statistics
- */
-#define NDB_INDEX_STAT_DB     "mysql"
-#define NDB_INDEX_STAT_SCHEMA "def"
-
-#define NDB_INDEX_STAT_HEAD_TABLE    "ndb_index_stat_head"
-#define NDB_INDEX_STAT_SAMPLE_TABLE  "ndb_index_stat_sample"
-#define NDB_INDEX_STAT_SAMPLE_INDEX1 "ndb_index_stat_sample_x1"
-#define NDB_INDEX_STAT_HEAD_EVENT    "ndb_index_stat_head_event"
-
-#define NDB_INDEX_STAT_PREFIX        "ndb_index_stat"
 
 #endif

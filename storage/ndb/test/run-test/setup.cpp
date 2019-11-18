@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2007, 2010, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2007, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -17,16 +17,14 @@
 
 #include "atrt.hpp"
 #include <ndb_global.h>
-#include <util/ndb_opts.h>
-#include <util/NdbOut.hpp>
-#include <util/BaseString.hpp>
+#include <my_sys.h>
+#include <my_getopt.h>
+#include <NdbOut.hpp>
 
-extern int g_mt;
-extern int g_mt_rr;
-
+static NdbOut& operator<<(NdbOut& out, const atrt_process& proc);
 static atrt_host * find(const char * hostname, Vector<atrt_host*>&);
 static bool load_process(atrt_config&, atrt_cluster&, atrt_process::Type, 
-			 unsigned idx, const char * hostname);
+			 size_t idx, const char * hostname);
 static bool load_options(int argc, char** argv, int type, atrt_options&);
 
 enum {
@@ -51,7 +49,6 @@ struct proc_option f_options[] = {
   ,{ "--datadir=",     atrt_process::AP_MYSQLD, 0 }
   ,{ "--socket=",      atrt_process::AP_MYSQLD | atrt_process::AP_CLIENT, 0 }
   ,{ "--port=",        atrt_process::AP_MYSQLD | atrt_process::AP_CLIENT, 0 }
-  ,{ "--host=",        atrt_process::AP_CLIENT, 0 }
   ,{ "--server-id=",   atrt_process::AP_MYSQLD, PO_REP }
   ,{ "--log-bin",      atrt_process::AP_MYSQLD, PO_REP_MASTER }
   ,{ "--master-host=", atrt_process::AP_MYSQLD, PO_REP_SLAVE }
@@ -66,14 +63,9 @@ struct proc_option f_options[] = {
 const char * ndbcs = "--ndb-connectstring=";
 
 bool
-setup_config(atrt_config& config, const char* atrt_mysqld)
+setup_config(atrt_config& config)
 {
   BaseString tmp(g_clusters);
-  
-  if (atrt_mysqld)
-  {
-    tmp.appfmt(",.atrt");
-  }
   Vector<BaseString> clusters;
   tmp.split(clusters, ",");
 
@@ -86,7 +78,6 @@ setup_config(atrt_config& config, const char* atrt_mysqld)
     config.m_clusters.push_back(cluster);
 
     cluster->m_name = clusters[i];
-    cluster->m_options.m_features = 0;
     if (fqpn)
     {
       cluster->m_dir.assfmt("cluster%s/", cluster->m_name.c_str());
@@ -95,7 +86,6 @@ setup_config(atrt_config& config, const char* atrt_mysqld)
     {
       cluster->m_dir = "";
     }
-    cluster->m_next_nodeid= 1;
     
     int argc = 1;
     const char * argv[] = { "atrt", 0, 0 };
@@ -144,18 +134,6 @@ setup_config(atrt_config& config, const char* atrt_mysqld)
       }      
     }
 
-    if (strcmp(clusters[i].c_str(), ".atrt") == 0)
-    {
-      /**
-       * Only use a mysqld...
-       */
-      proc_args[0].value = 0;
-      proc_args[1].value = 0;
-      proc_args[2].value = 0;      
-      proc_args[3].value = 0;      
-      proc_args[4].value = atrt_mysqld;
-    }
-
     /**
      * Load each process
      */
@@ -177,11 +155,10 @@ setup_config(atrt_config& config, const char* atrt_mysqld)
       /**
        * Load cluster options
        */
-      int argc = 1;
-      const char * argv[] = { "atrt", 0, 0 };
+      
+      argc = 1;
       argv[argc++] = buf.c_str();
       const char *groups[] = { "mysql_cluster", 0 };
-      char ** tmp = (char**)argv;
       ret = load_defaults(g_my_cnf, groups, &argc, &tmp);
       
       if (ret)
@@ -220,24 +197,22 @@ static
 bool 
 load_process(atrt_config& config, atrt_cluster& cluster, 
 	     atrt_process::Type type, 
-	     unsigned idx,
+	     size_t idx,
 	     const char * hostname)
 {
   atrt_host * host_ptr = find(hostname, config.m_hosts);
   atrt_process *proc_ptr = new atrt_process;
-
-  const unsigned proc_no = (unsigned)config.m_processes.size();
+  
   config.m_processes.push_back(proc_ptr);
   host_ptr->m_processes.push_back(proc_ptr);
   cluster.m_processes.push_back(proc_ptr);
   
   atrt_process& proc = *proc_ptr;
   
+  const size_t proc_no = config.m_processes.size();
   proc.m_index = idx;
   proc.m_type = type;
   proc.m_host = host_ptr;
-  proc.m_save.m_saved = false;
-  proc.m_nodeid= -1;
   proc.m_cluster = &cluster;
   proc.m_options.m_features = 0;
   proc.m_rep_src = 0;
@@ -251,7 +226,6 @@ load_process(atrt_config& config, atrt_cluster& cluster,
   proc.m_proc.m_ulimit = "c:unlimited";
   proc.m_proc.m_env.assfmt("MYSQL_BASE_DIR=%s", g_prefix);
   proc.m_proc.m_env.appfmt(" MYSQL_HOME=%s", g_basedir);
-  proc.m_proc.m_env.appfmt(" ATRT_PID=%u", (unsigned)proc_no);
   proc.m_proc.m_shutdown_options = "";
 
   int argc = 1;
@@ -262,40 +236,30 @@ load_process(atrt_config& config, atrt_cluster& cluster,
   const char *groups[] = { 0, 0, 0, 0 };
   switch(type){
   case atrt_process::AP_NDB_MGMD:
-    proc.m_nodeid= cluster.m_next_nodeid++; // always specify node-id
-
     groups[0] = "cluster_config";
-    buf[1].assfmt("cluster_config.ndb_mgmd.%u", idx);
+    buf[1].assfmt("cluster_config.ndb_mgmd.%d", idx);
     groups[1] = buf[1].c_str();
     buf[0].assfmt("--defaults-group-suffix=%s", cluster.m_name.c_str());
     argv[argc++] = buf[0].c_str();
     break;
   case atrt_process::AP_NDBD: 
-    if (g_fix_nodeid)
-      proc.m_nodeid= cluster.m_next_nodeid++;
-
     groups[0] = "cluster_config";
-    buf[1].assfmt("cluster_config.ndbd.%u", idx);
+    buf[1].assfmt("cluster_config.ndbd.%d", idx);
     groups[1] = buf[1].c_str();
     buf[0].assfmt("--defaults-group-suffix=%s", cluster.m_name.c_str());
     argv[argc++] = buf[0].c_str();
     break;
   case atrt_process::AP_MYSQLD:
-    if (g_fix_nodeid)
-      proc.m_nodeid= cluster.m_next_nodeid++;
-
     groups[0] = "mysqld";
     groups[1] = "mysql_cluster";
-    buf[0].assfmt("--defaults-group-suffix=.%u%s",idx,cluster.m_name.c_str());
+    buf[0].assfmt("--defaults-group-suffix=.%d%s",idx,cluster.m_name.c_str());
     argv[argc++] = buf[0].c_str();
     break;
   case atrt_process::AP_CLIENT:
-    buf[0].assfmt("client.%u%s", idx, cluster.m_name.c_str());
+    buf[0].assfmt("client.%d%s", idx, cluster.m_name.c_str());
     groups[0] = buf[0].c_str();
     break;
   case atrt_process::AP_NDB_API:
-    if (g_fix_nodeid)
-      proc.m_nodeid= cluster.m_next_nodeid++;
     break;
   default:
     g_logger.critical("Unhandled process type: %d", type);
@@ -320,47 +284,35 @@ load_process(atrt_config& config, atrt_cluster& cluster,
   switch(type){
   case atrt_process::AP_NDB_MGMD:
   {
-    proc.m_proc.m_name.assfmt("%u-%s", proc_no, "ndb_mgmd");
+    proc.m_proc.m_name.assfmt("%d-%s", proc_no, "ndb_mgmd");
     proc.m_proc.m_path.assign(g_prefix).append("/libexec/ndb_mgmd");
     proc.m_proc.m_args.assfmt("--defaults-file=%s/my.cnf",
 			      proc.m_host->m_basedir.c_str());
     proc.m_proc.m_args.appfmt(" --defaults-group-suffix=%s",
 			      cluster.m_name.c_str());
     proc.m_proc.m_args.append(" --nodaemon --mycnf");
-    proc.m_proc.m_args.appfmt(" --ndb-nodeid=%u", proc.m_nodeid);
-    proc.m_proc.m_cwd.assfmt("%sndb_mgmd.%u", dir.c_str(), proc.m_index);
-    proc.m_proc.m_args.appfmt(" --configdir=%s", proc.m_proc.m_cwd.c_str());
+    proc.m_proc.m_cwd.assfmt("%sndb_mgmd.%d", dir.c_str(), proc.m_index);
     proc.m_proc.m_env.appfmt(" MYSQL_GROUP_SUFFIX=%s", 
 			     cluster.m_name.c_str());
     break;
   } 
   case atrt_process::AP_NDBD:
   {
-    if (g_mt == 0 || (g_mt == 1 && ((g_mt_rr++) & 1) == 0))
-    {
-      proc.m_proc.m_path.assign(g_prefix).append("/libexec/ndbd");
-    }
-    else
-    {
-      proc.m_proc.m_path.assign(g_prefix).append("/libexec/ndbmtd");
-    }
-    
-    proc.m_proc.m_name.assfmt("%u-%s", proc_no, "ndbd");
+    proc.m_proc.m_name.assfmt("%d-%s", proc_no, "ndbd");
+    proc.m_proc.m_path.assign(g_prefix).append("/libexec/ndbd");
     proc.m_proc.m_args.assfmt("--defaults-file=%s/my.cnf",
 			      proc.m_host->m_basedir.c_str());
     proc.m_proc.m_args.appfmt(" --defaults-group-suffix=%s",
 			      cluster.m_name.c_str());
-    proc.m_proc.m_args.append(" --nodaemon --initial -n");
-    if (g_fix_nodeid)
-      proc.m_proc.m_args.appfmt(" --ndb-nodeid=%u", proc.m_nodeid);
-    proc.m_proc.m_cwd.assfmt("%sndbd.%u", dir.c_str(), proc.m_index);
+    proc.m_proc.m_args.append(" --nodaemon -n");
+    proc.m_proc.m_cwd.assfmt("%sndbd.%d", dir.c_str(), proc.m_index);
     proc.m_proc.m_env.appfmt(" MYSQL_GROUP_SUFFIX=%s", 
 			     cluster.m_name.c_str());
     break;
   } 
   case atrt_process::AP_MYSQLD:
   {
-    proc.m_proc.m_name.assfmt("%u-%s", proc_no, "mysqld");
+    proc.m_proc.m_name.assfmt("%d-%s", proc_no, "mysqld");
     proc.m_proc.m_path.assign(g_prefix).append("/libexec/mysqld");
     proc.m_proc.m_args.assfmt("--defaults-file=%s/my.cnf",
 			      proc.m_host->m_basedir.c_str());
@@ -368,38 +320,29 @@ load_process(atrt_config& config, atrt_cluster& cluster,
 			      proc.m_index,
 			      cluster.m_name.c_str());
     proc.m_proc.m_args.append(" --core-file");
-    if (g_fix_nodeid)
-      proc.m_proc.m_args.appfmt(" --ndb-nodeid=%d", proc.m_nodeid);
-
-    // Add ndb connect string
-    const char * val;
-    if (cluster.m_options.m_loaded.get(ndbcs, &val)) {
-      proc.m_proc.m_args.appfmt(" %s=%s", ndbcs, val);
-    }
-
-    proc.m_proc.m_cwd.appfmt("%smysqld.%u", dir.c_str(), proc.m_index);
+    proc.m_proc.m_cwd.appfmt("%smysqld.%d", dir.c_str(), proc.m_index);
     proc.m_proc.m_shutdown_options = "SIGKILL"; // not nice
-    proc.m_proc.m_env.appfmt(" MYSQL_GROUP_SUFFIX=.%u%s", 
+    proc.m_proc.m_env.appfmt(" MYSQL_GROUP_SUFFIX=.%d%s", 
 			     proc.m_index,
 			     cluster.m_name.c_str());
     break;
   } 
   case atrt_process::AP_NDB_API:
   {
-    proc.m_proc.m_name.assfmt("%u-%s", proc_no, "ndb_api");
+    proc.m_proc.m_name.assfmt("%d-%s", proc_no, "ndb_api");
     proc.m_proc.m_path = "";
     proc.m_proc.m_args = "";
-    proc.m_proc.m_cwd.appfmt("%sndb_api.%u", dir.c_str(), proc.m_index);
+    proc.m_proc.m_cwd.appfmt("%sndb_api.%d", dir.c_str(), proc.m_index);
     proc.m_proc.m_env.appfmt(" MYSQL_GROUP_SUFFIX=%s", 
 			     cluster.m_name.c_str());
     break;
   } 
   case atrt_process::AP_CLIENT:
   {
-    proc.m_proc.m_name.assfmt("%u-%s", proc_no, "mysql");
+    proc.m_proc.m_name.assfmt("%d-%s", proc_no, "mysql");
     proc.m_proc.m_path = "";
     proc.m_proc.m_args = "";
-    proc.m_proc.m_cwd.appfmt("%s/client.%u", dir.c_str(), proc.m_index);
+    proc.m_proc.m_cwd.appfmt("%s/client.%d", dir.c_str(), proc.m_index);
     proc.m_proc.m_env.appfmt(" MYSQL_GROUP_SUFFIX=.%d%s", 
 			     proc.m_index,
 			     cluster.m_name.c_str());
@@ -409,6 +352,15 @@ load_process(atrt_config& config, atrt_cluster& cluster,
   case atrt_process::AP_CLUSTER:
     g_logger.critical("Unhandled process type: %d", proc.m_type);
     return false;
+  }
+  
+  if (proc.m_proc.m_path.length())
+  {
+    proc.m_proc.m_env.appfmt(" CMD=\"%s", proc.m_proc.m_path.c_str());
+    if (proc.m_proc.m_args.length())
+      proc.m_proc.m_env.append(" ");
+    proc.m_proc.m_env.append(proc.m_proc.m_args);
+    proc.m_proc.m_env.append("\" ");
   }
   
   if (type == atrt_process::AP_MYSQLD)
@@ -436,7 +388,11 @@ load_options(int argc, char** argv, int type, atrt_options& opts)
 {
   for (size_t i = 0; i<(size_t)argc; i++)
   {
-    if (ndb_is_load_default_arg_separator(argv[i]))
+    /**
+     *  Skip the separator for arguments from config file and command
+     *  line
+     */
+    if (my_getopt_is_args_separator(argv[i]))
       continue;
     for (size_t j = 0; f_options[j].name; j++)
     {
@@ -501,7 +457,7 @@ configure(atrt_config& config, int setup)
   {
     bool ok = true;
     proc_rule_ctx ctx;
-    memset(&ctx, 0, sizeof(ctx));
+    bzero(&ctx, sizeof(ctx));
     ctx.m_setup = setup;
     ctx.m_config = &config;
     
@@ -511,7 +467,7 @@ configure(atrt_config& config, int setup)
       
       if (f_rules[i].type & atrt_process::AP_CLUSTER)
       {
-	g_logger.debug("applying rule %u to cluster %s", (unsigned)i, 
+	g_logger.debug("applying rule %d to cluster %s", i, 
 		       ctx.m_cluster->m_name.c_str());
 	if (! (* f_rules[i].func)(props, ctx, f_rules[i].extra))
 	  ok = false;
@@ -525,7 +481,7 @@ configure(atrt_config& config, int setup)
 	  ctx.m_process = cluster.m_processes[k];
 	  if (proc.m_type & f_rules[i].type)
 	  {
-	    g_logger.debug("applying rule %u to %s", (unsigned)i, 
+	    g_logger.debug("applying rule %d to %s", i, 
 			   proc.m_proc.m_cwd.c_str());
 	    if (! (* f_rules[i].func)(props, ctx, f_rules[i].extra))
 	      ok = false;
@@ -652,7 +608,6 @@ pr_check_features(Properties& props, proc_rule_ctx& ctx, int)
   {
     if (cluster.m_processes[i]->m_type == atrt_process::AP_NDB_MGMD ||
 	cluster.m_processes[i]->m_type == atrt_process::AP_NDB_API ||
-	cluster.m_processes[i]->m_type == atrt_process::AP_MYSQLD ||
 	cluster.m_processes[i]->m_type == atrt_process::AP_NDBD)
     {
       features |= atrt_options::AO_NDBCLUSTER;
@@ -675,15 +630,6 @@ static
 bool 
 pr_fix_client(Properties& props, proc_rule_ctx& ctx, int)
 {
-  atrt_process& proc = *ctx.m_process; 
-  const char * val, *name = "--host=";
-  if (!proc.m_options.m_loaded.get(name, &val))
-  {
-    val = proc.m_mysqld->m_host->m_hostname.c_str();
-    proc.m_options.m_loaded.put(name, val);
-    proc.m_options.m_generated.put(name, val);
-  }
-
   for (size_t i = 0; f_options[i].name; i++)
   {
     proc_option& opt = f_options[i];
@@ -691,6 +637,7 @@ pr_fix_client(Properties& props, proc_rule_ctx& ctx, int)
     if (opt.type & atrt_process::AP_CLIENT)
     {
       const char * val;
+      atrt_process& proc = *ctx.m_process; 
       if (!proc.m_options.m_loaded.get(name, &val))
       {
 	require(proc.m_mysqld->m_options.m_loaded.get(name, &val));
@@ -742,7 +689,7 @@ generate(atrt_process& proc, const char * name, Properties& props)
     }
     
     char buf[255];
-    BaseString::snprintf(buf, sizeof(buf), "%u", val);
+    snprintf(buf, sizeof(buf), "%u", val);
     opts.m_loaded.put(name, buf);
     opts.m_generated.put(name, buf);
     return true;
@@ -755,8 +702,12 @@ generate(atrt_process& proc, const char * name, Properties& props)
   }
   else if (strcmp(name, "--FileSystemPath=") == 0)
   {
-    opts.m_loaded.put(name, proc.m_proc.m_cwd.c_str());
-    opts.m_generated.put(name, proc.m_proc.m_cwd.c_str());
+    BaseString dir;
+    dir.append(proc.m_host->m_basedir);
+    dir.append("/");
+    dir.append(proc.m_cluster->m_dir);
+    opts.m_loaded.put(name, dir.c_str());
+    opts.m_generated.put(name, dir.c_str());
     return true;
   }
   else if (strcmp(name, "--socket=") == 0)
@@ -796,7 +747,7 @@ generate(atrt_process& proc, const char * name, Properties& props)
     Uint32 val = 1;
     props.get(name, &val);
     char buf[255];
-    BaseString::snprintf(buf, sizeof(buf), "%u", val);
+    snprintf(buf, sizeof(buf), "%u", val);
     opts.m_loaded.put(name, buf);
     opts.m_generated.put(name, buf);
     props.put(name, (val + 1), true);
@@ -952,7 +903,7 @@ pr_check_proc(Properties& props, proc_rule_ctx& ctx, int)
       if (!proc.m_options.m_loaded.get(name, &val))
       {
 	ok = false;
-	g_logger.warning("Missing parameter: %s for %s",
+	g_logger.warning("Missing paramter: %s for %s",
 			 name, proc.m_proc.m_cwd.c_str());
       }
       else if (proc.m_options.m_generated.get(name, &val))
@@ -960,7 +911,7 @@ pr_check_proc(Properties& props, proc_rule_ctx& ctx, int)
 	if (setup == 0)
 	{
 	  ok = false;
-	  g_logger.warning("Missing parameter: %s for %s",
+	  g_logger.warning("Missing paramter: %s for %s",
 			   name, proc.m_proc.m_cwd.c_str());
 	}
 	else

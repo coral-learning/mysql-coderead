@@ -21,7 +21,6 @@ INCLUDE (CheckLibraryExists)
 INCLUDE (CheckFunctionExists)
 INCLUDE (CheckCCompilerFlag)
 INCLUDE (CheckCSourceRuns)
-INCLUDE (CheckCXXSourceRuns)
 INCLUDE (CheckSymbolExists)
 
 
@@ -43,13 +42,6 @@ IF(UNIX)
 ENDIF()
 
 
-IF(CMAKE_SYSTEM_NAME MATCHES "SunOS" AND CMAKE_COMPILER_IS_GNUCXX)
-  ## We will be using gcc to generate .so files
-  ## Add C flags (e.g. -m64) to CMAKE_SHARED_LIBRARY_C_FLAGS
-  SET(CMAKE_SHARED_LIBRARY_C_FLAGS
-    "${CMAKE_SHARED_LIBRARY_C_FLAGS} ${CMAKE_C_FLAGS}")
-ENDIF()
-
 
 # System type affects version_compile_os variable 
 IF(NOT SYSTEM_TYPE)
@@ -60,167 +52,20 @@ IF(NOT SYSTEM_TYPE)
   ENDIF()
 ENDIF()
 
-# As a consequence of ALARMs no longer being used, thread
-# notification for KILL must close the socket to wake up
-# other threads.
-SET(SIGNAL_WITH_VIO_SHUTDOWN 1)
-
-# The default C++ library for SunPro is really old, and not standards compliant.
-# http://www.oracle.com/technetwork/server-storage/solaris10/cmp-stlport-libcstd-142559.html
-# Use stlport rather than Rogue Wave,
-#   unless otherwise specified on command line.
-IF(CMAKE_SYSTEM_NAME MATCHES "SunOS")
-  IF(CMAKE_CXX_COMPILER_ID MATCHES "SunPro")
-    IF(CMAKE_CXX_FLAGS MATCHES "-std=")
-      ADD_DEFINITIONS(-D__MATHERR_RENAME_EXCEPTION)
-      SET(CMAKE_SHARED_LIBRARY_C_FLAGS
-        "${CMAKE_SHARED_LIBRARY_C_FLAGS} -lc")
-      SET(CMAKE_SHARED_LIBRARY_CXX_FLAGS
-        "${CMAKE_SHARED_LIBRARY_CXX_FLAGS} -lstdc++ -lgcc_s -lCrunG3 -lc")
-      SET(QUOTED_CMAKE_CXX_LINK_FLAGS "-lstdc++ -lgcc_s -lCrunG3 -lc")
-    ELSE()
-      IF(SUNPRO_CXX_LIBRARY)
-        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -library=${SUNPRO_CXX_LIBRARY}")
-        IF(SUNPRO_CXX_LIBRARY STREQUAL "stdcxx4")
-          ADD_DEFINITIONS(-D__MATHERR_RENAME_EXCEPTION)
-          SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -template=extdef")
-        ENDIF()
-      ELSE()
-        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -library=stlport4")
-      ENDIF()
-    ENDIF()
-  ENDIF()
-ENDIF()
-
-# Check to see if we are using LLVM's libc++ rather than e.g. libstd++
-# Can then check HAVE_LLBM_LIBCPP later without including e.g. ciso646.
-CHECK_CXX_SOURCE_RUNS("
-#include <ciso646>
-int main()
-{
-#ifdef _LIBCPP_VERSION
-  return 0;
-#else
-  return 1;
-#endif
-}" HAVE_LLVM_LIBCPP)
-
-MACRO(DIRNAME IN OUT)
-  GET_FILENAME_COMPONENT(${OUT} ${IN} PATH)
-ENDMACRO()
-
-MACRO(FIND_REAL_LIBRARY SOFTLINK_NAME REALNAME)
-  # We re-distribute libstlport.so/libstdc++.so which are both symlinks.
-  # There is no 'readlink' on solaris, so we use perl to follow links:
-  SET(PERLSCRIPT
-    "my $link= $ARGV[0]; use Cwd qw(abs_path); my $file = abs_path($link); print $file;")
-  EXECUTE_PROCESS(
-    COMMAND perl -e "${PERLSCRIPT}" ${SOFTLINK_NAME}
-    RESULT_VARIABLE result
-    OUTPUT_VARIABLE real_library
-    )
-  SET(REALNAME ${real_library})
-ENDMACRO()
-
-MACRO(EXTEND_CXX_LINK_FLAGS LIBRARY_PATH)
-  # Using the $ORIGIN token with the -R option to locate the libraries
-  # on a path relative to the executable:
-  # We need an extra backslash to pass $ORIGIN to the mysql_config script...
-  SET(QUOTED_CMAKE_CXX_LINK_FLAGS
-    "${CMAKE_CXX_LINK_FLAGS} -R'\\$ORIGIN/../lib' -R${LIBRARY_PATH}")
-  SET(CMAKE_CXX_LINK_FLAGS
-    "${CMAKE_CXX_LINK_FLAGS} -R'\$ORIGIN/../lib' -R${LIBRARY_PATH}")
-  MESSAGE(STATUS "CMAKE_CXX_LINK_FLAGS ${CMAKE_CXX_LINK_FLAGS}")
-ENDMACRO()
-
-MACRO(EXTEND_C_LINK_FLAGS LIBRARY_PATH)
-  SET(QUOTED_CMAKE_C_LINK_FLAGS
-    "${CMAKE_C_LINK_FLAGS} -R'\\$ORIGIN/../lib' -R${LIBRARY_PATH}")
-  SET(CMAKE_C_LINK_FLAGS
-    "${CMAKE_C_LINK_FLAGS} -R'\$ORIGIN/../lib' -R${LIBRARY_PATH}")
-  MESSAGE(STATUS "CMAKE_C_LINK_FLAGS ${CMAKE_C_LINK_FLAGS}")
-  SET(CMAKE_SHARED_LIBRARY_C_FLAGS
-    "${CMAKE_SHARED_LIBRARY_C_FLAGS} -R'\$ORIGIN/..' -R'\$ORIGIN/../lib' -R${LIBRARY_PATH}")
-ENDMACRO()
-
-IF(CMAKE_SYSTEM_NAME MATCHES "SunOS" AND
-   CMAKE_C_COMPILER_ID MATCHES "SunPro" AND
-   CMAKE_CXX_FLAGS MATCHES "stlport4")
-  DIRNAME(${CMAKE_CXX_COMPILER} CXX_PATH)
-  # Also extract real path to the compiler(which is normally
-  # in <install_path>/prod/bin) and try to find the
-  # stlport libs relative to that location as well.
-  GET_FILENAME_COMPONENT(CXX_REALPATH ${CMAKE_CXX_COMPILER} REALPATH)
-
-  # CC -V yields
-  # CC: Studio 12.5 Sun C++ 5.14 SunOS_sparc Dodona 2016/04/04
-  # CC: Sun C++ 5.13 SunOS_sparc Beta 2014/03/11
-  # CC: Sun C++ 5.11 SunOS_sparc 2010/08/13
-
-  EXECUTE_PROCESS(
-    COMMAND ${CMAKE_CXX_COMPILER} "-V"
-    OUTPUT_VARIABLE stdout
-    ERROR_VARIABLE  stderr
-    RESULT_VARIABLE result
-  )
-  IF(result)
-    MESSAGE(FATAL_ERROR "Failed to execute ${CMAKE_CXX_COMPILER} -V")
-  ENDIF()
-
-  STRING(REGEX MATCH "CC: Sun C\\+\\+ 5\\.([0-9]+)" VERSION_STRING ${stderr})
-  IF (NOT CMAKE_MATCH_1 OR CMAKE_MATCH_1 STREQUAL "")
-    STRING(REGEX MATCH "CC: Studio 12\\.5 Sun C\\+\\+ 5\\.([0-9]+)"
-      VERSION_STRING ${stderr})
-  ENDIF()
-  SET(CC_MINOR_VERSION ${CMAKE_MATCH_1})
-
-  IF(${CC_MINOR_VERSION} GREATER 12)
-    SET(STLPORT_SUFFIX "lib/compilers/stlport4")
-    IF(SIZEOF_VOIDP EQUAL 8 AND CMAKE_SYSTEM_PROCESSOR MATCHES "sparc")
-      SET(STLPORT_SUFFIX "lib/compilers/stlport4/sparcv9")
-    ENDIF()
-    IF(SIZEOF_VOIDP EQUAL 8 AND CMAKE_SYSTEM_PROCESSOR MATCHES "i386")
-      SET(STLPORT_SUFFIX "lib/compilers/stlport4/amd64")
-    ENDIF()
-  ELSE()
-    SET(STLPORT_SUFFIX "lib/stlport4")
-    IF(SIZEOF_VOIDP EQUAL 8 AND CMAKE_SYSTEM_PROCESSOR MATCHES "sparc")
-      SET(STLPORT_SUFFIX "lib/stlport4/v9")
-    ENDIF()
-    IF(SIZEOF_VOIDP EQUAL 8 AND CMAKE_SYSTEM_PROCESSOR MATCHES "i386")
-      SET(STLPORT_SUFFIX "lib/stlport4/amd64")
-    ENDIF()
-  ENDIF()
-
-  FIND_LIBRARY(STL_LIBRARY_NAME
-    NAMES "stlport"
-    PATHS ${CXX_PATH}/../${STLPORT_SUFFIX}
-          ${CXX_REALPATH}/../../${STLPORT_SUFFIX}
-  )
-  MESSAGE(STATUS "STL_LIBRARY_NAME ${STL_LIBRARY_NAME}")
-  IF(STL_LIBRARY_NAME)
-    DIRNAME(${STL_LIBRARY_NAME} STLPORT_PATH)
-    FIND_REAL_LIBRARY(${STL_LIBRARY_NAME} real_library)
-    MESSAGE(STATUS "INSTALL ${STL_LIBRARY_NAME} ${real_library}")
-    INSTALL(FILES ${STL_LIBRARY_NAME} ${real_library}
-            DESTINATION ${INSTALL_LIBDIR} COMPONENT SharedLibraries)
-    EXTEND_C_LINK_FLAGS(${STLPORT_PATH})
-    EXTEND_CXX_LINK_FLAGS(${STLPORT_PATH})
-  ELSE()
-    MESSAGE(STATUS "Failed to find the required stlport library, print some"
-                   "variables to help debugging and bail out")
-    MESSAGE(STATUS "CMAKE_CXX_COMPILER ${CMAKE_CXX_COMPILER}")
-    MESSAGE(STATUS "CXX_PATH ${CXX_PATH}")
-    MESSAGE(STATUS "CXX_REALPATH ${CXX_REALPATH}")
-    MESSAGE(STATUS "STLPORT_SUFFIX ${STLPORT_SUFFIX}")
-    MESSAGE(STATUS "PATH: ${CXX_PATH}/../${STLPORT_SUFFIX}")
-    MESSAGE(STATUS "PATH: ${CXX_REALPATH}/../../${STLPORT_SUFFIX}")
-    MESSAGE(FATAL_ERROR
-      "Could not find the required stlport library.")
-  ENDIF()
-ENDIF()
 
 IF(CMAKE_COMPILER_IS_GNUCXX)
+  # MySQL "canonical" GCC flags. At least -fno-rtti flag affects
+  # ABI and cannot be simply removed. 
+  SET(CMAKE_CXX_FLAGS 
+    "${CMAKE_CXX_FLAGS} -fno-implicit-templates -fno-exceptions -fno-rtti")
+  IF(CMAKE_CXX_FLAGS)
+    STRING(REGEX MATCH "fno-implicit-templates" NO_IMPLICIT_TEMPLATES
+      ${CMAKE_CXX_FLAGS})
+    IF (NO_IMPLICIT_TEMPLATES)
+      SET(HAVE_EXPLICIT_TEMPLATE_INSTANTIATION TRUE)
+    ENDIF()
+  ENDIF()
+
   IF (CMAKE_EXE_LINKER_FLAGS MATCHES " -static " 
      OR CMAKE_EXE_LINKER_FLAGS MATCHES " -static$")
      SET(HAVE_DLOPEN FALSE CACHE "Disable dlopen due to -static flag" FORCE)
@@ -289,14 +134,10 @@ IF(UNIX)
   IF(NOT LIBRT)
     MY_SEARCH_LIBS(clock_gettime rt LIBRT)
   ENDIF()
-  MY_SEARCH_LIBS(backtrace execinfo LIBEXECINFO)
-
   FIND_PACKAGE(Threads)
 
   SET(CMAKE_REQUIRED_LIBRARIES 
-    ${LIBM} ${LIBNSL} ${LIBBIND} ${LIBCRYPT} ${LIBSOCKET} ${LIBDL}
-    ${CMAKE_THREAD_LIBS_INIT} ${LIBRT} ${LIBEXECINFO}
-  )
+    ${LIBM} ${LIBNSL} ${LIBBIND} ${LIBCRYPT} ${LIBSOCKET} ${LIBDL} ${CMAKE_THREAD_LIBS_INIT} ${LIBRT})
   # Need explicit pthread for gcc -fsanitize=address
   IF(CMAKE_USE_PTHREADS_INIT AND CMAKE_C_FLAGS MATCHES "-fsanitize=")
     SET(CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES} pthread)
@@ -326,11 +167,6 @@ IF(UNIX)
     IF(HAVE_LIBWRAP)
       SET(MYSYS_LIBWRAP_SOURCE  ${CMAKE_SOURCE_DIR}/mysys/my_libwrap.c)
       SET(LIBWRAP "wrap")
-    ELSE()
-      MESSAGE(FATAL_ERROR 
-      "WITH_LIBWRAP is defined, but can not find a working libwrap. "
-      "Make sure both the header files (tcpd.h) "
-      "and the library (libwrap) are installed.")
     ENDIF()
   ENDIF()
 ENDIF()
@@ -347,6 +183,7 @@ CHECK_INCLUDE_FILES (aio.h HAVE_AIO_H)
 CHECK_INCLUDE_FILES (arpa/inet.h HAVE_ARPA_INET_H)
 CHECK_INCLUDE_FILES (crypt.h HAVE_CRYPT_H)
 CHECK_INCLUDE_FILES (cxxabi.h HAVE_CXXABI_H)
+CHECK_INCLUDE_FILES (dirent.h HAVE_DIRENT_H)
 CHECK_INCLUDE_FILES (dlfcn.h HAVE_DLFCN_H)
 CHECK_INCLUDE_FILES (execinfo.h HAVE_EXECINFO_H)
 CHECK_INCLUDE_FILES (fcntl.h HAVE_FCNTL_H)
@@ -417,16 +254,6 @@ CHECK_INCLUDE_FILES ("stdlib.h;sys/un.h" HAVE_SYS_UN_H)
 CHECK_INCLUDE_FILES (vis.h HAVE_VIS_H)
 CHECK_INCLUDE_FILES (wchar.h HAVE_WCHAR_H)
 CHECK_INCLUDE_FILES (wctype.h HAVE_WCTYPE_H)
-CHECK_INCLUDE_FILES (sasl/sasl.h HAVE_SASL_SASL_H)
-
-# For libevent
-CHECK_INCLUDE_FILES(sys/devpoll.h HAVE_DEVPOLL)
-CHECK_INCLUDE_FILES(signal.h HAVE_SIGNAL_H)
-CHECK_INCLUDE_FILES(sys/devpoll.h HAVE_SYS_DEVPOLL_H)
-CHECK_INCLUDE_FILES(sys/epoll.h HAVE_SYS_EPOLL_H)
-CHECK_INCLUDE_FILES(sys/event.h HAVE_SYS_EVENT_H)
-CHECK_INCLUDE_FILES(sys/queue.h HAVE_SYS_QUEUE_H)
-CHECK_SYMBOL_EXISTS (TAILQ_FOREACH "sys/queue.h" HAVE_TAILQFOREACH)
 
 IF(HAVE_SYS_STREAM_H)
   # Needs sys/stream.h on Solaris
@@ -436,14 +263,15 @@ ELSE()
 ENDIF()
 
 # Figure out threading library
-# Defines CMAKE_USE_PTHREADS_INIT and CMAKE_THREAD_LIBS_INIT.
+#
 FIND_PACKAGE (Threads)
 
 FUNCTION(MY_CHECK_PTHREAD_ONCE_INIT)
   CHECK_C_COMPILER_FLAG("-Werror" HAVE_WERROR_FLAG)
-  IF(HAVE_WERROR_FLAG)
-    SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -Werror")
+  IF(NOT HAVE_WERROR_FLAG)
+    RETURN()
   ENDIF()
+  SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -Werror")
   CHECK_C_SOURCE_COMPILES("
     #include <pthread.h>
     void foo(void) {}
@@ -484,8 +312,6 @@ ENDIF()
 #
 # Tests for functions
 #
-CHECK_FUNCTION_EXISTS (_aligned_malloc HAVE_ALIGNED_MALLOC)
-CHECK_FUNCTION_EXISTS (_aligned_free HAVE_ALIGNED_FREE)
 #CHECK_FUNCTION_EXISTS (aiowait HAVE_AIOWAIT)
 CHECK_FUNCTION_EXISTS (aio_read HAVE_AIO_READ)
 CHECK_FUNCTION_EXISTS (alarm HAVE_ALARM)
@@ -494,9 +320,11 @@ CHECK_FUNCTION_EXISTS (backtrace HAVE_BACKTRACE)
 CHECK_FUNCTION_EXISTS (backtrace_symbols HAVE_BACKTRACE_SYMBOLS)
 CHECK_FUNCTION_EXISTS (backtrace_symbols_fd HAVE_BACKTRACE_SYMBOLS_FD)
 CHECK_FUNCTION_EXISTS (printstack HAVE_PRINTSTACK)
+CHECK_FUNCTION_EXISTS (bfill HAVE_BFILL)
 CHECK_FUNCTION_EXISTS (bmove HAVE_BMOVE)
 CHECK_FUNCTION_EXISTS (bsearch HAVE_BSEARCH)
 CHECK_FUNCTION_EXISTS (index HAVE_INDEX)
+CHECK_FUNCTION_EXISTS (bzero HAVE_BZERO)
 CHECK_FUNCTION_EXISTS (clock_gettime HAVE_CLOCK_GETTIME)
 CHECK_FUNCTION_EXISTS (cuserid HAVE_CUSERID)
 CHECK_FUNCTION_EXISTS (directio HAVE_DIRECTIO)
@@ -513,6 +341,7 @@ CHECK_FUNCTION_EXISTS (fcntl HAVE_FCNTL)
 CHECK_FUNCTION_EXISTS (fconvert HAVE_FCONVERT)
 CHECK_FUNCTION_EXISTS (fdatasync HAVE_FDATASYNC)
 CHECK_SYMBOL_EXISTS(fdatasync "unistd.h" HAVE_DECL_FDATASYNC)
+CHECK_FUNCTION_EXISTS (fesetround HAVE_FESETROUND)
 CHECK_FUNCTION_EXISTS (fedisableexcept HAVE_FEDISABLEEXCEPT)
 CHECK_FUNCTION_EXISTS (fpsetmask HAVE_FPSETMASK)
 CHECK_FUNCTION_EXISTS (fseeko HAVE_FSEEKO)
@@ -540,7 +369,7 @@ CHECK_FUNCTION_EXISTS (localtime_r HAVE_LOCALTIME_R)
 CHECK_FUNCTION_EXISTS (longjmp HAVE_LONGJMP)
 CHECK_FUNCTION_EXISTS (lstat HAVE_LSTAT)
 CHECK_FUNCTION_EXISTS (madvise HAVE_MADVISE)
-CHECK_FUNCTION_EXISTS (malloc_info HAVE_MALLOC_INFO)
+CHECK_FUNCTION_EXISTS (mallinfo HAVE_MALLINFO)
 CHECK_FUNCTION_EXISTS (memcpy HAVE_MEMCPY)
 CHECK_FUNCTION_EXISTS (memmove HAVE_MEMMOVE)
 CHECK_FUNCTION_EXISTS (mkstemp HAVE_MKSTEMP)
@@ -552,10 +381,8 @@ CHECK_FUNCTION_EXISTS (perror HAVE_PERROR)
 CHECK_FUNCTION_EXISTS (poll HAVE_POLL)
 CHECK_FUNCTION_EXISTS (port_create HAVE_PORT_CREATE)
 CHECK_FUNCTION_EXISTS (posix_fallocate HAVE_POSIX_FALLOCATE)
-CHECK_FUNCTION_EXISTS (posix_memalign HAVE_POSIX_MEMALIGN)
 CHECK_FUNCTION_EXISTS (pread HAVE_PREAD)
 CHECK_FUNCTION_EXISTS (pthread_attr_create HAVE_PTHREAD_ATTR_CREATE)
-CHECK_FUNCTION_EXISTS (pthread_attr_getguardsize HAVE_PTHREAD_ATTR_GETGUARDSIZE)
 CHECK_FUNCTION_EXISTS (pthread_attr_getstacksize HAVE_PTHREAD_ATTR_GETSTACKSIZE)
 CHECK_FUNCTION_EXISTS (pthread_attr_setscope HAVE_PTHREAD_ATTR_SETSCOPE)
 CHECK_FUNCTION_EXISTS (pthread_attr_setstacksize HAVE_PTHREAD_ATTR_SETSTACKSIZE)
@@ -567,6 +394,7 @@ CHECK_FUNCTION_EXISTS (pthread_sigmask HAVE_PTHREAD_SIGMASK)
 CHECK_FUNCTION_EXISTS (pthread_threadmask HAVE_PTHREAD_THREADMASK)
 CHECK_FUNCTION_EXISTS (pthread_yield_np HAVE_PTHREAD_YIELD_NP)
 CHECK_FUNCTION_EXISTS (putenv HAVE_PUTENV)
+CHECK_FUNCTION_EXISTS (readdir_r HAVE_READDIR_R)
 CHECK_FUNCTION_EXISTS (readlink HAVE_READLINK)
 CHECK_FUNCTION_EXISTS (re_comp HAVE_RE_COMP)
 CHECK_FUNCTION_EXISTS (regcomp HAVE_REGCOMP)
@@ -620,23 +448,6 @@ CHECK_FUNCTION_EXISTS (valloc HAVE_VALLOC)
 CHECK_FUNCTION_EXISTS (memalign HAVE_MEMALIGN)
 CHECK_FUNCTION_EXISTS (chown HAVE_CHOWN)
 CHECK_FUNCTION_EXISTS (nl_langinfo HAVE_NL_LANGINFO)
-CHECK_FUNCTION_EXISTS (ntohll HAVE_HTONLL)
-
-CHECK_FUNCTION_EXISTS (clock_gettime DNS_USE_CPU_CLOCK_FOR_ID)
-CHECK_FUNCTION_EXISTS (epoll_create HAVE_EPOLL)
-CHECK_FUNCTION_EXISTS (epoll_ctl HAVE_EPOLL_CTL)
-# Temperarily  Quote event port out as we encounter error in port_getn
-# on solaris x86
-# CHECK_FUNCTION_EXISTS (port_create HAVE_EVENT_PORTS)
-CHECK_FUNCTION_EXISTS (inet_ntop HAVE_INET_NTOP)
-CHECK_FUNCTION_EXISTS (kqueue HAVE_KQUEUE)
-CHECK_FUNCTION_EXISTS (kqueue HAVE_WORKING_KQUEUE)
-CHECK_FUNCTION_EXISTS (signal HAVE_SIGNAL)
-CHECK_SYMBOL_EXISTS (timeradd "sys/time.h" HAVE_TIMERADD)
-CHECK_SYMBOL_EXISTS (timerclear "sys/time.h" HAVE_TIMERCLEAR)
-CHECK_SYMBOL_EXISTS (timercmp "sys/time.h" HAVE_TIMERCMP)
-CHECK_SYMBOL_EXISTS (timerisset "sys/time.h" HAVE_TIMERISSET)
-
 
 #--------------------------------------------------------------------
 # Support for WL#2373 (Use cycle counter for timing)
@@ -669,6 +480,7 @@ CHECK_FUNCTION_EXISTS(rdtscll HAVE_RDTSCLL)
 # Tests for symbols
 #
 
+CHECK_SYMBOL_EXISTS(sys_errlist "stdio.h" HAVE_SYS_ERRLIST)
 CHECK_SYMBOL_EXISTS(madvise "sys/mman.h" HAVE_DECL_MADVISE)
 CHECK_SYMBOL_EXISTS(tzname "time.h" HAVE_TZNAME)
 CHECK_SYMBOL_EXISTS(lrand48 "stdlib.h" HAVE_LRAND48)
@@ -696,15 +508,6 @@ int main() {
   isinf(0.0); 
   return 0;
 }" HAVE_ISINF)
-
-
-# fesetround() prototype not found in gcc compatibility file fenv.h
-CHECK_CXX_SOURCE_COMPILES(
-"#include  <fenv.h>
-int main() { 
-  fesetround(FE_TONEAREST);
-  return 0;
-}" HAVE_FESETROUND)
 
 
 
@@ -973,9 +776,7 @@ IF(NOT HAVE_FCNTL_NONBLOCK)
 ENDIF()
 
 #
-# Test for how the C compiler does inline.
-# If both of these tests fail, then there is probably something wrong
-# in the environment (flags and/or compiling and/or linking).
+# Test for how the C compiler does inline, if at all
 #
 CHECK_C_SOURCE_COMPILES("
 static inline int foo(){return 0;}
@@ -987,12 +788,6 @@ IF(NOT C_HAS_inline)
   int main(int argc, char *argv[]){return 0;}"
                             C_HAS___inline)
   SET(C_INLINE __inline)
-ENDIF()
-
-IF(NOT C_HAS_inline AND NOT C_HAS___inline)
-  MESSAGE(FATAL_ERROR "It seems like ${CMAKE_C_COMPILER} does not support "
-    "inline or __inline. Please verify compiler and flags. "
-    "See CMakeFiles/CMakeError.log for why the test failed to compile/link.")
 ENDIF()
 
 IF(NOT CMAKE_CROSSCOMPILING AND NOT MSVC)
@@ -1080,6 +875,14 @@ CHECK_CXX_SOURCE_COMPILES("
 ENDIF()
 
 CHECK_C_SOURCE_COMPILES("
+  int main(int argc, char **argv) 
+  {
+    extern char *__bss_start;
+    return __bss_start ? 1 : 0;
+  }"
+HAVE_BSS_START)
+
+CHECK_C_SOURCE_COMPILES("
     int main()
     {
       extern void __attribute__((weak)) foo(void);
@@ -1088,6 +891,16 @@ CHECK_C_SOURCE_COMPILES("
     HAVE_WEAK_SYMBOL
 )
 
+
+CHECK_CXX_SOURCE_COMPILES("
+    #include <new>
+    int main()
+    {
+      char *c = new char;
+      return 0;
+    }"
+    HAVE_CXX_NEW
+)
 
 CHECK_CXX_SOURCE_COMPILES("
     #undef inline
@@ -1111,7 +924,53 @@ CHECK_CXX_SOURCE_COMPILES("
   "
   HAVE_SOLARIS_STYLE_GETHOST)
 
-IF(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+# Use of ALARMs to wakeup on timeout on sockets
+#
+# This feature makes use of a mutex and is a scalability hog we
+# try to avoid using. However we need support for SO_SNDTIMEO and
+# SO_RCVTIMEO socket options for this to work. So we will check
+# if this feature is supported by a simple TRY_RUN macro. However
+# on some OS's there is support for setting those variables but
+# they are silently ignored. For those OS's we will not attempt
+# to use SO_SNDTIMEO and SO_RCVTIMEO even if it is said to work.
+# See Bug#29093 for the problem with SO_SND/RCVTIMEO on HP/UX.
+# To use alarm is simple, simply avoid setting anything.
+
+IF(WIN32)
+  SET(HAVE_SOCKET_TIMEOUT 1)
+ELSEIF(CMAKE_SYSTEM MATCHES "HP-UX")
+  SET(HAVE_SOCKET_TIMEOUT 0)
+ELSEIF(CMAKE_CROSSCOMPILING)
+  SET(HAVE_SOCKET_TIMEOUT 0)
+ELSE()
+SET(CMAKE_REQUIRED_LIBRARIES ${LIBNSL} ${LIBSOCKET}) 
+CHECK_C_SOURCE_RUNS(
+"
+ #include <sys/types.h>
+ #include <sys/socket.h>
+ #include <sys/time.h>
+ 
+ int main()
+ {    
+   int fd = socket(AF_INET, SOCK_STREAM, 0);
+   struct timeval tv;
+   int ret= 0;
+   tv.tv_sec= 2;
+   tv.tv_usec= 0;
+   ret|= setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+   ret|= setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+   return !!ret;
+ }
+" HAVE_SOCKET_TIMEOUT)
+ENDIF()
+
+SET(NO_ALARM "${HAVE_SOCKET_TIMEOUT}" CACHE BOOL 
+   "No need to use alarm to implement socket timeout")
+SET(SIGNAL_WITH_VIO_CLOSE "${HAVE_SOCKET_TIMEOUT}")
+MARK_AS_ADVANCED(NO_ALARM)
+
+
+IF(CMAKE_COMPILER_IS_GNUCXX)
 IF(WITH_ATOMIC_OPS STREQUAL "up")
   SET(MY_ATOMIC_MODE_DUMMY 1 CACHE BOOL "Assume single-CPU mode, no concurrency")
 ELSEIF(WITH_ATOMIC_OPS STREQUAL "rwlocks")
@@ -1142,11 +1001,6 @@ ELSEIF(NOT WITH_ATOMIC_OPS)
     return 0;
   }"
   HAVE_GCC_ATOMIC_BUILTINS)
-  IF(NOT HAVE_GCC_ATOMIC_BUILTINS)
-    MESSAGE(WARNING
-    "Unsupported version of GCC/Clang is used which does not support Atomic "
-    "Builtins. Using pthread rwlocks instead.")
-  ENDIF(NOT HAVE_GCC_ATOMIC_BUILTINS)
 ELSE()
   MESSAGE(FATAL_ERROR "${WITH_ATOMIC_OPS} is not a valid value for WITH_ATOMIC_OPS!")
 ENDIF()
@@ -1160,12 +1014,10 @@ if available and 'smp' configuration otherwise.")
 MARK_AS_ADVANCED(WITH_ATOMIC_LOCKS MY_ATOMIC_MODE_RWLOCK MY_ATOMIC_MODE_DUMMY)
 
 IF(WITH_VALGRIND)
-  SET(VALGRIND_HEADERS "valgrind/memcheck.h;valgrind/valgrind.h")
-  CHECK_INCLUDE_FILES("${VALGRIND_HEADERS}" HAVE_VALGRIND_HEADERS)
+  CHECK_INCLUDE_FILES("valgrind/memcheck.h;valgrind/valgrind.h" 
+    HAVE_VALGRIND_HEADERS)
   IF(HAVE_VALGRIND_HEADERS)
     SET(HAVE_VALGRIND 1)
-  ELSE()
-    MESSAGE(FATAL_ERROR "Unable to find Valgrind header files ${VALGRIND_HEADERS}. Make sure you have them in your include path.")
   ENDIF()
 ENDIF()
 
@@ -1223,22 +1075,3 @@ SET(CMAKE_EXTRA_INCLUDE_FILES)
 CHECK_STRUCT_HAS_MEMBER("struct dirent" d_ino "dirent.h"  STRUCT_DIRENT_HAS_D_INO)
 CHECK_STRUCT_HAS_MEMBER("struct dirent" d_namlen "dirent.h"  STRUCT_DIRENT_HAS_D_NAMLEN)
 SET(SPRINTF_RETURNS_INT 1)
-
-CHECK_INCLUDE_FILES (numaif.h HAVE_NUMAIF_H)
-OPTION(WITH_NUMA "Explicitly set NUMA memory allocation policy" ON)
-IF(HAVE_NUMAIF_H AND WITH_NUMA)
-    SET(SAVE_CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES})
-    SET(CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES} numa)
-    CHECK_C_SOURCE_COMPILES(
-    "
-    #include <numa.h>
-    #include <numaif.h>
-    int main()
-    {
-       struct bitmask *all_nodes= numa_all_nodes_ptr;
-       set_mempolicy(MPOL_DEFAULT, 0, 0);
-       return all_nodes != NULL;
-    }"
-    HAVE_LIBNUMA)
-    SET(CMAKE_REQUIRED_LIBRARIES ${SAVE_CMAKE_REQUIRED_LIBRARIES})
-ENDIF()

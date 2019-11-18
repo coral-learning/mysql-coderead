@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2007 MySQL AB, 2010 Sun Microsystems, Inc.
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,16 +12,17 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 
 #include <ndb_global.h>
 #include <kernel_types.h>
 
+#include "NdbDictionaryImpl.hpp"
 #include "API.hpp"
 #include <NdbOut.hpp>
-
+#include "NdbApiSignal.hpp"
+#include "TransporterFacade.hpp"
 #include <signaldata/CreateEvnt.hpp>
 #include <signaldata/SumaImpl.hpp>
 #include <SimpleProperties.hpp>
@@ -31,22 +32,30 @@
 #include <NdbError.hpp>
 #include <BaseString.hpp>
 #include <UtilBuffer.hpp>
+#include <NdbDictionary.hpp>
+#include <Ndb.hpp>
+#include "NdbImpl.hpp"
+#include "DictCache.hpp"
 #include <portlib/NdbMem.h>
+#include <NdbRecAttr.hpp>
+#include <NdbBlob.hpp>
+#include <NdbEventOperation.hpp>
+#include "NdbEventOperationImpl.hpp"
 #include <signaldata/AlterTable.hpp>
 #include "ndb_internal.hpp"
 
 #include <EventLogger.hpp>
-extern EventLogger * g_eventLogger;
+extern EventLogger g_eventLogger;
 
-#define TOTAL_BUCKETS_INIT (1 << 15)
 static Gci_container_pod g_empty_gci_container;
+static const Uint32 ACTIVE_GCI_DIRECTORY_SIZE = 4;
+static const Uint32 ACTIVE_GCI_MASK = ACTIVE_GCI_DIRECTORY_SIZE - 1;
 
 #if defined(VM_TRACE) && defined(NOT_USED)
 static void
 print_std(const SubTableData * sdata, LinearSectionPtr ptr[3])
 {
-  printf("addr=%p gci{hi/lo}hi=%u/%u op=%d\n", (void*)sdata,
-         sdata->gci_hi, sdata->gci_lo,
+  printf("addr=%p gci=%d op=%d\n", (void*)sdata, sdata->gci, 
 	 SubTableData::getOperation(sdata->requestInfo));
   for (int i = 0; i <= 2; i++) {
     printf("sec=%d addr=%p sz=%d\n", i, (void*)ptr[i].p, ptr[i].sz);
@@ -58,6 +67,16 @@ print_std(const SubTableData * sdata, LinearSectionPtr ptr[3])
 #endif
 
 // EventBufData
+
+Uint32
+EventBufData::get_blob_part_no() const
+{
+  assert(ptr[0].sz > 2);
+  Uint32 pos = AttributeHeader(ptr[0].p[0]).getDataSize() +
+              AttributeHeader(ptr[0].p[1]).getDataSize();
+  Uint32 no = ptr[1].p[pos];
+  return no;
+}
 
 void
 EventBufData::add_part_size(Uint32 & full_count, Uint32 & full_sz) const
@@ -156,7 +175,6 @@ NdbEventOperationImpl::init(NdbEventImpl& evnt)
   theBlobList = NULL;
   theBlobOpList = NULL;
   theMainOp = NULL;
-  theBlobVersion = 0;
 
   m_data_item= NULL;
   m_eventImpl = NULL;
@@ -175,7 +193,7 @@ NdbEventOperationImpl::init(NdbEventImpl& evnt)
 
   m_state= EO_CREATED;
 
-  m_stop_gci = 0;
+  m_node_bit_mask.clear();
 #ifdef ndb_event_stores_merge_events_flag
   m_mergeEvents = m_eventImpl->m_mergeEvents;
 #else
@@ -417,7 +435,6 @@ NdbEventOperationImpl::getBlobHandle(const NdbColumnImpl *tAttrInfo, int n)
       // pointer to main table op
       tBlobOp->theMainOp = this;
       tBlobOp->m_mergeEvents = m_mergeEvents;
-      tBlobOp->theBlobVersion = tAttrInfo->m_blobVersion;
 
       // to hide blob op it is linked under main op, not under m_ndb
       if (tLastBlopOp == NULL)
@@ -450,46 +467,15 @@ NdbEventOperationImpl::getBlobHandle(const NdbColumnImpl *tAttrInfo, int n)
   DBUG_RETURN(tBlob);
 }
 
-Uint32
-NdbEventOperationImpl::get_blob_part_no(bool hasDist)
-{
-  assert(theBlobVersion == 1 || theBlobVersion == 2);
-  assert(theMainOp != NULL);
-  const NdbTableImpl* mainTable = theMainOp->m_eventImpl->m_tableImpl;
-  assert(m_data_item != NULL);
-  LinearSectionPtr (&ptr)[3] = m_data_item->ptr;
-
-  uint pos = 0; // PK and possibly DIST to skip
-
-  if (unlikely(theBlobVersion == 1)) {
-    pos += AttributeHeader(ptr[0].p[0]).getDataSize();
-    assert(hasDist);
-    pos += AttributeHeader(ptr[0].p[1]).getDataSize();
-  } else {
-    uint n = mainTable->m_noOfKeys;
-    uint i;
-    for (i = 0; i < n; i++) {
-      pos += AttributeHeader(ptr[0].p[i]).getDataSize();
-    }
-    if (hasDist)
-      pos += AttributeHeader(ptr[0].p[n]).getDataSize();
-  }
-
-  assert(pos < ptr[1].sz);
-  Uint32 no = ptr[1].p[pos];
-  return no;
-}
-
 int
 NdbEventOperationImpl::readBlobParts(char* buf, NdbBlob* blob,
-                                     Uint32 part, Uint32 count, Uint16* lenLoc)
+                                     Uint32 part, Uint32 count)
 {
   DBUG_ENTER_EVENT("NdbEventOperationImpl::readBlobParts");
   DBUG_PRINT_EVENT("info", ("part=%u count=%u post/pre=%d",
                       part, count, blob->theEventBlobVersion));
 
   NdbEventOperationImpl* blob_op = blob->theBlobEventOp;
-  const bool hasDist = (blob->theStripeSize != 0);
 
   EventBufData* main_data = m_data_item;
   DBUG_PRINT_EVENT("info", ("main_data=%p", main_data));
@@ -510,7 +496,6 @@ NdbEventOperationImpl::readBlobParts(char* buf, NdbBlob* blob,
   }
 
   Uint32 nparts = 0;
-  Uint32 noutside = 0;
   EventBufData* data = head;
   // XXX optimize using part no ordering
   while (data != NULL)
@@ -518,48 +503,28 @@ NdbEventOperationImpl::readBlobParts(char* buf, NdbBlob* blob,
     /*
      * Hack part no directly out of buffer since it is not returned
      * in pre data (PK buglet).  For part data use receive_event().
-     * This means extra copy. XXX fix
+     * This means extra copy.
      */
     blob_op->m_data_item = data;
     int r = blob_op->receive_event();
     assert(r > 0);
-    // XXX should be: no = blob->theBlobEventPartValue
-    Uint32 no = blob_op->get_blob_part_no(hasDist);
+    Uint32 no = data->get_blob_part_no();
+    Uint32 sz = blob->thePartSize;
+    const char* src = blob->theBlobEventDataBuf.data;
 
-    DBUG_PRINT_EVENT("info", ("part_data=%p part no=%u part", data, no));
+    DBUG_PRINT_EVENT("info", ("part_data=%p part no=%u part sz=%u", data, no, sz));
 
     if (part <= no && no < part + count)
     {
       DBUG_PRINT_EVENT("info", ("part within read range"));
-
-      const char* src = blob->theBlobEventDataBuf.data;
-      Uint32 sz = 0;
-      if (blob->theFixedDataFlag) {
-        sz = blob->thePartSize;
-      } else {
-        const uchar* p = (const uchar*)blob->theBlobEventDataBuf.data;
-        sz = p[0] + (p[1] << 8);
-        src += 2;
-      }
       memcpy(buf + (no - part) * sz, src, sz);
       nparts++;
-      if (lenLoc != NULL) {
-        assert(count == 1);
-        *lenLoc = sz;
-      } else {
-        assert(sz == blob->thePartSize);
-      }
     }
     else
     {
       DBUG_PRINT_EVENT("info", ("part outside read range"));
-      noutside++;
     }
     data = data->m_next;
-  }
-  if (unlikely(nparts != count))
-  {
-    ndbout_c("nparts: %u count: %u noutside: %u", nparts, count, noutside);
   }
   assert(nparts == count);
 
@@ -588,28 +553,6 @@ NdbEventOperationImpl::execute_nolock()
     DBUG_RETURN(-1);
   }
 
-  bool schemaTrans = false;
-  if (m_ndb->theEventBuffer->m_total_buckets == TOTAL_BUCKETS_INIT)
-  {
-    int res = NdbDictionaryImpl::getImpl(* myDict).beginSchemaTrans(false);
-    if (res != 0)
-    {
-      switch(myDict->getNdbError().code){
-      case 711:
-      case 763:
-        // ignore;
-        break;
-      default:
-        m_error.code= myDict->getNdbError().code;
-        DBUG_RETURN(-1);
-      }
-    }
-    else
-    {
-      schemaTrans = true;
-    }
-  }
-
   if (theFirstPkAttrs[0] == NULL && 
       theFirstDataAttrs[0] == NULL) { // defaults to get all
   }
@@ -621,26 +564,10 @@ NdbEventOperationImpl::execute_nolock()
   // add kernel reference
   // removed on TE_STOP, TE_CLUSTER_FAILURE, or error below
   m_ref_count++;
-  m_stop_gci= ~(Uint64)0;
+  m_node_bit_mask.set(0u);
   DBUG_PRINT("info", ("m_ref_count: %u for op: %p", m_ref_count, this));
-  Uint32 buckets = 0;
-  int r= NdbDictionaryImpl::getImpl(*myDict).executeSubscribeEvent(*this,
-                                                                   buckets);
-  if (r == 0) 
-  {
-    /* Pre-7.0 kernel nodes do not return the number of buckets
-     * Assume it's == theNoOfDBnodes as was the case in 6.3
-     */
-    if (buckets == ~ (Uint32)0)
-      buckets = m_ndb->theImpl->theNoOfDBnodes;
-
-    m_ndb->theEventBuffer->set_total_buckets(buckets);
-    if (schemaTrans)
-    {
-      schemaTrans = false;
-      myDict->endSchemaTrans(1);
-    }
-
+  int r= NdbDictionaryImpl::getImpl(*myDict).executeSubscribeEvent(*this);
+  if (r == 0) {
     if (theMainOp == NULL) {
       DBUG_PRINT("info", ("execute blob ops"));
       NdbEventOperationImpl* blob_op = theBlobOpList;
@@ -654,6 +581,10 @@ NdbEventOperationImpl::execute_nolock()
           m_error.code= myDict->getNdbError().code;
           DBUG_RETURN(r);
         }
+        // add blob reference to main op
+        // removed by TE_STOP or TE_CLUSTER_FAILURE
+        m_ref_count++;
+        DBUG_PRINT("info", ("m_ref_count: %u for op: %p", m_ref_count, this));
         blob_op = blob_op->m_next;
       }
     }
@@ -666,20 +597,13 @@ NdbEventOperationImpl::execute_nolock()
   // remove kernel reference
   // added above
   m_ref_count--;
-  m_stop_gci = 0;
+  m_node_bit_mask.clear(0u);
   DBUG_PRINT("info", ("m_ref_count: %u for op: %p", m_ref_count, this));
   m_state= EO_ERROR;
   mi_type= 0;
   m_magic_number= 0;
   m_error.code= myDict->getNdbError().code;
   m_ndb->theEventBuffer->remove_op();
-
-  if (schemaTrans)
-  {
-    schemaTrans = false;
-    myDict->endSchemaTrans(1);
-  }
-
   DBUG_RETURN(r);
 }
 
@@ -725,23 +649,6 @@ NdbEventOperationImpl::stop()
   m_state= EO_DROPPED;
   mi_type= 0;
   if (r == 0) {
-    if (m_stop_gci == 0)
-    {
-      // response from old kernel
-      Uint64 gci= m_ndb->theEventBuffer->m_highest_sub_gcp_complete_GCI;
-      if (gci)
-      {
-        // calculate a "safe" gci in the future to remove event op.
-        gci += Uint64(3) << 32;
-      }
-      else
-      {
-        // set highest value to ensure that operation does not get dropped
-        // too early. Note '-1' as ~Uint64(0) indicates active event
-        gci = ~Uint64(0)-1;
-      }
-      m_stop_gci = gci;
-    }
     m_ndb->theEventBuffer->add_drop_unlock();
     DBUG_RETURN(0);
   }
@@ -775,9 +682,7 @@ bool NdbEventOperationImpl::tableRangeListChanged() const
 Uint64
 NdbEventOperationImpl::getGCI()
 {
-  Uint32 gci_hi = m_data_item->sdata->gci_hi;
-  Uint32 gci_lo = m_data_item->sdata->gci_lo;
-  return gci_lo | (Uint64(gci_hi) << 32);
+  return m_data_item->sdata->gci;
 }
 
 Uint32
@@ -792,18 +697,9 @@ NdbEventOperationImpl::getLatestGCI()
   return m_ndb->theEventBuffer->getLatestGCI();
 }
 
-Uint64
-NdbEventOperationImpl::getTransId() const
-{
-  /* Return 64 bit composite */
-  Uint32 transId1 = m_data_item->sdata->transId1;
-  Uint32 transId2 = m_data_item->sdata->transId2;
-  return Uint64(transId1) << 32 | transId2;
-}
-
 bool
-NdbEventOperationImpl::execSUB_TABLE_DATA(const NdbApiSignal * signal,
-                                          const LinearSectionPtr ptr[3])
+NdbEventOperationImpl::execSUB_TABLE_DATA(NdbApiSignal * signal, 
+                                          LinearSectionPtr ptr[3])
 {
   DBUG_ENTER("NdbEventOperationImpl::execSUB_TABLE_DATA");
   const SubTableData * const sdata=
@@ -817,7 +713,6 @@ NdbEventOperationImpl::execSUB_TABLE_DATA(const NdbApiSignal * signal,
       abort();
     }
   }
-
   const Uint32 i = SubTableData::DICT_TAB_INFO;
   DBUG_PRINT("info", ("Accumulated %u bytes for fragment %u", 
                       4 * ptr[i].sz, m_fragmentId));
@@ -840,15 +735,12 @@ NdbEventOperationImpl::receive_event()
   {
     DBUG_ENTER("NdbEventOperationImpl::receive_event");
     DBUG_PRINT("info",("sdata->operation %u  this: %p", operation, this));
-    m_ndb->theImpl->incClientStat(Ndb::NonDataEventsRecvdCount, 1);
     if (operation == NdbDictionary::Event::_TE_ALTER)
     {
       // Parse the new table definition and
       // create a table object
-      NdbDictInterface::Tx tx_unused;
       NdbError error;
-      int warn;
-      NdbDictInterface dif(tx_unused, error, warn);
+      NdbDictInterface dif(error);
       NdbTableImpl *at;
       m_change_mask = m_data_item->sdata->changeMask;
       error.code = dif.parseTableInfo(&at,
@@ -856,7 +748,7 @@ NdbEventOperationImpl::receive_event()
                                       m_buffer.length() / 4, 
                                       true);
       m_buffer.clear();
-      if (unlikely(error.code))
+      if (unlikely(!at))
       {
         DBUG_PRINT("info", ("Failed to parse DictTabInfo error %u", 
                                   error.code));
@@ -922,9 +814,8 @@ NdbEventOperationImpl::receive_event()
   DBUG_ENTER_EVENT("NdbEventOperationImpl::receive_event");
   DBUG_PRINT_EVENT("info",("sdata->operation %u  this: %p", operation, this));
   // now move the data into the RecAttrs
-  m_ndb->theImpl->incClientStat(Ndb::DataEventsRecvdCount, 1);
-
-  int is_insert= operation == NdbDictionary::Event::_TE_INSERT;
+    
+  int is_update= operation == NdbDictionary::Event::_TE_UPDATE;
 
   Uint32 *aAttrPtr = m_data_item->ptr[0].p;
   Uint32 *aAttrEndPtr = aAttrPtr + m_data_item->ptr[0].sz;
@@ -947,7 +838,7 @@ NdbEventOperationImpl::receive_event()
       assert(tAttr->attrId() ==
 	     AttributeHeader(*aAttrPtr).getAttributeId());
       receive_data(tAttr, aDataPtr, tDataSz);
-      if (!is_insert)
+      if (is_update)
 	receive_data(tAttr1, aDataPtr, tDataSz);
       else
         tAttr1->setUNDEFINED(); // do not leave unspecified
@@ -964,7 +855,7 @@ NdbEventOperationImpl::receive_event()
   Uint32 tRecAttrId;
   Uint32 tAttrId;
   Uint32 tDataSz;
-  int hasSomeData= (operation != NdbDictionary::Event::_TE_UPDATE);
+  int hasSomeData=0;
   while ((aAttrPtr < aAttrEndPtr) && (tWorkingRecAttr != NULL)) {
     tRecAttrId = tWorkingRecAttr->attrId();
     tAttrId = AttributeHeader(*aAttrPtr).getAttributeId();
@@ -983,7 +874,7 @@ NdbEventOperationImpl::receive_event()
       break;
     
     if (tAttrId == tRecAttrId) {
-      hasSomeData=1;
+      hasSomeData++;
       
       DBUG_PRINT_EVENT("info",("set [%u] %u 0x%x [%u] 0x%x",
                                tAttrId, tDataSz, *aDataPtr, tRecAttrId, aDataPtr));
@@ -1022,7 +913,7 @@ NdbEventOperationImpl::receive_event()
       break;
     if (tAttrId == tRecAttrId) {
       assert(!m_eventImpl->m_tableImpl->getColumn(tRecAttrId)->getPrimaryKey());
-      hasSomeData=1;
+      hasSomeData++;
       
       receive_data(tWorkingRecAttr, aDataPtr, tDataSz);
       tWorkingRecAttr = tWorkingRecAttr->next();
@@ -1034,7 +925,7 @@ NdbEventOperationImpl::receive_event()
     tWorkingRecAttr = tWorkingRecAttr->next();
   }
   
-  if (hasSomeData)
+  if (hasSomeData || !is_update)
   {
     DBUG_RETURN_EVENT(1);
   }
@@ -1101,19 +992,17 @@ NdbEventOperationImpl::printAll()
  * Class NdbEventBuffer
  * Each Ndb object has a Object.
  */
+
+
 NdbEventBuffer::NdbEventBuffer(Ndb *ndb) :
-  m_total_buckets(TOTAL_BUCKETS_INIT), 
-  m_min_gci_index(0),
-  m_max_gci_index(0),
+  m_system_nodes(ndb->theImpl->theNoOfDBnodes),
   m_ndb(ndb),
   m_latestGCI(0), m_latest_complete_GCI(0),
-  m_highest_sub_gcp_complete_GCI(0),
-  m_latest_poll_GCI(0),
   m_total_alloc(0),
-  m_free_thresh(0),
-  m_min_free_thresh(0),
-  m_max_free_thresh(0),
-  m_gci_slip_thresh(0),
+  m_free_thresh(10),
+  m_min_free_thresh(10),
+  m_max_free_thresh(100),
+  m_gci_slip_thresh(3),
   m_dropped_ev_op(0),
   m_active_op_count(0),
   m_add_drop_mutex(0)
@@ -1127,8 +1016,7 @@ NdbEventBuffer::NdbEventBuffer(Ndb *ndb) :
     ndbout_c("NdbEventHandle: NdbCondition_Create() failed");
     exit(-1);
   }
-  m_mutex = 0; // Set in Ndb::init()
-
+  m_mutex= ndb->theImpl->theWaiter.m_mutex;
   // ToDo set event buffer size
   // pre allocate event data array
   m_sz= 0;
@@ -1145,8 +1033,6 @@ NdbEventBuffer::NdbEventBuffer(Ndb *ndb) :
   // initialize lists
   bzero(&g_empty_gci_container, sizeof(Gci_container));
   init_gci_containers();
-
-  m_alive_node_bit_mask.clear();
 }
 
 NdbEventBuffer::~NdbEventBuffer()
@@ -1202,15 +1088,10 @@ NdbEventBuffer::remove_op()
 void
 NdbEventBuffer::init_gci_containers()
 {
-  m_startup_hack = true;
   bzero(&m_complete_data, sizeof(m_complete_data));
-  m_latest_complete_GCI = m_latestGCI = m_latest_poll_GCI = 0;
+  m_latest_complete_GCI = m_latestGCI = 0;
   m_active_gci.clear();
-  m_active_gci.fill(3, g_empty_gci_container);
-  m_min_gci_index = m_max_gci_index = 1;
-  Uint64 gci = 0;
-  m_known_gci.clear();
-  m_known_gci.fill(7, gci);
+  m_active_gci.fill(2 * ACTIVE_GCI_DIRECTORY_SIZE - 1, g_empty_gci_container);
 }
 
 int NdbEventBuffer::expand(unsigned sz)
@@ -1260,7 +1141,8 @@ NdbEventBuffer::pollEvents(int aMillisecondNumber, Uint64 *latestGCI)
     if (unlikely(ev_op == 0))
       ret= 0;
   }
-  m_latest_poll_GCI= m_latestGCI;
+  if (latestGCI)
+    *latestGCI= m_latestGCI;
 #ifdef VM_TRACE
   if (ev_op)
   {
@@ -1271,19 +1153,7 @@ NdbEventBuffer::pollEvents(int aMillisecondNumber, Uint64 *latestGCI)
   }
   m_latest_command= m_latest_command_save;
 #endif
-  if (unlikely(ev_op == 0))
-  {
-    /*
-      gci's consumed up until m_latest_poll_GCI, so we can free all
-      dropped event operations stopped up until that gci
-    */
-    deleteUsedEventOperations(m_latest_poll_GCI);
-  }
   NdbMutex_Unlock(m_mutex); // we have moved the data
-
-  if (latestGCI)
-    *latestGCI= m_latest_poll_GCI;
-
   return ret;
 }
 
@@ -1293,34 +1163,30 @@ NdbEventBuffer::flushIncompleteEvents(Uint64 gci)
   /**
    *  Find min complete gci
    */
-  Uint64 * array = m_known_gci.getBase();
-  Uint32 mask = m_known_gci.size() - 1;
-  Uint32 minpos = m_min_gci_index;
-  Uint32 maxpos = m_max_gci_index;
-
-  g_eventLogger->info("Flushing incomplete GCI:s < %u/%u",
-                      Uint32(gci >> 32), Uint32(gci));
-  while (minpos != maxpos && array[minpos] < gci)
+  // called by user thread, so we need to lock the data
+  lock();
+  Uint32 i;
+  Uint32 sz= m_active_gci.size();
+  Gci_container* array = (Gci_container*)m_active_gci.getBase();
+  for(i = 0; i < sz; i++)
   {
-    Gci_container* tmp = find_bucket(array[minpos]);
-    assert(tmp);
-    assert(maxpos == m_max_gci_index);
-
-    if(!tmp->m_data.is_empty())
+    Gci_container* tmp = array + i;
+    if (tmp->m_gci && tmp->m_gci < gci)
     {
-      free_list(tmp->m_data);
+      // we have found an old not-completed gci, remove it
+      ndbout_c("ndb: flushing incomplete epoch %lld (<%lld)", tmp->m_gci, gci);
+      if(!tmp->m_data.is_empty())
+      {
+        free_list(tmp->m_data);
+      }
+      tmp->~Gci_container();
+      bzero(tmp, sizeof(Gci_container));
     }
-    tmp->~Gci_container();
-    bzero(tmp, sizeof(Gci_container));
-    minpos = (minpos + 1) & mask;
   }
-
-  m_min_gci_index = minpos;
-
 #ifdef VM_TRACE
   m_flush_gci = gci;
 #endif
-
+  unlock();
   return 0;
 }
 
@@ -1348,21 +1214,9 @@ NdbEventBuffer::nextEvent()
 #endif
 
   EventBufData *data;
-  Uint64 gci= 0;
   while ((data= m_available_data.m_head))
   {
     NdbEventOperationImpl *op= data->m_event_op;
-
-    /*
-     * The data was not associated with an event operation,
-     * possibly a dummy event list marking missing data
-     */
-    if (!op && !isConsistent(gci))
-    {
-      DBUG_PRINT_EVENT("info", ("detected inconsistent gci %u", gci));
-      DBUG_RETURN_EVENT(0);
-    }
-
     DBUG_PRINT_EVENT("info", ("available data=%p op=%p", data, op));
 
     /*
@@ -1381,45 +1235,44 @@ NdbEventBuffer::nextEvent()
     // add it to used list
     m_used_data.append_used_data(data, full_count, full_sz);
 
-    m_ndb->theImpl->incClientStat(Ndb::EventBytesRecvdCount, full_sz);
-
 #ifdef VM_TRACE
     op->m_data_done_count++;
 #endif
 
-    if (op->m_state == NdbEventOperation::EO_EXECUTING)
+    int r= op->receive_event();
+    if (r > 0)
     {
-      int r= op->receive_event();
-      if (r > 0)
+      if (op->m_state == NdbEventOperation::EO_EXECUTING)
       {
 #ifdef VM_TRACE
-	 m_latest_command= m_latest_command_save;
+	m_latest_command= m_latest_command_save;
 #endif
-         NdbBlob* tBlob = op->theBlobList;
-         while (tBlob != NULL)
-         {
-           (void)tBlob->atNextEvent();
-           tBlob = tBlob->theNext;
-         }
-         EventBufData_list::Gci_ops *gci_ops = m_available_data.first_gci_ops();
-         while (gci_ops && op->getGCI() > gci_ops->m_gci)
-         {
-           gci_ops = m_available_data.delete_next_gci_ops();
-         }
-         if (!gci_ops->m_consistent)
-           DBUG_RETURN_EVENT(0);
-         assert(gci_ops && (op->getGCI() == gci_ops->m_gci));
-         // to return TE_NUL it should be made into data event
-         if (SubTableData::getOperation(data->sdata->requestInfo) ==
-	   NdbDictionary::Event::_TE_NUL)
-         {
-           DBUG_PRINT_EVENT("info", ("skip _TE_NUL"));
-           continue;
-         }
-	 DBUG_RETURN_EVENT(op->m_facade);
-       }
-       // the next event belonged to an event op that is no
-       // longer valid, skip to next
+        NdbBlob* tBlob = op->theBlobList;
+        while (tBlob != NULL)
+        {
+          (void)tBlob->atNextEvent();
+          tBlob = tBlob->theNext;
+        }
+        EventBufData_list::Gci_ops *gci_ops = m_available_data.first_gci_ops();
+        while (gci_ops && op->getGCI() > gci_ops->m_gci)
+        {
+          // moved to next gci, check if any references have been
+          // released when completing the last gci
+          deleteUsedEventOperations();
+          gci_ops = m_available_data.next_gci_ops();
+        }
+        assert(gci_ops && (op->getGCI() == gci_ops->m_gci));
+        // to return TE_NUL it should be made into data event
+        if (SubTableData::getOperation(data->sdata->requestInfo) == 
+	    NdbDictionary::Event::_TE_NUL)
+        {
+          DBUG_PRINT_EVENT("info", ("skip _TE_NUL"));
+          continue;
+        }
+	DBUG_RETURN_EVENT(op->m_facade);
+      }
+      // the next event belonged to an event op that is no
+      // longer valid, skip to next
       continue;
     }
 #ifdef VM_TRACE
@@ -1431,57 +1284,17 @@ NdbEventBuffer::nextEvent()
   m_latest_command= m_latest_command_save;
 #endif
 
+  // free all "per gci unique" collected operations
+  // completed gci, check if any references have been
+  // released when completing the gci
   EventBufData_list::Gci_ops *gci_ops = m_available_data.first_gci_ops();
   while (gci_ops)
   {
-    gci_ops = m_available_data.delete_next_gci_ops();
-  }
-  /*
-    gci's consumed up until m_latest_poll_GCI, so we can free all
-    dropped event operations stopped up until that gci
-  */
-  if (m_dropped_ev_op)
-  {
-    NdbMutex_Lock(m_mutex);
-    deleteUsedEventOperations(m_latest_poll_GCI);
-    NdbMutex_Unlock(m_mutex);
+    deleteUsedEventOperations();
+    gci_ops = m_available_data.next_gci_ops();
   }
   DBUG_RETURN_EVENT(0);
 }
-
-bool
-NdbEventBuffer::isConsistent(Uint64& gci)
-{
-  DBUG_ENTER("NdbEventBuffer::isConsistent");
-  EventBufData_list::Gci_ops *gci_ops = m_available_data.first_gci_ops();
-  while (gci_ops)
-  {
-    if (!gci_ops->m_consistent)
-    {
-      gci = gci_ops->m_gci;
-      DBUG_RETURN(false);
-    }
-    gci_ops = gci_ops->m_next;
-  }
-
-  DBUG_RETURN(true);
-}
-
-bool
-NdbEventBuffer::isConsistentGCI(Uint64 gci)
-{
-  DBUG_ENTER("NdbEventBuffer::isConsistentGCI");
-  EventBufData_list::Gci_ops *gci_ops = m_available_data.first_gci_ops();
-  while (gci_ops)
-  {
-    if (gci_ops->m_gci == gci && !gci_ops->m_consistent)
-      DBUG_RETURN(false);
-    gci_ops = gci_ops->m_next;
-  }
-
-  DBUG_RETURN(true);
-}
-
 
 NdbEventOperationImpl*
 NdbEventBuffer::getGCIEventOperations(Uint32* iter, Uint32* event_types)
@@ -1502,42 +1315,38 @@ NdbEventBuffer::getGCIEventOperations(Uint32* iter, Uint32* event_types)
 }
 
 void
-NdbEventBuffer::deleteUsedEventOperations(Uint64 last_consumed_gci)
+NdbEventBuffer::deleteUsedEventOperations()
 {
-  NdbEventOperationImpl *op= m_dropped_ev_op;
-  while (op && op->m_stop_gci)
+  Uint32 iter= 0;
+  const NdbEventOperation *op_f;
+  while ((op_f= getGCIEventOperations(&iter, NULL)) != NULL)
   {
-    if (last_consumed_gci > op->m_stop_gci)
+    NdbEventOperationImpl *op = &op_f->m_impl;
+    DBUG_ASSERT(op->m_ref_count > 0);
+    // remove gci reference
+    // added in inserDataL
+    op->m_ref_count--;
+    DBUG_PRINT("info", ("m_ref_count: %u for op: %p", op->m_ref_count, op));
+    if (op->m_ref_count == 0)
     {
-      while (op)
-      {
-        NdbEventOperationImpl *next_op= op->m_next;
-        op->m_stop_gci= 0;
-        op->m_ref_count--;
-        if (op->m_ref_count == 0)
-        {
-          if (op->m_next)
-            op->m_next->m_prev = op->m_prev;
-          if (op->m_prev)
-            op->m_prev->m_next = op->m_next;
-          else
-            m_dropped_ev_op = op->m_next;
-          delete op->m_facade;
-        }
-        op = next_op;
-      }
-      break;
+      DBUG_PRINT("info", ("deleting op: %p", op));
+      DBUG_ASSERT(op->m_node_bit_mask.isclear());
+      if (op->m_next)
+        op->m_next->m_prev = op->m_prev;
+      if (op->m_prev)
+        op->m_prev->m_next = op->m_next;
+      else
+        m_dropped_ev_op = op->m_next;
+      delete op->m_facade;
     }
-    op = op->m_next;
   }
 }
 
-#ifdef VM_TRACE
 static
 NdbOut&
 operator<<(NdbOut& out, const Gci_container& gci)
 {
-  out << "[ GCI: " << (gci.m_gci >> 32) << "/" << (gci.m_gci & 0xFFFFFFFF)
+  out << "[ GCI: " << gci.m_gci
       << "  state: " << hex << gci.m_state 
       << "  head: " << hex << gci.m_data.m_head
       << "  tail: " << hex << gci.m_data.m_tail
@@ -1549,6 +1358,7 @@ operator<<(NdbOut& out, const Gci_container& gci)
   return out;
 }
 
+#ifdef VM_TRACE
 static
 NdbOut&
 operator<<(NdbOut& out, const Gci_container_pod& gci)
@@ -1559,411 +1369,127 @@ operator<<(NdbOut& out, const Gci_container_pod& gci)
 }
 #endif
 
-void
-NdbEventBuffer::resize_known_gci()
-{
-  Uint32 minpos = m_min_gci_index;
-  Uint32 maxpos = m_max_gci_index;
-  Uint32 mask = m_known_gci.size() - 1;
-
-  Uint64 fill = 0;
-  Uint32 newsize = 2 * (mask + 1);
-  m_known_gci.fill(newsize - 1, fill);
-  Uint64 * array = m_known_gci.getBase();
-
-  if (0)
-  {
-    printf("before (%u): ", minpos);
-    for (Uint32 i = minpos; i != maxpos; i = (i + 1) & mask)
-      printf("%u/%u ",
-             Uint32(array[i] >> 32),
-             Uint32(array[i]));
-    printf("\n");
-  }
-
-  Uint32 idx = mask + 1; // Store eveything in "new" part of buffer
-  if (0) printf("swapping ");
-  while (minpos != maxpos)
-  {
-    if (0) printf("%u-%u ", minpos, idx);
-    Uint64 tmp = array[idx];
-    array[idx] = array[minpos];
-    array[minpos] = tmp;
-
-    idx++;
-    minpos = (minpos + 1) & mask; // NOTE old mask
-  }
-  if (0) printf("\n");
-
-  minpos = m_min_gci_index = mask + 1;
-  maxpos = m_max_gci_index = idx;
-  assert(minpos < maxpos);
-
-  if (0)
-  {
-    ndbout_c("resize_known_gci from %u to %u", (mask + 1), newsize);
-    printf("after: ");
-    for (Uint32 i = minpos; i < maxpos; i++)
-    {
-      printf("%u/%u ",
-             Uint32(array[i] >> 32),
-             Uint32(array[i]));
-    }
-    printf("\n");
-  }
-
-#ifdef VM_TRACE
-  Uint64 gci = array[minpos];
-  for (Uint32 i = minpos + 1; i<maxpos; i++)
-  {
-    assert(array[i] > gci);
-    gci = array[i];
-  }
-#endif
-}
-
-#ifdef VM_TRACE
-void
-NdbEventBuffer::verify_known_gci(bool allowempty)
-{
-  Uint32 minpos = m_min_gci_index;
-  Uint32 maxpos = m_max_gci_index;
-  Uint32 mask = m_known_gci.size() - 1;
-
-  Uint32 line;
-#define MMASSERT(x) { if (!(x)) { line = __LINE__; goto fail; }}
-  if (m_min_gci_index == m_max_gci_index)
-  {
-    MMASSERT(allowempty);
-    for (Uint32 i = 0; i<m_active_gci.size(); i++)
-      MMASSERT(((Gci_container*)(m_active_gci.getBase()+i))->m_gci == 0);
-    return;
-  }
-
-  {
-    Uint64 last = m_known_gci[minpos];
-    MMASSERT(last > m_latestGCI);
-    MMASSERT(find_bucket(last) != 0);
-    MMASSERT(maxpos == m_max_gci_index);
-
-    minpos = (minpos + 1) & mask;
-    while (minpos != maxpos)
-    {
-      MMASSERT(m_known_gci[minpos] > last);
-      last = m_known_gci[minpos];
-      MMASSERT(find_bucket(last) != 0);
-      MMASSERT(maxpos == m_max_gci_index);
-      minpos = (minpos + 1) & mask;
-    }
-  }
-
-  {
-    Gci_container* bucktets = (Gci_container*)(m_active_gci.getBase());
-    for (Uint32 i = 0; i<m_active_gci.size(); i++)
-    {
-      if (bucktets[i].m_gci)
-      {
-        bool found = false;
-        for (Uint32 j = m_min_gci_index; j != m_max_gci_index;
-             j = (j + 1) & mask)
-        {
-          if (m_known_gci[j] == bucktets[i].m_gci)
-          {
-            found = true;
-            break;
-          }
-        }
-        if (!found)
-          ndbout_c("%u/%u not found",
-                   Uint32(bucktets[i].m_gci >> 32),
-                   Uint32(bucktets[i].m_gci));
-        MMASSERT(found == true);
-      }
-    }
-  }
-
-  return;
-fail:
-  ndbout_c("assertion at %d", line);
-  printf("known gci: ");
-  for (Uint32 i = m_min_gci_index; i != m_max_gci_index; i = (i + 1) & mask)
-  {
-    printf("%u/%u ", Uint32(m_known_gci[i] >> 32), Uint32(m_known_gci[i]));
-  }
-
-  printf("\nContainers");
-  for (Uint32 i = 0; i<m_active_gci.size(); i++)
-    ndbout << m_active_gci[i] << endl;
-  abort();
-}
-#endif
-
+static
 Gci_container*
-NdbEventBuffer::find_bucket_chained(Uint64 gci)
+find_bucket_chained(Vector<Gci_container_pod> * active, Uint64 gci
+#ifdef VM_TRACE
+                    ,Uint64 flush_gci
+#endif
+                    )
 {
-  if (0)
-    printf("find_bucket_chained(%u/%u) ", Uint32(gci >> 32), Uint32(gci));
-  if (unlikely(gci <= m_latestGCI))
-  {
-    /**
-     * an already complete GCI
-     */
-    if (0)
-      ndbout_c("already complete (%u/%u)",
-               Uint32(m_latestGCI >> 32),
-               Uint32(m_latestGCI));
-    return 0;
-  }
+  Uint32 pos = (gci & ACTIVE_GCI_MASK);
+  Gci_container *bucket= ((Gci_container*)active->getBase()) + pos;
 
-  if (unlikely(m_total_buckets == 0))
+  if(gci > bucket->m_gci)
   {
-    return 0;
-  }
-
-  Uint32 pos = Uint32(gci & ACTIVE_GCI_MASK);
-  Uint32 size = m_active_gci.size();
-  Gci_container *buckets = (Gci_container*)(m_active_gci.getBase());
-  while (pos < size)
-  {
-    Uint64 cmp = (buckets + pos)->m_gci;
-    if (cmp == gci)
+    Gci_container* move;
+    Uint32 move_pos = pos + ACTIVE_GCI_DIRECTORY_SIZE;
+    do 
     {
-      if (0)
-        ndbout_c("found pos: %u", pos);
-      return buckets + pos;
-    }
-
-    if (cmp == 0)
-    {
-      if (0)
-        ndbout_c("empty(%u) ", pos);
-      Uint32 search = pos + ACTIVE_GCI_DIRECTORY_SIZE;
-      while (search < size)
+      active->fill(move_pos, g_empty_gci_container);
+      // Needs to recomputed after fill
+      bucket = ((Gci_container*)active->getBase()) + pos; 
+      move = ((Gci_container*)active->getBase()) + move_pos;
+      if(move->m_gcp_complete_rep_count == 0)
       {
-        if ((buckets + search)->m_gci == gci)
+	memcpy(move, bucket, sizeof(Gci_container));
+	bzero(bucket, sizeof(Gci_container));
+	bucket->m_gci = gci;
+	bucket->m_gcp_complete_rep_count = ~(Uint32)0;
+#ifdef VM_TRACE
+        if (gci < flush_gci)
         {
-          memcpy(buckets + pos, buckets + search, sizeof(Gci_container));
-          bzero(buckets + search, sizeof(Gci_container));
-          if (0)
-            printf("moved from %u to %u", search, pos);
-          if (search == size - 1)
-          {
-            m_active_gci.erase(search);
-            if (0)
-              ndbout_c(" shrink");
-          }
-          else
-          {
-            if (0)
-              printf("\n");
-          }
-          return buckets + pos;
+          ndbout_c("received old gci %llu < flush gci %llu", gci, flush_gci);
+          assert(false);
         }
-        search += ACTIVE_GCI_DIRECTORY_SIZE;
+#endif
+	return bucket;
       }
-      goto newbucket;
-    }
-    pos += ACTIVE_GCI_DIRECTORY_SIZE;
+      move_pos += ACTIVE_GCI_DIRECTORY_SIZE;
+    } while(true);
   }
-
-  /**
-   * This is a new bucket...likely close to start
-   */
-  if (0)
-    ndbout_c("new (with expand) ");
-  m_active_gci.fill(pos, g_empty_gci_container);
-  buckets = (Gci_container*)(m_active_gci.getBase());
-newbucket:
-  Gci_container* bucket = buckets + pos;
-  bucket->m_gci = gci;
-  bucket->m_gcp_complete_rep_count = m_total_buckets;
-
-  Uint32 mask = m_known_gci.size() - 1;
-  Uint64 * array = m_known_gci.getBase();
-
-  Uint32 minpos = m_min_gci_index;
-  Uint32 maxpos = m_max_gci_index;
-  bool full = ((maxpos + 1) & mask) == minpos;
-  if (unlikely(full))
+  else /** gci < bucket->m_gci */
   {
-    resize_known_gci();
-    minpos = m_min_gci_index;
-    maxpos = m_max_gci_index;
-    mask = m_known_gci.size() - 1;
-    array = m_known_gci.getBase();
-  }
-
-  Uint32 maxindex = (maxpos - 1) & mask;
-  Uint32 newmaxpos = (maxpos + 1) & mask;
-  m_max_gci_index = newmaxpos;
-  if (likely(minpos == maxpos || gci > array[maxindex]))
-  {
-    array[maxpos] = gci;
+    Uint32 size = active->size() - ACTIVE_GCI_DIRECTORY_SIZE;
+    do 
+    {
+      pos += ACTIVE_GCI_DIRECTORY_SIZE;
+      bucket += ACTIVE_GCI_DIRECTORY_SIZE;
+      
+      if(bucket->m_gci == gci)
+      {
 #ifdef VM_TRACE
-    verify_known_gci(false);
+        if (gci < flush_gci)
+        {
+          ndbout_c("received old gci %llu < flush gci %llu", gci, flush_gci);
+          assert(false);
+        }
 #endif
+	return bucket;
+      }
+      
+    } while(pos < size);
+    
+    return 0;
+  }
+}
+
+inline
+Gci_container*
+find_bucket(Vector<Gci_container_pod> * active, Uint64 gci
+#ifdef VM_TRACE
+            ,Uint64 flush_gci
+#endif
+            )
+{
+  Uint32 pos = (gci & ACTIVE_GCI_MASK);
+  Gci_container *bucket= ((Gci_container*)active->getBase()) + pos;
+  if(likely(gci == bucket->m_gci))
     return bucket;
-  }
 
-  for (pos = minpos; pos != maxpos; pos = (pos + 1) & mask)
-  {
-    if (array[pos] > gci)
-      break;
-  }
-
-  if (0)
-    ndbout_c("insert %u/%u (max %u/%u) at pos %u (min: %u max: %u)",
-             Uint32(gci >> 32),
-             Uint32(gci),
-             Uint32(array[maxindex] >> 32),
-             Uint32(array[maxindex]),
-             pos,
-             m_min_gci_index, m_max_gci_index);
-
-  assert(pos != maxpos);
-  Uint64 oldgci;
-  do {
-    oldgci = array[pos];
-    array[pos] = gci;
-    gci = oldgci;
-    pos = (pos + 1) & mask;
-  } while (pos != maxpos);
-  array[pos] = gci;
-
+  return find_bucket_chained(active,gci
 #ifdef VM_TRACE
-  verify_known_gci(false);
+                             , flush_gci
 #endif
-  return bucket;
+                             );
 }
 
 static
 void
 crash_on_invalid_SUB_GCP_COMPLETE_REP(const Gci_container* bucket,
 				      const SubGcpCompleteRep * const rep,
-				      Uint32 buckets)
+				      Uint32 nodes)
 {
   Uint32 old_cnt = bucket->m_gcp_complete_rep_count;
   
   ndbout_c("INVALID SUB_GCP_COMPLETE_REP");
-  ndbout_c("gci_hi: %u", rep->gci_hi);
-  ndbout_c("gci_lo: %u", rep->gci_lo);
+  ndbout_c("gci: %d", rep->gci);
   ndbout_c("sender: %x", rep->senderRef);
   ndbout_c("count: %d", rep->gcp_complete_rep_count);
   ndbout_c("bucket count: %u", old_cnt);
-  ndbout_c("total buckets: %u", buckets);
+  ndbout_c("nodes: %u", nodes);
   abort();
 }
 
 void
-NdbEventBuffer::complete_bucket(Gci_container* bucket)
+NdbEventBuffer::execSUB_GCP_COMPLETE_REP(const SubGcpCompleteRep * const rep)
 {
-  Uint64 gci = bucket->m_gci;
-  Gci_container* buckets = (Gci_container*)m_active_gci.getBase();
-
-  if (0)
-    ndbout_c("complete %u/%u pos: %u", Uint32(gci >> 32), Uint32(gci),
-             Uint32(bucket - buckets));
-
-#ifdef VM_TRACE
-  verify_known_gci(false);
-#endif
-
-  /**
-   * Copy data
-   */
-  if(!bucket->m_data.is_empty())
+  if (unlikely(m_active_op_count == 0))
   {
-#ifdef VM_TRACE
-    assert(bucket->m_data.m_count);
-#endif
-    m_complete_data.m_data.append_list(&bucket->m_data, gci);
-    if (bucket->m_state & Gci_container::GC_INCONSISTENT)
-    {
-      /*
-       * Bucket marked as possibly missing data, probably due to
-       * kernel running out of event_buffer during node failure.
-       * Mark newly appended event list as inconsistent.
-       */
-      assert(m_complete_data.m_data.m_gci_ops_list_tail != NULL);
-      m_complete_data.m_data.m_gci_ops_list_tail->m_consistent = false;
-    }
-  }
-  else // if (bucket->m_data.is_empty())
-  {
-    if (bucket->m_state & Gci_container::GC_INCONSISTENT)
-    {
-      /*
-       * Bucket marked as possibly missing data, probably due to
-       * kernel running out of event_buffer during node failure
-       * Bucket contained no data so we must add a dummy event list
-       * as inconsistency marker.
-       */
-      EventBufData *dummy_data= alloc_data();
-      EventBufData_list *dummy_event_list = new EventBufData_list;
-      dummy_event_list->append_used_data(dummy_data);
-      dummy_event_list->m_is_not_multi_list = true;
-      m_complete_data.m_data.append_list(dummy_event_list, gci);
-      assert(m_complete_data.m_data.m_gci_ops_list_tail != NULL);
-      m_complete_data.m_data.m_gci_ops_list_tail->m_consistent = false;
-    }
-  }
-
-  Uint32 minpos = m_min_gci_index;
-  Uint32 mask = m_known_gci.size() - 1;
-  assert((mask & (mask + 1)) == 0);
-
-  bzero(bucket, sizeof(Gci_container));
-
-  m_min_gci_index = (minpos + 1) & mask;
-
-#ifdef VM_TRACE
-  verify_known_gci(true);
-#endif
-}
-
-void
-NdbEventBuffer::execSUB_GCP_COMPLETE_REP(const SubGcpCompleteRep * const rep,
-                                         Uint32 len, int complete_cluster_failure)
-{
-  Uint32 gci_hi = rep->gci_hi;
-  Uint32 gci_lo = rep->gci_lo;
-
-  if (unlikely(len < SubGcpCompleteRep::SignalLength))
-  {
-    gci_lo = 0;
-  }
-
-  const Uint64 gci= gci_lo | (Uint64(gci_hi) << 32);
-  if (gci > m_highest_sub_gcp_complete_GCI)
-    m_highest_sub_gcp_complete_GCI = gci;
-
-  if (!complete_cluster_failure)
-  {
-    m_alive_node_bit_mask.set(refToNode(rep->senderRef));
-
-    if (unlikely(m_active_op_count == 0))
-    {
-      return;
-    }
+    return;
   }
   
   DBUG_ENTER_EVENT("NdbEventBuffer::execSUB_GCP_COMPLETE_REP");
 
+  const Uint64 gci= rep->gci;
   const Uint32 cnt= rep->gcp_complete_rep_count;
 
-  Gci_container *bucket = find_bucket(gci);
-
-  if (0)
-    ndbout_c("execSUB_GCP_COMPLETE_REP(%u/%u) cnt: %u from %x flags: 0x%x",
-             Uint32(gci >> 32), Uint32(gci), cnt, rep->senderRef,
-             rep->flags);
-
-  if (unlikely(rep->flags & (SubGcpCompleteRep::ADD_CNT |
-                             SubGcpCompleteRep::SUB_CNT)))
-  {
-    handle_change_nodegroup(rep);
-  }
-
+  Gci_container *bucket = find_bucket(&m_active_gci, gci
+#ifdef VM_TRACE
+                                      , m_flush_gci
+#endif
+                                      );
+  Uint32 idx = bucket - (Gci_container*)m_active_gci.getBase();
   if (unlikely(bucket == 0))
   {
     /**
@@ -1971,49 +1497,56 @@ NdbEventBuffer::execSUB_GCP_COMPLETE_REP(const SubGcpCompleteRep * const rep,
      *   Possible in case of resend during NF handling
      */
 #ifdef VM_TRACE
-    Uint64 minGCI = m_known_gci[m_min_gci_index];
-    ndbout_c("bucket == 0, gci: %u/%u minGCI: %u/%u m_latestGCI: %u/%u",
-             Uint32(gci >> 32), Uint32(gci),
-             Uint32(minGCI >> 32), Uint32(minGCI),
-             Uint32(m_latestGCI >> 32), Uint32(m_latestGCI));
-    ndbout << " complete: " << m_complete_data << endl;
+    ndbout << "bucket == 0, gci:" << gci
+	   << " complete: " << m_complete_data << endl;
     for(Uint32 i = 0; i<m_active_gci.size(); i++)
     {
-      if (((Gci_container*)(&m_active_gci[i]))->m_gci)
-        ndbout << i << " - " << m_active_gci[i] << endl;
+      ndbout << i << " - " << m_active_gci[i] << endl;
     }
 #endif
     DBUG_VOID_RETURN_EVENT;
   }
 
-  if (rep->flags & SubGcpCompleteRep::MISSING_DATA)
-  {
-    bucket->m_state = Gci_container::GC_INCONSISTENT;
-  }
-
   Uint32 old_cnt = bucket->m_gcp_complete_rep_count;
   if(unlikely(old_cnt == ~(Uint32)0))
   {
-    old_cnt = m_total_buckets;
+    old_cnt = m_system_nodes;
   }
   
   //assert(old_cnt >= cnt);
   if (unlikely(! (old_cnt >= cnt)))
   {
-    crash_on_invalid_SUB_GCP_COMPLETE_REP(bucket, rep, m_total_buckets);
+    crash_on_invalid_SUB_GCP_COMPLETE_REP(bucket, rep, m_system_nodes);
   }
   bucket->m_gcp_complete_rep_count = old_cnt - cnt;
   
   if(old_cnt == cnt)
   {
-    Uint64 minGCI = m_known_gci[m_min_gci_index];
-    if(likely(minGCI == 0 || gci == minGCI))
+    if(likely(gci == m_latestGCI + 1 || m_latestGCI == 0))
     {
-  do_complete:
-      m_startup_hack = false;
-      complete_bucket(bucket);
       m_latestGCI = m_complete_data.m_gci = gci; // before reportStatus
+      if(!bucket->m_data.is_empty())
+      {
+#ifdef VM_TRACE
+	assert(bucket->m_data.m_count);
+#endif
+	m_complete_data.m_data.append_list(&bucket->m_data, gci);
+      }
       reportStatus();
+      bzero(bucket, sizeof(Gci_container));
+      if (likely(idx < ACTIVE_GCI_DIRECTORY_SIZE))
+      {
+        /**
+         * Only "prepare" next GCI if we're in
+         *   the first 4 highest GCI's...else
+         *   this is somekind of "late" GCI...
+         *   which is only initialized to 0
+         *
+         *   This to make sure we dont get several buckets with same GCI
+         */
+        bucket->m_gci = gci + ACTIVE_GCI_DIRECTORY_SIZE;
+        bucket->m_gcp_complete_rep_count = m_system_nodes;
+      }
       
       if(unlikely(m_latest_complete_GCI > gci))
       {
@@ -2026,20 +1559,10 @@ NdbEventBuffer::execSUB_GCP_COMPLETE_REP(const SubGcpCompleteRep * const rep,
     }
     else
     {
-      if (unlikely(m_startup_hack))
-      {
-        flushIncompleteEvents(gci);
-        bucket = find_bucket(gci);
-        assert(bucket);
-        assert(bucket->m_gci == gci);
-        goto do_complete;
-      }
       /** out of order something */
-      g_eventLogger->info("out of order bucket: %d gci: %u/%u minGCI: %u/%u m_latestGCI: %u/%u",
-                          (int)(bucket-(Gci_container*)m_active_gci.getBase()),
-                          Uint32(gci >> 32), Uint32(gci),
-                          Uint32(minGCI >> 32), Uint32(minGCI),
-                          Uint32(m_latestGCI >> 32), Uint32(m_latestGCI));
+      ndbout_c("out of order bucket: %d  gci: %ld  m_latestGCI: %ld", 
+	       (int) (bucket-(Gci_container*)m_active_gci.getBase()), 
+	       (long) gci, (long) m_latestGCI);
       bucket->m_state = Gci_container::GC_COMPLETE;
       bucket->m_gcp_complete_rep_count = 1; // Prevent from being reused
       m_latest_complete_GCI = gci;
@@ -2052,52 +1575,64 @@ NdbEventBuffer::execSUB_GCP_COMPLETE_REP(const SubGcpCompleteRep * const rep,
 void
 NdbEventBuffer::complete_outof_order_gcis()
 {
-#ifdef VM_TRACE
-  verify_known_gci(false);
-#endif
-
-  Uint64 * array = m_known_gci.getBase();
-  Uint32 mask = m_known_gci.size() - 1;
-  Uint32 minpos = m_min_gci_index;
-  Uint32 maxpos = m_max_gci_index;
+  Uint64 start_gci = m_latestGCI + 1;
   Uint64 stop_gci = m_latest_complete_GCI;
-
-  Uint64 start_gci = array[minpos];
-  g_eventLogger->info("complete_outof_order_gcis from: %u/%u(%u) to: %u/%u(%u)",
-                      Uint32(start_gci >> 32), Uint32(start_gci), minpos,
-                      Uint32(stop_gci >> 32), Uint32(stop_gci), maxpos);
-
-  assert(start_gci <= stop_gci);
-  do
+  
+  const Uint32 size = m_active_gci.size();
+  Gci_container* array= (Gci_container*)m_active_gci.getBase();
+  
+  ndbout_c("complete_outof_order_gcis");
+  for(Uint32 i = 0; i<size; i++)
   {
-    start_gci = array[minpos];
-    Gci_container* bucket = find_bucket(start_gci);
-    assert(bucket);
-    assert(maxpos == m_max_gci_index);
-    if (!(bucket->m_state & Gci_container::GC_COMPLETE)) // Not complete
+    ndbout << i << " - " << array[i] << endl;
+  }
+  
+  for(; start_gci <= stop_gci; start_gci++)
+  {
+    /**
+     * Find gci
+     */
+    Uint32 i;
+    Gci_container* bucket= 0;
+    for(i = 0; i<size; i++)
     {
-#ifdef VM_TRACE
-      verify_known_gci(false);
-#endif
-      return;
+      Gci_container* tmp = array + i;
+      if(tmp->m_gci == start_gci && tmp->m_state == Gci_container::GC_COMPLETE)
+      {
+	bucket= tmp;
+	break;
+      }
+    }
+    if(bucket == 0)
+    {
+      break;
     }
 
+    printf("complete_outof_order_gcis - completing %lld", start_gci);
+    if(!bucket->m_data.is_empty())
+    {
 #ifdef VM_TRACE
-    ndbout_c("complete_outof_order_gcis - completing %u/%u rows: %u",
-             Uint32(start_gci >> 32), Uint32(start_gci), bucket->m_data.m_count);
+      assert(bucket->m_data.m_count);
+#endif
+      m_complete_data.m_data.append_list(&bucket->m_data, start_gci);
+#ifdef VM_TRACE
+      ndbout_c(" moved %ld rows -> %ld", (long) bucket->m_data.m_count,
+	       (long) m_complete_data.m_data.m_count);
 #else
-    ndbout_c("complete_outof_order_gcis - completing %u/%u",
-             Uint32(start_gci >> 32), Uint32(start_gci));
+      ndbout_c(" ");
 #endif
+    }
+    bzero(bucket, sizeof(Gci_container));
+    if(i < ACTIVE_GCI_DIRECTORY_SIZE)
+    {
+      bucket->m_gci = start_gci + ACTIVE_GCI_DIRECTORY_SIZE;
+      bucket->m_gcp_complete_rep_count = m_system_nodes;
+    }
     
-    complete_bucket(bucket);
     m_latestGCI = m_complete_data.m_gci = start_gci;
-
-#ifdef VM_TRACE
-    verify_known_gci(true);
-#endif
-    minpos = (minpos + 1) & mask;
-  } while (start_gci != stop_gci);
+  }
+  
+  ndbout_c("complete_outof_order_gcis: m_latestGCI: %lld", m_latestGCI);
 }
 
 void
@@ -2106,229 +1641,71 @@ NdbEventBuffer::insert_event(NdbEventOperationImpl* impl,
                              LinearSectionPtr *ptr,
                              Uint32 &oid_ref)
 {
-  DBUG_PRINT("info", ("gci{hi/lo}: %u/%u", data.gci_hi, data.gci_lo));
+  NdbEventOperationImpl *dropped_ev_op = m_dropped_ev_op;
+  DBUG_PRINT("info", ("gci: %u", data.gci));
   do
   {
-    if (impl->m_stop_gci == ~Uint64(0))
+    do
     {
-      oid_ref = impl->m_oid;
-      insertDataL(impl, &data, SubTableData::SignalLength, ptr);
-    }
-    NdbEventOperationImpl* blob_op = impl->theBlobOpList;
-    while (blob_op != NULL)
-    {
-      if (blob_op->m_stop_gci == ~Uint64(0))
+      if (impl->m_node_bit_mask.get(0u))
       {
-        oid_ref = blob_op->m_oid;
-        insertDataL(blob_op, &data, SubTableData::SignalLength, ptr);
+        oid_ref = impl->m_oid;
+        insertDataL(impl, &data, ptr);
       }
-      blob_op = blob_op->m_next;
-    }
-  } while((impl = impl->m_next));
+      NdbEventOperationImpl* blob_op = impl->theBlobOpList;
+      while (blob_op != NULL)
+      {
+        if (blob_op->m_node_bit_mask.get(0u))
+        {
+          oid_ref = blob_op->m_oid;
+          insertDataL(blob_op, &data, ptr);
+        }
+        blob_op = blob_op->m_next;
+      }
+    } while((impl = impl->m_next));
+    impl = dropped_ev_op;
+    dropped_ev_op = NULL;
+  } while (impl);
 }
 
-bool
-NdbEventBuffer::find_max_known_gci(Uint64 * res) const
-{
-  const Uint64 * array = m_known_gci.getBase();
-  Uint32 mask = m_known_gci.size() - 1;
-  Uint32 minpos = m_min_gci_index;
-  Uint32 maxpos = m_max_gci_index;
-
-  if (minpos == maxpos)
-    return false;
-
-  if (res)
-  {
-    * res = array[(maxpos - 1) & mask];
-  }
-
-  return true;
-}
 
 void
-NdbEventBuffer::handle_change_nodegroup(const SubGcpCompleteRep* rep)
+NdbEventBuffer::report_node_connected(Uint32 node_id)
 {
-  Uint64 gci = (Uint64(rep->gci_hi) << 32) | rep->gci_lo;
-  Uint32 cnt = (rep->flags >> 16);
-  Uint64 * array = m_known_gci.getBase();
-  Uint32 mask = m_known_gci.size() - 1;
-  Uint32 minpos = m_min_gci_index;
-  Uint32 maxpos = m_max_gci_index;
-
-  if (rep->flags & SubGcpCompleteRep::ADD_CNT)
-  {
-    ndbout_c("handle_change_nodegroup(add, cnt=%u,gci=%u/%u)",
-             cnt, Uint32(gci >> 32), Uint32(gci));
-
-    Uint32 found = 0;
-    Uint32 pos = minpos;
-    for (; pos != maxpos; pos = (pos + 1) & mask)
-    {
-      if (array[pos] == gci)
-      {
-        Gci_container* tmp = find_bucket(array[pos]);
-        if (tmp->m_state & Gci_container::GC_CHANGE_CNT)
-        {
-          found = 1;
-          ndbout_c(" - gci %u/%u already marked complete",
-                   Uint32(tmp->m_gci >> 32), Uint32(tmp->m_gci));
-          break;
-        }
-        else
-        {
-          found = 2;
-          ndbout_c(" - gci %u/%u marking (and increasing)",
-                   Uint32(tmp->m_gci >> 32), Uint32(tmp->m_gci));
-          tmp->m_state |= Gci_container::GC_CHANGE_CNT;
-          tmp->m_gcp_complete_rep_count += cnt;
-          break;
-        }
-      }
-      else
-      {
-        ndbout_c(" - ignore %u/%u",
-                 Uint32(array[pos] >> 32), Uint32(array[pos]));
-      }
-    }
-
-    if (found == 0)
-    {
-      ndbout_c(" - NOT FOUND (total: %u cnt: %u)", m_total_buckets, cnt);
-      return;
-    }
-
-    if (found == 1)
-    {
-      return; // Nothing todo
-    }
-
-    m_total_buckets += cnt;
-
-    pos = (pos + 1) & mask;
-    for (; pos != maxpos; pos = (pos + 1) & mask)
-    {
-      assert(array[pos] > gci);
-      Gci_container* tmp = find_bucket(array[pos]);
-      assert((tmp->m_state & Gci_container::GC_CHANGE_CNT) == 0);
-      tmp->m_gcp_complete_rep_count += cnt;
-      ndbout_c(" - increasing cnt on %u/%u by %u",
-               Uint32(tmp->m_gci >> 32), Uint32(tmp->m_gci), cnt);
-    }
-  }
-  else if (rep->flags & SubGcpCompleteRep::SUB_CNT)
-  {
-    ndbout_c("handle_change_nodegroup(sub, cnt=%u,gci=%u/%u)",
-             cnt, Uint32(gci >> 32), Uint32(gci));
-
-    Uint32 found = 0;
-    Uint32 pos = minpos;
-    for (; pos != maxpos; pos = (pos + 1) & mask)
-    {
-      if (array[pos] == gci)
-      {
-        Gci_container* tmp = find_bucket(array[pos]);
-        if (tmp->m_state & Gci_container::GC_CHANGE_CNT)
-        {
-          found = 1;
-          ndbout_c(" - gci %u/%u already marked complete",
-                   Uint32(tmp->m_gci >> 32), Uint32(tmp->m_gci));
-          break;
-        }
-        else
-        {
-          found = 2;
-          ndbout_c(" - gci %u/%u marking",
-                   Uint32(tmp->m_gci >> 32), Uint32(tmp->m_gci));
-          tmp->m_state |= Gci_container::GC_CHANGE_CNT;
-          break;
-        }
-      }
-      else
-      {
-        ndbout_c(" - ignore %u/%u",
-                 Uint32(array[pos] >> 32), Uint32(array[pos]));
-      }
-    }
-
-    if (found == 0)
-    {
-      ndbout_c(" - NOT FOUND");
-      return;
-    }
-
-    if (found == 1)
-    {
-      return; // Nothing todo
-    }
-
-    m_total_buckets -= cnt;
-
-    pos = (pos + 1) & mask;
-    for (; pos != maxpos; pos = (pos + 1) & mask)
-    {
-      assert(array[pos] > gci);
-      Gci_container* tmp = find_bucket(array[pos]);
-      assert((tmp->m_state & Gci_container::GC_CHANGE_CNT) == 0);
-      tmp->m_gcp_complete_rep_count -= cnt;
-      ndbout_c(" - decreasing cnt on %u/%u by %u to: %u",
-               Uint32(tmp->m_gci >> 32), Uint32(tmp->m_gci), 
-               cnt,
-               tmp->m_gcp_complete_rep_count);
-    }
-  }
-}
-
-void
-NdbEventBuffer::set_total_buckets(Uint32 cnt)
-{
-  if (m_total_buckets == cnt)
-    return;
-
-  assert(m_total_buckets == TOTAL_BUCKETS_INIT);
-  m_total_buckets = cnt;
-
-  Uint64 * array = m_known_gci.getBase();
-  Uint32 mask = m_known_gci.size() - 1;
-  Uint32 minpos = m_min_gci_index;
-  Uint32 maxpos = m_max_gci_index;
-
-  bool found = false;
-  Uint32 pos = minpos;
-  for (; pos != maxpos; pos = (pos + 1) & mask)
-  {
-    Gci_container* tmp = find_bucket(array[pos]);
-    if (TOTAL_BUCKETS_INIT >= tmp->m_gcp_complete_rep_count)
-    {
-      found = true;
-      if (0)
-        ndbout_c("set_total_buckets(%u) complete %u/%u",
-                 cnt, Uint32(tmp->m_gci >> 32), Uint32(tmp->m_gci));
-      tmp->m_gcp_complete_rep_count = 0;
-      complete_bucket(tmp);
-    }
-    else
-    {
-      assert(tmp->m_gcp_complete_rep_count > TOTAL_BUCKETS_INIT);
-      tmp->m_gcp_complete_rep_count -= TOTAL_BUCKETS_INIT;
-    }
-  }
-  if (found)
-  {
-    NdbCondition_Signal(p_cond);
-  }
-}
-
-void
-NdbEventBuffer::report_node_failure_completed(Uint32 node_id)
-{
-  m_alive_node_bit_mask.clear(node_id);
-
   NdbEventOperation* op= m_ndb->getEventOperation(0);
   if (op == 0)
     return;
 
-  DBUG_ENTER("NdbEventBuffer::report_node_failure_completed");
+  DBUG_ENTER("NdbEventBuffer::report_node_connected");
+  SubTableData data;
+  LinearSectionPtr ptr[3];
+  bzero(&data, sizeof(data));
+  bzero(ptr, sizeof(ptr));
+
+  data.tableId = ~0;
+  data.requestInfo = 0;
+  SubTableData::setOperation(data.requestInfo,
+			     NdbDictionary::Event::_TE_ACTIVE);
+  SubTableData::setReqNodeId(data.requestInfo, node_id);
+  SubTableData::setNdbdNodeId(data.requestInfo, node_id);
+  data.logType = SubTableData::LOG;
+  data.gci = m_latestGCI + 1;
+  /**
+   * Insert this event for each operation
+   */
+  // no need to lock()/unlock(), receive thread calls this
+  insert_event(&op->m_impl, data, ptr, data.senderData);
+  DBUG_VOID_RETURN;
+}
+
+void
+NdbEventBuffer::report_node_failure(Uint32 node_id)
+{
+  NdbEventOperation* op= m_ndb->getEventOperation(0);
+  if (op == 0)
+    return;
+
+  DBUG_ENTER("NdbEventBuffer::report_node_failure");
   SubTableData data;
   LinearSectionPtr ptr[3];
   bzero(&data, sizeof(data));
@@ -2340,101 +1717,106 @@ NdbEventBuffer::report_node_failure_completed(Uint32 node_id)
 			     NdbDictionary::Event::_TE_NODE_FAILURE);
   SubTableData::setReqNodeId(data.requestInfo, node_id);
   SubTableData::setNdbdNodeId(data.requestInfo, node_id);
-  data.flags = SubTableData::LOG;
-
-  Uint64 gci = Uint64((m_latestGCI >> 32) + 1) << 32;
-  find_max_known_gci(&gci);
-
-  data.gci_hi = Uint32(gci >> 32);
-  data.gci_lo = Uint32(gci);
-
+  data.logType = SubTableData::LOG;
+  data.gci = m_latestGCI + 1;
   /**
    * Insert this event for each operation
    */
   // no need to lock()/unlock(), receive thread calls this
   insert_event(&op->m_impl, data, ptr, data.senderData);
+  DBUG_VOID_RETURN;
+}
 
-  if (!m_alive_node_bit_mask.isclear())
-    DBUG_VOID_RETURN;
+void
+NdbEventBuffer::completeClusterFailed()
+{
+  NdbEventOperation* op= m_ndb->getEventOperation(0);
+  if (op == 0)
+    return;
 
-  /*
-   * Cluster failure
-   */
+  DBUG_ENTER("NdbEventBuffer::completeClusterFailed");
+  SubTableData data;
+  LinearSectionPtr ptr[3];
+  bzero(&data, sizeof(data));
+  bzero(ptr, sizeof(ptr));
 
-  DBUG_PRINT("info", ("Cluster failure"));
-
-  gci = Uint64((m_latestGCI >> 32) + 1) << 32;
-  bool found = find_max_known_gci(&gci);
-
-  Uint64 * array = m_known_gci.getBase();
-  Uint32 mask = m_known_gci.size() - 1;
-  Uint32 minpos = m_min_gci_index;
-  Uint32 maxpos = m_max_gci_index;
-
-  while (minpos != maxpos && array[minpos] != gci)
-  {
-    Gci_container* tmp = find_bucket(array[minpos]);
-    assert(tmp);
-    assert(maxpos == m_max_gci_index);
-
-    if(!tmp->m_data.is_empty())
-    {
-      free_list(tmp->m_data);
-    }
-    tmp->~Gci_container();
-    bzero(tmp, sizeof(Gci_container));
-
-    minpos = (minpos + 1) & mask;
-  }
-  m_min_gci_index = minpos;
-  if (found)
-  {
-    assert(((minpos + 1) & mask) == maxpos);
-  }
-  else
-  {
-    assert(minpos == maxpos);
-  }
-
-  /**
-   * Inject new event
-   */
   data.tableId = ~0;
   data.requestInfo = 0;
   SubTableData::setOperation(data.requestInfo,
 			     NdbDictionary::Event::_TE_CLUSTER_FAILURE);
+  data.logType = SubTableData::LOG;
+  data.gci = m_latestGCI + 1;
+  
+#ifdef VM_TRACE
+  m_flush_gci = 0;
+#endif
 
   /**
    * Insert this event for each operation
    */
   // no need to lock()/unlock(), receive thread calls this
   insert_event(&op->m_impl, data, ptr, data.senderData);
+  
+  /**
+   *  Release all GCI's with m_gci > gci
+   */
+  Uint32 i;
+  Uint32 sz= m_active_gci.size();
+  Uint64 gci= data.gci;
+  Gci_container* bucket = 0;
+  Gci_container* array = (Gci_container*)m_active_gci.getBase();
+  for(i = 0; i < sz; i++)
+  {
+    Gci_container* tmp = array + i;
+    if (tmp->m_gci > gci)
+    {
+      if(!tmp->m_data.is_empty())
+      {
+        free_list(tmp->m_data);
+      }
+      tmp->~Gci_container();
+      bzero(tmp, sizeof(Gci_container));
+    }
+    else if (tmp->m_gcp_complete_rep_count)
+    {
+      if (tmp->m_gci == gci)
+      {
+        bucket= tmp;
+        continue;
+      }
+      // we have found an old not-completed gci
+      // something is wrong, assert in debug, but try so salvage
+      // in release
+      ndbout_c("out of order bucket detected at cluster disconnect, "
+               "data.gci: %u.  tmp->m_gci: %u",
+               (unsigned)data.gci, (unsigned)tmp->m_gci);
+      assert(false);
+      if(!tmp->m_data.is_empty())
+      {
+        free_list(tmp->m_data);
+      }
+      tmp->~Gci_container();
+      bzero(tmp, sizeof(Gci_container));
+    }
+  }
 
-#ifdef VM_TRACE
-  m_flush_gci = 0;
-#endif
+  if (bucket == 0)
+  {
+    // no bucket to complete
+    DBUG_VOID_RETURN;
+  }
+
+  const Uint32 cnt= bucket->m_gcp_complete_rep_count = 1; 
+  bucket->m_gci = gci;
+  bucket->m_gcp_complete_rep_count = cnt;
   
   /**
    * And finally complete this GCI
    */
-  Gci_container* tmp = find_bucket(gci);
-  assert(tmp);
-  if (found)
-  {
-    assert(m_max_gci_index == maxpos); // shouldnt have changed...
-  }
-  else
-  {
-    assert(m_max_gci_index == ((maxpos + 1) & mask));
-  }
-  Uint32 cnt = tmp->m_gcp_complete_rep_count;
-  
   SubGcpCompleteRep rep;
-  rep.gci_hi= (Uint32)(gci >> 32);
-  rep.gci_lo= (Uint32)(gci & 0xFFFFFFFF);
+  rep.gci= gci;
   rep.gcp_complete_rep_count= cnt;
-  rep.flags = 0;
-  execSUB_GCP_COMPLETE_REP(&rep, SubGcpCompleteRep::SignalLength, 1);
+  execSUB_GCP_COMPLETE_REP(&rep);
 
   DBUG_VOID_RETURN;
 }
@@ -2448,55 +1830,95 @@ NdbEventBuffer::getLatestGCI()
 int
 NdbEventBuffer::insertDataL(NdbEventOperationImpl *op,
 			    const SubTableData * const sdata, 
-                            Uint32 len,
 			    LinearSectionPtr ptr[3])
 {
   DBUG_ENTER_EVENT("NdbEventBuffer::insertDataL");
   const Uint32 ri = sdata->requestInfo;
   const Uint32 operation = SubTableData::getOperation(ri);
-  Uint32 gci_hi = sdata->gci_hi;
-  Uint32 gci_lo = sdata->gci_lo;
-
-  if (unlikely(len < SubTableData::SignalLength))
-  {
-    gci_lo = 0;
-  }
-
-  Uint64 gci= gci_lo | (Uint64(gci_hi) << 32);
+  Uint64 gci= sdata->gci;
   const bool is_data_event = 
     operation < NdbDictionary::Event::_TE_FIRST_NON_DATA_EVENT;
 
   if (!is_data_event)
   {
-    if (operation == NdbDictionary::Event::_TE_CLUSTER_FAILURE)
+    switch (operation)
     {
-      /*
-        Mark event as stopping.  Subsequent dropEventOperation
-        will add the event to the dropped list for delete
-      */
-      op->m_stop_gci = gci;
-    }
-    else if (operation == NdbDictionary::Event::_TE_ACTIVE)
-    {
+    case NdbDictionary::Event::_TE_NODE_FAILURE:
+      DBUG_ASSERT(op->m_node_bit_mask.get(0u) != 0);
+      op->m_node_bit_mask.clear(SubTableData::getNdbdNodeId(ri));
+      DBUG_PRINT("info",
+                 ("_TE_NODE_FAILURE: m_ref_count: %u for op: %p id: %u",
+                  op->m_ref_count, op, SubTableData::getNdbdNodeId(ri)));
+      break;
+    case NdbDictionary::Event::_TE_ACTIVE:
+      DBUG_ASSERT(op->m_node_bit_mask.get(0u) != 0);
+      op->m_node_bit_mask.set(SubTableData::getNdbdNodeId(ri));
       // internal event, do not relay to user
       DBUG_PRINT("info",
                  ("_TE_ACTIVE: m_ref_count: %u for op: %p id: %u",
                   op->m_ref_count, op, SubTableData::getNdbdNodeId(ri)));
       DBUG_RETURN_EVENT(0);
-    }
-    else if (operation == NdbDictionary::Event::_TE_STOP)
-    {
-      // internal event, do not relay to user
-      DBUG_PRINT("info",
-                 ("_TE_STOP: m_ref_count: %u for op: %p id: %u",
-                  op->m_ref_count, op, SubTableData::getNdbdNodeId(ri)));
-      DBUG_RETURN_EVENT(0);
+      break;
+    case NdbDictionary::Event::_TE_CLUSTER_FAILURE:
+      DBUG_ASSERT(op->m_node_bit_mask.get(0u) != 0);
+      op->m_node_bit_mask.clear();
+      DBUG_ASSERT(op->m_ref_count > 0);
+      // remove kernel reference
+      // added in execute_nolock
+      op->m_ref_count--;
+      DBUG_PRINT("info", ("_TE_CLUSTER_FAILURE: m_ref_count: %u for op: %p",
+                          op->m_ref_count, op));
+      if (op->theMainOp)
+      {
+        DBUG_ASSERT(op->m_ref_count == 0);
+        DBUG_ASSERT(op->theMainOp->m_ref_count > 0);
+        // remove blob reference in main op
+        // added in execute_no_lock
+        op->theMainOp->m_ref_count--;
+        DBUG_PRINT("info", ("m_ref_count: %u for op: %p",
+                            op->theMainOp->m_ref_count, op->theMainOp));
+      }
+      break;
+    case NdbDictionary::Event::_TE_STOP:
+      DBUG_ASSERT(op->m_node_bit_mask.get(0u) != 0);
+      op->m_node_bit_mask.clear(0u);
+      op->m_node_bit_mask.clear(SubTableData::getNdbdNodeId(ri));
+      if (op->m_node_bit_mask.isclear())
+      {
+        DBUG_ASSERT(op->m_ref_count > 0);
+        // remove kernel reference
+        // added in execute_no_lock
+        op->m_ref_count--;
+        DBUG_PRINT("info", ("_TE_STOP: m_ref_count: %u for op: %p",
+                            op->m_ref_count, op));
+        if (op->theMainOp)
+        {
+          DBUG_ASSERT(op->m_ref_count == 0);
+          DBUG_ASSERT(op->theMainOp->m_ref_count > 0);
+          // remove blob reference in main op
+          // added in execute_no_lock
+          op->theMainOp->m_ref_count--;
+          DBUG_PRINT("info", ("m_ref_count: %u for op: %p",
+                              op->theMainOp->m_ref_count, op->theMainOp));
+        }
+      }
+      else
+      {
+        op->m_node_bit_mask.set(0u);
+      }
+      break;
+    default:
+      break;
     }
   }
   
   if ( likely((Uint32)op->mi_type & (1 << operation)))
   {
-    Gci_container* bucket= find_bucket(gci);
+    Gci_container* bucket= find_bucket(&m_active_gci, gci
+#ifdef VM_TRACE
+                                       , m_flush_gci
+#endif
+                                       );
     
     DBUG_PRINT_EVENT("info", ("data insertion in eventId %d", op->m_eventId));
     DBUG_PRINT_EVENT("info", ("gci=%d tab=%d op=%d node=%d",
@@ -2541,7 +1963,7 @@ NdbEventBuffer::insertDataL(NdbEventOperationImpl *op,
         op->m_has_error = 2;
         DBUG_RETURN_EVENT(-1);
       }
-      if (unlikely(copy_data(sdata, len, ptr, data, NULL)))
+      if (unlikely(copy_data(sdata, ptr, data, NULL)))
       {
         op->m_has_error = 3;
         DBUG_RETURN_EVENT(-1);
@@ -2587,7 +2009,7 @@ NdbEventBuffer::insertDataL(NdbEventOperationImpl *op,
     else
     {
       // event with same op, PK found, merge into old buffer
-      if (unlikely(merge_data(sdata, len, ptr, data, &bucket->m_data.m_sz)))
+      if (unlikely(merge_data(sdata, ptr, data, & bucket->m_data.m_sz)))
       {
         op->m_has_error = 3;
         DBUG_RETURN_EVENT(-1);
@@ -2652,15 +2074,13 @@ NdbEventBuffer::alloc_data()
     {
 #ifdef VM_TRACE
       printf("m_latest_command: %s\n", m_latest_command);
-      printf("no free data, m_latestGCI %u/%u\n",
-             (Uint32)(m_latestGCI << 32), (Uint32)m_latestGCI);
+      printf("no free data, m_latestGCI %lld\n",
+             m_latestGCI);
       printf("m_free_data_count %d\n", m_free_data_count);
-      printf("m_available_data_count %d first gci{hi/lo} %u/%u last gci{hi/lo} %u/%u\n",
+      printf("m_available_data_count %d first gci %d last gci %d\n",
              m_available_data.m_count,
-             m_available_data.m_head?m_available_data.m_head->sdata->gci_hi:0,
-             m_available_data.m_head?m_available_data.m_head->sdata->gci_lo:0,
-             m_available_data.m_tail?m_available_data.m_tail->sdata->gci_hi:0,
-             m_available_data.m_tail?m_available_data.m_tail->sdata->gci_lo:0);
+             m_available_data.m_head ? m_available_data.m_head->sdata->gci : 0,
+             m_available_data.m_tail ? m_available_data.m_tail->sdata->gci : 0);
       printf("m_used_data_count %d\n", m_used_data.m_count);
 #endif
       DBUG_RETURN_EVENT(0); // TODO handle this, overrun, or, skip?
@@ -2758,7 +2178,7 @@ NdbEventBuffer::dealloc_mem(EventBufData* data,
 }
 
 int 
-NdbEventBuffer::copy_data(const SubTableData * const sdata, Uint32 len,
+NdbEventBuffer::copy_data(const SubTableData * const sdata,
                           LinearSectionPtr ptr[3],
                           EventBufData* data,
                           Uint32 * change_sz)
@@ -2768,18 +2188,6 @@ NdbEventBuffer::copy_data(const SubTableData * const sdata, Uint32 len,
   if (alloc_mem(data, ptr, change_sz) != 0)
     DBUG_RETURN_EVENT(-1);
   memcpy(data->sdata, sdata, sizeof(SubTableData));
-
-  if (unlikely(len < SubTableData::SignalLength))
-  {
-    data->sdata->gci_lo = 0;
-  }
-  if (len < SubTableData::SignalLengthWithTransId)
-  {
-    /* No TransId, set to uninit value */
-    data->sdata->transId1 = ~Uint32(0);
-    data->sdata->transId2 = ~Uint32(0);
-  }
-
   int i;
   for (i = 0; i <= 2; i++)
     memcpy(data->ptr[i].p, ptr[i].p, ptr[i].sz << 2);
@@ -2847,24 +2255,19 @@ copy_attr(AttributeHeader ah,
 }
 
 int 
-NdbEventBuffer::merge_data(const SubTableData * const sdata, Uint32 len,
+NdbEventBuffer::merge_data(const SubTableData * const sdata,
                            LinearSectionPtr ptr2[3],
                            EventBufData* data,
                            Uint32 * change_sz)
 {
   DBUG_ENTER_EVENT("NdbEventBuffer::merge_data");
 
-  /* TODO : Consider how/if to merge multiple events/key with different
-   * transid
-   * Same consideration probably applies to AnyValue!
-   */
-
   Uint32 nkey = data->m_event_op->m_eventImpl->m_tableImpl->m_noOfKeys;
 
   int t1 = SubTableData::getOperation(data->sdata->requestInfo);
   int t2 = SubTableData::getOperation(sdata->requestInfo);
   if (t1 == Ev_t::enum_NUL)
-    DBUG_RETURN_EVENT(copy_data(sdata, len, ptr2, data, change_sz));
+    DBUG_RETURN_EVENT(copy_data(sdata, ptr2, data, change_sz));
 
   Ev_t* tp = 0;
   int i;
@@ -3051,6 +2454,35 @@ end:
  * NUL event on main table.  The real event replaces it later.
  */
 
+// write attribute headers for concatened PK
+static void
+split_concatenated_pk(const NdbTableImpl* t, Uint32* ah_buffer,
+                      const Uint32* pk_buffer, Uint32 pk_sz)
+{
+  Uint32 sz = 0; // words parsed so far
+  Uint32 n;  // pk attr count
+  Uint32 i;
+  for (i = n = 0; i < t->m_columns.size() && n < t->m_noOfKeys; i++)
+  {
+    const NdbColumnImpl* c = t->getColumn(i);
+    assert(c != NULL);
+    if (! c->m_pk)
+      continue;
+
+    assert(sz < pk_sz);
+    Uint32 bytesize = c->m_attrSize * c->m_arraySize;
+    Uint32 lb, len;
+    bool ok = NdbSqlUtil::get_var_length(c->m_type, &pk_buffer[sz], bytesize,
+                                         lb, len);
+    assert(ok);
+
+    AttributeHeader ah(i, lb + len);
+    ah_buffer[n++] = ah.m_value;
+    sz += ah.getDataSize();
+  }
+  assert(n == t->m_noOfKeys && sz <= pk_sz);
+}
+
 int
 NdbEventBuffer::get_main_data(Gci_container* bucket,
                               EventBufData_hash::Pos& hpos,
@@ -3058,82 +2490,20 @@ NdbEventBuffer::get_main_data(Gci_container* bucket,
 {
   DBUG_ENTER_EVENT("NdbEventBuffer::get_main_data");
 
-  int blobVersion = blob_data->m_event_op->theBlobVersion;
-  assert(blobVersion == 1 || blobVersion == 2);
-
   NdbEventOperationImpl* main_op = blob_data->m_event_op->theMainOp;
   assert(main_op != NULL);
   const NdbTableImpl* mainTable = main_op->m_eventImpl->m_tableImpl;
 
   // create LinearSectionPtr for main table key
   LinearSectionPtr ptr[3];
-
-  Uint32 pk_ah[NDB_MAX_NO_OF_ATTRIBUTES_IN_KEY];
-  Uint32* pk_data = blob_data->ptr[1].p;
-  Uint32 pk_size = 0;
-
-  if (unlikely(blobVersion == 1)) {
-    /*
-     * Blob PK attribute 0 is concatenated table PK null padded
-     * to fixed maximum size.  The actual size and attributes of
-     * table PK must be discovered.
-     */
-    Uint32 max_size = AttributeHeader(blob_data->ptr[0].p[0]).getDataSize();
-
-    Uint32 sz = 0; // words parsed so far
-    Uint32 n = 0;
-    Uint32 i;
-    for (i = 0; n < mainTable->m_noOfKeys; i++) {
-      const NdbColumnImpl* c = mainTable->getColumn(i);
-      assert(c != NULL);
-      if (! c->m_pk)
-        continue;
-
-      Uint32 bytesize = c->m_attrSize * c->m_arraySize;
-      Uint32 lb, len;
-      assert(sz < max_size);
-      bool ok = NdbSqlUtil::get_var_length(c->m_type, &pk_data[sz],
-                                           bytesize, lb, len);
-      assert(ok);
-
-      AttributeHeader ah(i, lb + len);
-      pk_ah[n] = ah.m_value;
-      sz += ah.getDataSize();
-      n++;
-    }
-    assert(n == mainTable->m_noOfKeys);
-    assert(sz <= max_size);
-    pk_size = sz;
-  } else {
-    /*
-     * Blob PK starts with separate table PKs.  Total size must be
-     * counted and blob attribute ids changed to table attribute ids.
-     */
-    Uint32 sz = 0; // count size
-    Uint32 n = 0;
-    Uint32 i;
-    for (i = 0; n < mainTable->m_noOfKeys; i++) {
-      const NdbColumnImpl* c = mainTable->getColumn(i);
-      assert(c != NULL);
-      if (! c->m_pk)
-        continue;
-
-      AttributeHeader ah(blob_data->ptr[0].p[n]);
-      ah.setAttributeId(i);
-      pk_ah[n] = ah.m_value;
-      sz += ah.getDataSize();
-      n++;
-    }
-    assert(n == mainTable->m_noOfKeys);
-    pk_size = sz;
-  }
-
+  Uint32 ah_buffer[NDB_MAX_NO_OF_ATTRIBUTES_IN_KEY];
   ptr[0].sz = mainTable->m_noOfKeys;
-  ptr[0].p = pk_ah;
-  ptr[1].sz = pk_size;
-  ptr[1].p = pk_data;
+  ptr[0].p = ah_buffer;
+  ptr[1].sz = AttributeHeader(blob_data->ptr[0].p[0]).getDataSize();
+  ptr[1].p = blob_data->ptr[1].p;
   ptr[2].sz = 0;
   ptr[2].p = 0;
+  split_concatenated_pk(mainTable, ptr[0].p, ptr[1].p, ptr[1].sz);
 
   DBUG_DUMP_EVENT("ah", (char*)ptr[0].p, ptr[0].sz << 2);
   DBUG_DUMP_EVENT("pk", (char*)ptr[1].p, ptr[1].sz << 2);
@@ -3150,7 +2520,7 @@ NdbEventBuffer::get_main_data(Gci_container* bucket,
   SubTableData sdata = *blob_data->sdata;
   sdata.tableId = main_op->m_eventImpl->m_tableImpl->m_id;
   SubTableData::setOperation(sdata.requestInfo, NdbDictionary::Event::_TE_NUL);
-  if (copy_data(&sdata, SubTableData::SignalLength, ptr, main_data, NULL) != 0)
+  if (copy_data(&sdata, ptr, main_data, NULL) != 0)
     DBUG_RETURN_EVENT(-1);
   hpos.data = main_data;
 
@@ -3287,6 +2657,10 @@ EventBufData_list::add_gci_op(Gci_op g)
 #ifndef DBUG_OFF
     i = m_gci_op_count;
 #endif
+    // add gci reference
+    // removed in deleteUsedOperations
+    g.op->m_ref_count++;
+    DBUG_PRINT("info", ("m_ref_count: %u for op: %p", g.op->m_ref_count, g.op));
     m_gci_op_list[m_gci_op_count++] = g;
   }
   DBUG_PRINT_EVENT("exit", ("m_gci_op_list[%u].event_types: %x", i, m_gci_op_list[i].event_types));
@@ -3297,8 +2671,8 @@ void
 EventBufData_list::move_gci_ops(EventBufData_list *list, Uint64 gci)
 {
   DBUG_ENTER_EVENT("EventBufData_list::move_gci_ops");
-  DBUG_PRINT_EVENT("info", ("this: %p  list: %p  gci: %u/%u",
-                            this, list, (Uint32)(gci >> 32), (Uint32)gci));
+  DBUG_PRINT_EVENT("info", ("this: %p  list: %p  gci: %llu",
+                            this, list, gci));
   assert(!m_is_not_multi_list);
   if (!list->m_is_not_multi_list)
   {
@@ -3390,33 +2764,14 @@ NdbEventBuffer::dropEventOperation(NdbEventOperation* tOp)
   // stop blob event ops
   if (op->theMainOp == NULL)
   {
-    Uint64 max_stop_gci = op->m_stop_gci;
     NdbEventOperationImpl* tBlobOp = op->theBlobOpList;
     while (tBlobOp != NULL)
     {
       tBlobOp->stop();
-      Uint64 stop_gci = tBlobOp->m_stop_gci;
-      if (stop_gci > max_stop_gci)
-        max_stop_gci = stop_gci;
       tBlobOp = tBlobOp->m_next;
     }
-    tBlobOp = op->theBlobOpList;
-    while (tBlobOp != NULL)
-    {
-      tBlobOp->m_stop_gci = max_stop_gci;
-      tBlobOp = tBlobOp->m_next;
-    }
-    op->m_stop_gci = max_stop_gci;
-  }
 
-  /**
-   * Needs mutex lock as report_node_XXX accesses list...
-   */
-  NdbMutex_Lock(m_mutex);
-
-  // release blob handles now, further access is user error
-  if (op->theMainOp == NULL)
-  {
+    // release blob handles now, further access is user error
     while (op->theBlobList != NULL)
     {
       NdbBlob* tBlob = op->theBlobList;
@@ -3425,15 +2780,6 @@ NdbEventBuffer::dropEventOperation(NdbEventOperation* tOp)
     }
   }
 
-  if (op->m_next)
-    op->m_next->m_prev= op->m_prev;
-  if (op->m_prev)
-    op->m_prev->m_next= op->m_next;
-  else
-    m_ndb->theImpl->m_ev_op= op->m_next;
-  
-  assert(m_ndb->theImpl->m_ev_op == 0 || m_ndb->theImpl->m_ev_op->m_prev == 0);
-  
   DBUG_ASSERT(op->m_ref_count > 0);
   // remove user reference
   // added in createEventOperation
@@ -3442,8 +2788,8 @@ NdbEventBuffer::dropEventOperation(NdbEventOperation* tOp)
   DBUG_PRINT("info", ("m_ref_count: %u for op: %p", op->m_ref_count, op));
   if (op->m_ref_count == 0)
   {
-    NdbMutex_Unlock(m_mutex);
     DBUG_PRINT("info", ("deleting op: %p", op));
+    DBUG_ASSERT(op->m_node_bit_mask.isclear());
     delete op->m_facade;
   }
   else
@@ -3453,8 +2799,6 @@ NdbEventBuffer::dropEventOperation(NdbEventOperation* tOp)
     if (m_dropped_ev_op)
       m_dropped_ev_op->m_prev= op;
     m_dropped_ev_op= op;
-    
-    NdbMutex_Unlock(m_mutex);
   }
   DBUG_VOID_RETURN;
 }
@@ -3466,41 +2810,33 @@ NdbEventBuffer::reportStatus()
   Uint64 apply_gci, latest_gci= m_latestGCI;
   if (apply_buf == 0)
     apply_buf= m_complete_data.m_data.m_head;
-  if (apply_buf && apply_buf->sdata)
-  {
-    Uint32 gci_hi = apply_buf->sdata->gci_hi;
-    Uint32 gci_lo = apply_buf->sdata->gci_lo;
-    apply_gci= gci_lo | (Uint64(gci_hi) << 32);
-  }
+  if (apply_buf)
+    apply_gci= apply_buf->sdata->gci;
   else
     apply_gci= latest_gci;
 
-  if (m_free_thresh)
+  if (100*(Uint64)m_free_data_sz < m_min_free_thresh*(Uint64)m_total_alloc &&
+      m_total_alloc > 1024*1024)
   {
-    if (100*(Uint64)m_free_data_sz < m_min_free_thresh*(Uint64)m_total_alloc &&
-        m_total_alloc > 1024*1024)
-    {
-      /* report less free buffer than m_free_thresh,
-         next report when more free than 2 * m_free_thresh
-      */
-      m_min_free_thresh= 0;
-      m_max_free_thresh= 2 * m_free_thresh;
-      goto send_report;
-    }
-  
-    if (100*(Uint64)m_free_data_sz > m_max_free_thresh*(Uint64)m_total_alloc &&
-        m_total_alloc > 1024*1024)
-    {
-      /* report more free than 2 * m_free_thresh
-         next report when less free than m_free_thresh
-      */
-      m_min_free_thresh= m_free_thresh;
-      m_max_free_thresh= 100;
-      goto send_report;
-    }
+    /* report less free buffer than m_free_thresh,
+       next report when more free than 2 * m_free_thresh
+    */
+    m_min_free_thresh= 0;
+    m_max_free_thresh= 2 * m_free_thresh;
+    goto send_report;
   }
-  if (m_gci_slip_thresh &&
-      (latest_gci-apply_gci >= m_gci_slip_thresh))
+  
+  if (100*(Uint64)m_free_data_sz > m_max_free_thresh*(Uint64)m_total_alloc &&
+      m_total_alloc > 1024*1024)
+  {
+    /* report more free than 2 * m_free_thresh
+       next report when less free than m_free_thresh
+    */
+    m_min_free_thresh= m_free_thresh;
+    m_max_free_thresh= 100;
+    goto send_report;
+  }
+  if (latest_gci-apply_gci >=  m_gci_slip_thresh)
   {
     goto send_report;
   }
@@ -3512,11 +2848,11 @@ send_report:
   data[1]= m_total_alloc-m_free_data_sz;
   data[2]= m_total_alloc;
   data[3]= 0;
-  data[4]= (Uint32)(apply_gci);
-  data[5]= (Uint32)(apply_gci >> 32);
-  data[6]= (Uint32)(latest_gci);
-  data[7]= (Uint32)(latest_gci >> 32);
-  Ndb_internal::send_event_report(true, m_ndb, data,8);
+  data[4]= apply_gci & ~(Uint32)0;
+  data[5]= apply_gci >> 32;
+  data[6]= latest_gci & ~(Uint32)0;
+  data[7]= latest_gci >> 32;
+  Ndb_internal::send_event_report(m_ndb, data,8);
 #ifdef VM_TRACE
   assert(m_total_alloc >= m_free_data_sz);
 #endif
@@ -3526,7 +2862,6 @@ send_report:
 void
 NdbEventBuffer::verify_size(const EventBufData* data, Uint32 count, Uint32 sz)
 {
-#if 0
   Uint32 tmp_count = 0;
   Uint32 tmp_sz = 0;
   while (data != 0) {
@@ -3538,14 +2873,11 @@ NdbEventBuffer::verify_size(const EventBufData* data, Uint32 count, Uint32 sz)
   }
   assert(tmp_count == count);
   assert(tmp_sz == sz);
-#endif
 }
 void
 NdbEventBuffer::verify_size(const EventBufData_list & list)
 {
-#if 0
   verify_size(list.m_head, list.m_count, list.m_sz);
-#endif
 }
 #endif
 

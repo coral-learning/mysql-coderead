@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003-2006, 2008 MySQL AB, 2008, 2009 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include <ndb_global.h>
 
@@ -170,7 +168,7 @@ put(PropertiesImpl * impl, const char * name, T value, bool replace){
       return false;
     }
   }
-  return (tmp->put(new PropertyImpl(short_name, value)) != 0);
+  return tmp->put(new PropertyImpl(short_name, value));  
 }
 
 
@@ -437,7 +435,7 @@ Properties::pack(Uint32 * buf) const {
   if(!res)
     return res;
 
-  * buf = htonl(computeChecksum(bufStart, Uint32(buf - bufStart)));
+  * buf = htonl(computeChecksum(bufStart, (buf - bufStart)));
 
   return true;
 }
@@ -590,7 +588,7 @@ PropertiesImpl::getProps(const char * name,
     * impl = this;
     return ret;
   } else {
-    Uint32 sz = Uint32(tmp - name);
+    Uint32 sz = tmp - name;
     char * tmp2 = (char*)malloc(sz + 1);
     memcpy(tmp2, name, sz);
     tmp2[sz] = 0;
@@ -620,7 +618,7 @@ PropertiesImpl::getPropsPut(const char * name,
     * impl = this;
     return ret;
   } else {
-    Uint32 sz = Uint32(tmp - name);
+    Uint32 sz = tmp - name;
     char * tmp2 = (char*)malloc(sz + 1);
     memcpy(tmp2, name, sz);
     tmp2[sz] = 0;
@@ -657,7 +655,7 @@ PropertiesImpl::getPackedSize(Uint32 pLen) const {
   for(unsigned int i = 0; i<items; i++){
     if(content[i]->valueType == PropertiesType_Properties){
       Properties * p = (Properties*)content[i]->value;
-      sz += p->impl->getPackedSize(pLen+(Uint32)strlen(content[i]->name)+1);
+      sz += p->impl->getPackedSize(pLen+strlen(content[i]->name)+1);
     } else { 
       sz += 4; // Type
       sz += 4; // Name Len
@@ -776,7 +774,7 @@ PropertiesImpl::pack(Uint32 *& buf, const char * prefix, Uint32 pLen) const {
       valLenData  = 8;
       break;
     case PropertiesType_char:
-      valLenData  = Uint32(strlen((char *)content[i]->value));
+      valLenData  = strlen((char *)content[i]->value);
       break;
     case PropertiesType_Properties:
       assert(0);
@@ -799,8 +797,8 @@ PropertiesImpl::pack(Uint32 *& buf, const char * prefix, Uint32 pLen) const {
       break;
     case PropertiesType_Uint64:{
       Uint64 val =  * (Uint64 *)content[i]->value;
-      Uint32 hi = (Uint32)(val >> 32);
-      Uint32 lo = (Uint32)(val & 0xFFFFFFFF);
+      Uint32 hi = (val >> 32);
+      Uint32 lo = (val & 0xFFFFFFFF);
       * (Uint32 *)valBuf = htonl(hi);
       * (Uint32 *)(valBuf + 4) = htonl(lo);
     }
@@ -1008,7 +1006,7 @@ Properties::put64(const char * name, Uint32 no, Uint64 val, bool replace){
   size_t tmp_len = strlen(name)+20;
   char * tmp = (char*)malloc(tmp_len);
   BaseString::snprintf(tmp, tmp_len, "%s_%d", name, no);
-  bool res = put64(tmp, val, replace);
+  bool res = put(tmp, val, replace);
   free(tmp);
   return res;
 }

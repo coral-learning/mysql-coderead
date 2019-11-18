@@ -19,10 +19,8 @@ IndexMemory = 25M
 DataMemory = 100M
 BackupMemory = 64M
 MaxNoOfConcurrentScans = 100
-MaxNoOfSavedMessages= 5
+MaxNoOfSavedMessages= 1000
 SendBufferMemory = 2M
 NoOfFragmentLogFiles = 4
 FragmentLogFileSize = 64M
-CompressedLCP=1
-CompressedBackup=1
-ODirect=1
+

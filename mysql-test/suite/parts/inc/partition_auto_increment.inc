@@ -58,7 +58,6 @@ if (!$skip_update)
   UPDATE t1 SET c1 = 51 WHERE c1 = 19;
   FLUSH TABLES;
   UPDATE t1 SET c1 = 40 WHERE c1 = 50;
-  UPDATE t1 SET c1 = -1 WHERE c1 = 40;
   SELECT AUTO_INCREMENT FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='test'
   AND TABLE_NAME='t1';
   UPDATE t1 SET c1 = NULL WHERE c1 = 4;
@@ -84,14 +83,6 @@ if (!$skip_delete)
 {
 DELETE FROM t1;
 }
-INSERT INTO t1 VALUES (NULL);
---error 0, ER_DUP_KEY
-INSERT INTO t1 VALUES (-1);
-if ($mysql_errno)
-{
-  echo # ERROR (only OK if Archive) mysql_errno: $mysql_errno;
-}
-INSERT INTO t1 VALUES (NULL);
 INSERT INTO t1 VALUES (NULL);
 SHOW CREATE TABLE t1;
 SELECT * FROM t1 ORDER BY c1;
@@ -688,12 +679,7 @@ eval CREATE TABLE t (c1 INT NOT NULL AUTO_INCREMENT, PRIMARY KEY(c1),
 
 INSERT INTO t(c2) VALUES (10);
 INSERT INTO t(c2) VALUES (20);
---error 0, ER_DUP_KEY
 INSERT INTO t VALUES (-1,-10);
-if ($mysql_errno)
-{
-  echo # ERROR (only OK if Archive), mysql_errno: $mysql_errno;
-}
 INSERT INTO t(c2) VALUES (30);
 INSERT INTO t(c2) VALUES (40);
 
@@ -708,12 +694,7 @@ DROP TABLE t;
 eval CREATE TABLE t (c1 INT NOT NULL AUTO_INCREMENT, PRIMARY KEY(c1),
   c2 INT) ENGINE=$engine PARTITION BY HASH(c1) PARTITIONS 2;
 
---error 0, ER_DUP_KEY
 INSERT INTO t VALUES (-2,-20);
-if ($mysql_errno)
-{
-  echo # ERROR (only OK if Archive), mysql_errno: $mysql_errno;
-}
 INSERT INTO t(c2) VALUES (30);
 
 SELECT * FROM t ORDER BY c1 ASC;
@@ -726,12 +707,7 @@ DROP TABLE t;
 eval CREATE TABLE t (c1 INT NOT NULL AUTO_INCREMENT, PRIMARY KEY(c1),
   c2 INT) ENGINE=$engine PARTITION BY HASH(c1) PARTITIONS 2;
 
---error 0, ER_DUP_KEY
 INSERT INTO t VALUES (-4,-20);
-if ($mysql_errno)
-{
-  echo # ERROR (only OK if Archive), mysql_errno: $mysql_errno;
-}
 INSERT INTO t(c2) VALUES (30);
 INSERT INTO t(c2) VALUES (40);
 
@@ -746,12 +722,7 @@ eval CREATE TABLE t (c1 INT NOT NULL AUTO_INCREMENT, PRIMARY KEY(c1),
 
 INSERT INTO t(c2) VALUES (10);
 INSERT INTO t(c2) VALUES (20);
---error 0, ER_DUP_KEY
 INSERT INTO t VALUES (-1,-10);
-if ($mysql_errno)
-{
-  echo # ERROR (only OK if Archive), mysql_errno: $mysql_errno;
-}
 
 SELECT * FROM t ORDER BY c1 ASC;
 
@@ -768,19 +739,9 @@ eval CREATE TABLE t (c1 INT NOT NULL AUTO_INCREMENT, PRIMARY KEY(c1),
 
 INSERT INTO t(c2) VALUES (10);
 INSERT INTO t(c2) VALUES (20);
---error 0, ER_DUP_KEY
 INSERT INTO t VALUES (-1,-10);
-if ($mysql_errno)
-{
-  echo # ERROR (only OK if Archive), mysql_errno: $mysql_errno;
-}
 INSERT INTO t(c2) VALUES (30);
---error 0, ER_DUP_KEY
 INSERT INTO t VALUES (-3,-20);
-if ($mysql_errno)
-{
-  echo # ERROR (only OK if Archive), mysql_errno: $mysql_errno;
-}
 INSERT INTO t(c2) VALUES (40);
 
 SELECT * FROM t ORDER BY c1 ASC;
@@ -805,20 +766,10 @@ INSERT INTO t(c2) VALUES (20);
 INSERT INTO t VALUES (126,30);
 INSERT INTO t VALUES (127,40);
 
---error 0, ER_DUP_ENTRY, ER_DUP_KEY
+--error ER_DUP_ENTRY
 INSERT INTO t VALUES (128,50);
-if (!$mysql_errno)
-{
-  echo # ERROR (Only OK if Blackhole);
-  echo # expecting ER_DUP_ENTRY or ER_DUP_KEY, mysql_errno: $mysql_errno;
-}
---error 0, ER_DUP_ENTRY, ER_DUP_KEY
+--error ER_DUP_ENTRY 
 INSERT INTO t VALUES (129,60);
-if (!$mysql_errno)
-{
-  echo # ERROR (only OK if Blackhole);
-  echo # expecting ER_DUP_ENTRY or ER_DUP_KEY, mysql_errno: $mysql_errno;
-}
 
 SELECT * FROM t ORDER BY c1 ASC;
 
@@ -832,33 +783,13 @@ eval CREATE TABLE t (c1 TINYINT NOT NULL AUTO_INCREMENT, PRIMARY KEY(c1),
 
 INSERT INTO t(c2) VALUES (10);
 INSERT INTO t(c2) VALUES (20);
---error 0, ER_DUP_KEY
 INSERT INTO t VALUES (-127,30);
-if ($mysql_errno)
-{
-  echo # ERROR (only OK if Archive), mysql_errno: $mysql_errno;
-}
---error 0, ER_DUP_KEY
 INSERT INTO t VALUES (-128,40);
-if ($mysql_errno)
-{
-  echo # ERROR (only OK if Archive), mysql_errno: $mysql_errno;
-}
 
---error 0, ER_DUP_ENTRY, ER_DUP_KEY
+--error ER_DUP_ENTRY
 INSERT INTO t VALUES (-129,50);
-if (!$mysql_errno)
-{
-  echo # ERROR (only OK if Blackhole)
-  echo # should give ER_DUP_KEY or ER_DUP_ENTRY mysql_errno: $mysql_errno;
-}
---error 0, ER_DUP_ENTRY, ER_DUP_KEY
+--error ER_DUP_ENTRY
 INSERT INTO t VALUES (-130,60);
-if (!$mysql_errno)
-{
-  echo # ERROR (only OK if Blackhole)
-  echo # should give ER_DUP_KEY or ER_DUP_ENTRY mysql_errno: $mysql_errno;
-}
 
 SELECT * FROM t ORDER BY c1 ASC;
 
@@ -871,12 +802,7 @@ eval CREATE TABLE t (c1 INT NOT NULL AUTO_INCREMENT, PRIMARY KEY(c1),
 
 INSERT INTO t(c2) VALUES (10);
 INSERT INTO t(c2) VALUES (20);
---error 0, ER_DUP_KEY
 INSERT INTO t VALUES (-1,-10);
-if ($mysql_errno)
-{
-  echo # ERROR (only OK if Archive), mysql_errno: $mysql_errno;
-}
 INSERT INTO t(c2) VALUES (30);
 
 SELECT * FROM t ORDER BY c1 ASC;

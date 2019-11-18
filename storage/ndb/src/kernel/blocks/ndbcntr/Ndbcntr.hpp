@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef NDBCNTR_H
 #define NDBCNTR_H
@@ -27,6 +26,8 @@
 #include <signaldata/DictTabInfo.hpp>
 #include <signaldata/CntrStart.hpp>
 #include <signaldata/CheckNodeGroups.hpp>
+
+#include <signaldata/UpgradeStartup.hpp>
 
 #include <NodeState.hpp>
 #include <NdbTick.h>
@@ -47,7 +48,6 @@
 //------- OTHERS ---------------------------------------------
 #define ZSTARTUP  1
 #define ZSHUTDOWN 2
-#define ZBLOCK_STTOR 3
 
 #define ZSIZE_NDB_BLOCKS_REC 16 /* MAX BLOCKS IN NDB                    */
 #define ZSIZE_SYSTAB 2048
@@ -61,6 +61,15 @@
 #define ZSTART_PHASE_8 8
 #define ZSTART_PHASE_9 9
 #define ZSTART_PHASE_END 255
+#define ZWAITPOINT_4_1 1
+#define ZWAITPOINT_4_2 2
+#define ZWAITPOINT_5_1 3
+#define ZWAITPOINT_5_2 4
+#define ZWAITPOINT_6_1 5
+#define ZWAITPOINT_6_2 6
+#define ZWAITPOINT_7_1 7
+#define ZWAITPOINT_7_2 8
+#define ZSYSTAB_VERSION 1
 #endif
 
 class Ndbcntr: public SimulatedBlock {
@@ -79,10 +88,9 @@ public:
     
     void reset();
     NdbNodeBitmask m_starting;
-    NdbNodeBitmask m_waiting; // == (m_withLog | m_withoutLog | m_waitTO)
+    NdbNodeBitmask m_waiting; // == (m_withLog | m_withoutLog)
     NdbNodeBitmask m_withLog;
     NdbNodeBitmask m_withoutLog;
-    NdbNodeBitmask m_waitTO;
     Uint32 m_lastGci;
     Uint32 m_lastGciNodeId;
 
@@ -94,8 +102,6 @@ public:
       Uint32 m_lastGci;
     } m_logNodes[MAX_NDB_NODES];
     Uint32 m_logNodesCount;
-
-    Uint32 m_wait_sp[MAX_NDB_NODES];
   } c_start;
   
   struct NdbBlocksRec {
@@ -127,7 +133,6 @@ public:
     bool tableLoggedFlag;
     // saved table id
     mutable Uint32 tableId;
-    mutable Uint32 tableVersion;
   };
   struct SysIndex {
     const char* name;
@@ -145,12 +150,7 @@ public:
   static const unsigned g_sysTableCount;
   // the system tables
   static const SysTable g_sysTable_SYSTAB_0;
-  static SysTable g_sysTable_NDBEVENTS_0;
-  // schema trans
-  Uint32 c_schemaTransId;
-  Uint32 c_schemaTransKey;
-  Uint32 c_hashMapId;
-  Uint32 c_hashMapVersion;
+  static const SysTable g_sysTable_NDBEVENTS_0;
 
 public:
   Ndbcntr(Block_context&);
@@ -173,8 +173,6 @@ private:
   void execNODE_FAILREP(Signal* signal);
   void execSYSTEM_ERROR(Signal* signal);
 
-  void execSTART_PERMREP(Signal*);
-
   // Received signals
   void execDUMP_STATE_ORD(Signal* signal);
   void execREAD_CONFIG_REQ(Signal* signal);
@@ -189,18 +187,8 @@ private:
   void execGETGCICONF(Signal* signal);
   void execDIH_RESTARTCONF(Signal* signal);
   void execDIH_RESTARTREF(Signal* signal);
-  void execSCHEMA_TRANS_BEGIN_CONF(Signal* signal);
-  void execSCHEMA_TRANS_BEGIN_REF(Signal* signal);
-  void execSCHEMA_TRANS_END_CONF(Signal* signal);
-  void execSCHEMA_TRANS_END_REF(Signal* signal);
   void execCREATE_TABLE_REF(Signal* signal);
   void execCREATE_TABLE_CONF(Signal* signal);
-  void execCREATE_HASH_MAP_REF(Signal* signal);
-  void execCREATE_HASH_MAP_CONF(Signal* signal);
-  void execCREATE_FILEGROUP_REF(Signal* signal);
-  void execCREATE_FILEGROUP_CONF(Signal* signal);
-  void execCREATE_FILE_REF(Signal* signal);
-  void execCREATE_FILE_CONF(Signal* signal);
   void execNDB_STTORRY(Signal* signal);
   void execNDB_STARTCONF(Signal* signal);
   void execREAD_NODESREQ(Signal* signal);
@@ -225,8 +213,6 @@ private:
   void execABORT_ALL_CONF(Signal* signal);
 
   // Statement blocks
-  void beginSchemaTransLab(Signal* signal);
-  void endSchemaTransLab(Signal* signal);
   void sendCreateTabReq(Signal* signal, const char* buffer, Uint32 bufLen);
   void startInsertTransactions(Signal* signal);
   void initData(Signal* signal);
@@ -243,9 +229,7 @@ private:
   // Generated statement blocks
   void systemErrorLab(Signal* signal, int line);
 
-  void createHashMap(Signal*, Uint32 index);
   void createSystableLab(Signal* signal, unsigned index);
-  void createDDObjects(Signal*, unsigned index);
   void crSystab7Lab(Signal* signal);
   void crSystab8Lab(Signal* signal);
   void crSystab9Lab(Signal* signal);
@@ -273,25 +257,12 @@ private:
   void ph7ALab(Signal* signal);
   void ph8ALab(Signal* signal);
 
+
   void waitpoint41Lab(Signal* signal);
   void waitpoint51Lab(Signal* signal);
   void waitpoint52Lab(Signal* signal);
   void waitpoint61Lab(Signal* signal);
   void waitpoint71Lab(Signal* signal);
-  void waitpoint42To(Signal* signal);
-
-  /**
-   * Wait before starting sp
-   *   so that all nodes in cluster is waiting for >= sp
-   */
-  bool wait_sp(Signal*, Uint32 sp);
-  void wait_sp_rep(Signal*);
-
-  void execSTART_COPYREF(Signal*);
-  void execSTART_COPYCONF(Signal*);
-
-  void execCREATE_NODEGROUP_IMPL_REQ(Signal*);
-  void execDROP_NODEGROUP_IMPL_REQ(Signal*);
 
   void updateNodeState(Signal* signal, const NodeState & newState) const ;
   void getNodeGroup(Signal* signal);
@@ -324,7 +295,6 @@ private:
   UintR cnoWaitrep6;
   UintR cnoWaitrep7;
   UintR ctcConnectionP;
-  Uint32 ctcReference;
   UintR ctcReqInfo;
   Uint8 ctransidPhase;
   Uint16 cresponses;
@@ -332,13 +302,11 @@ private:
   Uint8 cstartPhase;
   Uint16 cinternalStartphase;
 
-  bool m_cntr_start_conf;
   Uint16 cmasterNodeId;
   Uint16 cndbBlocksCount;
   Uint16 cnoStartNodes;
   UintR cnoWaitrep;
   NodeState::StartType ctypeOfStart;
-  NodeState::StartType cdihStartType;
   Uint16 cdynamicNodeId;
 
   Uint32 c_fsRemoveCount;
@@ -369,7 +337,6 @@ public:
     void checkLqhTimeout_2(Signal* signal);
     
     BlockNumber number() const { return cntr.number(); }
-    EmulatedJamBuffer *jamBuffer() const { return cntr.jamBuffer(); }
     void progError(int line, int cause, const char * extra) { 
       cntr.progError(line, cause, extra); 
     }
@@ -402,7 +369,6 @@ private:
     void sendNextREAD_CONFIG_REQ(Signal* signal);
     
     BlockNumber number() const { return cntr.number(); }
-    EmulatedJamBuffer *jamBuffer() const { return cntr.jamBuffer(); }
     void progError(int line, int cause, const char * extra) { 
       cntr.progError(line, cause, extra); 
     }
@@ -415,6 +381,8 @@ private:
   void execSTTORRY(Signal* signal);
   void execSTART_ORD(Signal* signal);
   void execREAD_CONFIG_CONF(Signal*);
+
+  friend struct UpgradeStartup;
 };
 
 #endif

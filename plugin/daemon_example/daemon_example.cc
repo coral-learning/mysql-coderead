@@ -1,4 +1,5 @@
-/* Copyright (c) 2006, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2006, 2015, Oracle and/or its affiliates. All rights
+   reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -26,10 +27,10 @@
 #include "sql_plugin.h"                         // st_plugin_int
 
 /*
-  Disable MY_ATTRIBUTE() on non-gcc compilers.
+  Disable __attribute__() on non-gcc compilers.
 */
-#if !defined(MY_ATTRIBUTE) && !defined(__GNUC__)
-#define MY_ATTRIBUTE(A)
+#if !defined(__attribute__) && !defined(__GNUC__)
+#define __attribute__(A)
 #endif
 
 
@@ -158,7 +159,6 @@ static int daemon_example_plugin_deinit(void *p)
     (struct mysql_heartbeat_context *)plugin->data;
   time_t result= time(NULL);
   struct tm tm_tmp;
-  void *dummy_retval;
 
   pthread_cancel(con->heartbeat_thread);
 
@@ -175,9 +175,9 @@ static int daemon_example_plugin_deinit(void *p)
 
   /*
     Need to wait for the hearbeat thread to terminate before closing
-    the file it writes to and freeing the memory it uses
+    the file it writes to and freeing the memory it uses.
   */
-  pthread_join(con->heartbeat_thread, &dummy_retval);
+  pthread_join(con->heartbeat_thread, NULL);
 
   my_close(con->heartbeat_file, MYF(0));
 

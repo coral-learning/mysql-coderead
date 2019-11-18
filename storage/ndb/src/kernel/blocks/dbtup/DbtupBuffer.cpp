@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003-2008 MySQL AB, 2008, 2009 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #define DBTUP_C
 #define DBTUP_BUFFER_CPP
@@ -144,7 +142,7 @@ void Dbtup::sendReadAttrinfo(Signal* signal,
   bool connectedToNode= getNodeInfo(nodeId).m_connected;
   const Uint32 type= getNodeInfo(nodeId).m_type;
   bool is_api= (type >= NodeInfo::API && type <= NodeInfo::MGM);
-  bool old_dest= (getNodeInfo(nodeId).m_version < MAKE_VERSION(6,4,0));
+  bool old_dest= (getNodeInfo(nodeId).m_version < MAKE_VERSION(3,5,0));
   Uint32 TpacketLen= hostBuffer[nodeId].packetLenTA;
   Uint32 TpacketTA= hostBuffer[nodeId].noOfPacketsTA;
 
@@ -173,7 +171,7 @@ void Dbtup::sendReadAttrinfo(Signal* signal,
       /**
        * Send long sig
        */
-      if (ToutBufIndex >= 22 && is_api) {
+      if (ToutBufIndex >= 22 && is_api && !old_dest) {
 	jam();
 	/**
 	 * Flush buffer so that order is maintained
@@ -198,18 +196,6 @@ void Dbtup::sendReadAttrinfo(Signal* signal,
 	return;
       }
       
-      /**
-       * Send long signal to DBUTIL.
-       */
-      if ((block == DBUTIL || block == DBSPJ) && !old_dest) {
-	jam();
-	LinearSectionPtr ptr[3];
-	ptr[0].p= &signal->theData[25];
-	ptr[0].sz= ToutBufIndex;
-	sendSignal(recBlockref, GSN_TRANSID_AI, signal, 3, JBB, ptr, 1);
-	return;
-      }
-
       /**
        * short sig + api -> buffer
        */
@@ -242,41 +228,8 @@ void Dbtup::sendReadAttrinfo(Signal* signal,
       }
       return;
     }
-
-    /**
-     * BACKUP/SUMA/LQH run in our thread, so we can EXECUTE_DIRECT().
-     *
-     * The UTIL/TC blocks are in another thread (in multi-threaded ndbd), so
-     * must use sendSignal().
-     *
-     * In MT LQH only LQH and BACKUP are in same thread, and BACKUP only
-     * in LCP case since user-backup uses single worker.
-     */
-    BlockNumber blockMain = blockToMain(block);
-    const bool sameInstance = blockToInstance(block) == instance();
-    if (blockMain == DBLQH)
-    {
-      EXECUTE_DIRECT(blockMain, GSN_TRANSID_AI, signal, 3 + ToutBufIndex);
-      jamEntry();
-    }
-    else if (blockMain == SUMA && sameInstance)
-    {
-      EXECUTE_DIRECT(blockMain, GSN_TRANSID_AI, signal, 3 + ToutBufIndex);
-      jamEntry();
-    }
-    else if (blockMain == BACKUP && sameInstance)
-    {
-      EXECUTE_DIRECT(blockMain, GSN_TRANSID_AI, signal, 3 + ToutBufIndex);
-      jamEntry();
-    }
-    else
-    {
-      jam();
-      LinearSectionPtr ptr[3];
-      ptr[0].p= &signal->theData[3];
-      ptr[0].sz= ToutBufIndex;
-      sendSignal(recBlockref, GSN_TRANSID_AI, signal, 3, JBB, ptr, 1);
-    }
+    EXECUTE_DIRECT(block, GSN_TRANSID_AI, signal, 3 + ToutBufIndex);
+    jamEntry();
     return;
   }
 

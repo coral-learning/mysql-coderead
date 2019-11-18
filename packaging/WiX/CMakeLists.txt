@@ -1,4 +1,4 @@
-# Copyright (c) 2010, 2016, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2010, Oracle and/or its affiliates. All rights reserved.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -22,15 +22,7 @@ FIND_PATH(WIX_DIR heat.exe
    $ENV{ProgramFiles}/wix/bin
   "$ENV{ProgramFiles}/Windows Installer XML v3/bin"
   "$ENV{ProgramFiles}/Windows Installer XML v3.5/bin"
-  "$ENV{ProgramFiles}/WiX Toolset V3.6/bin"
-  "$ENV{ProgramFiles}/WiX Toolset V3.8/bin"
 )
-
-IF(NOT WIX_DIR)
-  FIND_PATH(WIX_DIR heat.exe
-    "$ENV{ProgramFiles}/WiX Toolset V3.10/bin"
-  )
-ENDIF()
 
 IF(NOT WIX_DIR)
   IF(NOT _WIX_DIR_CHECKED)
@@ -42,7 +34,7 @@ ENDIF()
 
 ADD_SUBDIRECTORY(ca)
 
-# mysql_server_extra.wxs.in needs DATADIR_MYSQL_FILES and DATADIR_PERFORMANCE_SCHEMA_FILES, i.e
+# extra.wxs.in needs DATADIR_MYSQL_FILES and DATADIR_PERFORMANCE_SCHEMA_FILES, i.e
 # Wix-compatible file lists for ${builddir}\sql\data\{mysql,performance_schema}
 
 FOREACH(dir mysql performance_schema)
@@ -60,22 +52,6 @@ FOREACH(dir mysql performance_schema)
  STRING(TOUPPER ${dir} DIR_UPPER)
  SET(DATADIR_${DIR_UPPER}_FILES "${filelist}")
 ENDFOREACH()
-
-FILE(GLOB files ${CMAKE_BINARY_DIR}/sql/data/*)
-SET(filelist)
-FOREACH(f ${files})
-  IF(IS_DIRECTORY "${f}")
-  ELSE()
-    IF(NOT (f MATCHES ".rule" OR f MATCHES "bootstrap.sql"))
-      FILE(TO_NATIVE_PATH "${f}" file_native_path)
-      GET_FILENAME_COMPONENT(file_name "${f}" NAME)
-      SET(filelist 
-"${filelist}
-<File Id='${file_name}' Source='${file_native_path}'/>")
-    ENDIF()
-  ENDIF()
-ENDFOREACH()
-SET(DATADIR_FILES "${filelist}")
 
 
 FIND_PROGRAM(HEAT_EXECUTABLE heat ${WIX_DIR})
@@ -102,21 +78,21 @@ ELSE()
 ENDIF()
 GET_TARGET_PROPERTY(WIXCA_LOCATION wixca LOCATION)
 SET(CPACK_WIX_CONFIG ${CMAKE_CURRENT_SOURCE_DIR}/CPackWixConfig.cmake)
-SET(CPACK_WIX_INCLUDE "${CMAKE_CURRENT_BINARY_DIR}/mysql_server_extra.wxs;${CMAKE_CURRENT_SOURCE_DIR}/custom_ui.wxs")
+SET(CPACK_WIX_INCLUDE "${CMAKE_CURRENT_BINARY_DIR}/extra.wxs;${CMAKE_CURRENT_SOURCE_DIR}/custom_ui.wxs")
+
+CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/create_msi.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/create_msi.cmake
+  @ONLY)
+
 
 IF(CMAKE_SIZEOF_VOID_P EQUAL 8)
   SET(WixWin64 " Win64='yes'")
 ELSE()
   SET(WixWin64)
-  SET(WixWin64 " Win64='no'")
 ENDIF()
 
-CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/mysql_server_extra.wxs.in
-  ${CMAKE_CURRENT_BINARY_DIR}/mysql_server_extra.wxs)
-
-CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/create_msi.cmake.in
-  ${CMAKE_CURRENT_BINARY_DIR}/create_msi.cmake
-  @ONLY)
+CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/extra.wxs.in
+  ${CMAKE_CURRENT_BINARY_DIR}/extra.wxs)
 
 IF(CMAKE_GENERATOR MATCHES "Visual Studio")
  SET(CONFIG_PARAM "-DCMAKE_INSTALL_CONFIG_NAME=${CMAKE_CFG_INTDIR}")

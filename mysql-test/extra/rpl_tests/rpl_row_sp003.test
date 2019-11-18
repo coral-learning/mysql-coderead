@@ -54,7 +54,9 @@ SELECT release_lock("test");
 connection master;
 SELECT * FROM test.t1; 
 #show binlog events;
---source include/sync_slave_sql_with_master.inc
+--source include/wait_for_ndb_to_binlog.inc
+sync_slave_with_master;
+connection slave;
 SELECT * FROM test.t1;
 
 connection master;
@@ -65,7 +67,8 @@ CALL test.p1();
 SELECT release_lock("test");
 SELECT * FROM test.t1;
 
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
+connection slave;
 SELECT * FROM test.t1;
 connection master;
 #show binlog events from 720;
@@ -73,6 +76,6 @@ connection master;
 DROP PROCEDURE IF EXISTS test.p1;
 DROP PROCEDURE IF EXISTS test.p2;
 DROP TABLE IF EXISTS test.t1;
---source include/sync_slave_sql_with_master.inc
+sync_slave_with_master;
 
 # End of 5.0 test case

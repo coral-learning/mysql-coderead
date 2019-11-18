@@ -469,9 +469,11 @@ inline void showPeer(SSL* ssl)
     if (peer) {
         char* issuer  = X509_NAME_oneline(X509_get_issuer_name(peer), 0, 0);
         char* subject = X509_NAME_oneline(X509_get_subject_name(peer), 0, 0);
+
         X509_NAME_ENTRY* se = NULL;
         ASN1_STRING*     sd = NULL;
         char*            subCN = NULL;
+
         X509_NAME* sub = X509_get_subject_name(peer);
         int lastpos = -1;
         if (sub)
@@ -489,6 +491,7 @@ inline void showPeer(SSL* ssl)
 
         free(subject);
         free(issuer);
+
     }
     else
         printf("peer has no cert!\n");

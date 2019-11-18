@@ -1,6 +1,4 @@
 --source include/have_innodb.inc
-# Adding big test option for this test.
---source include/big_test.inc
 
 #
 # create test-bed to run test

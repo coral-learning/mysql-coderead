@@ -49,7 +49,6 @@ drop table if exists t0, t1, t2, t3, t4, t5;
 drop view if exists v1, v2;
 drop procedure if exists p1;
 drop procedure if exists p2;
-drop procedure if exists p3;
 drop function if exists f1;
 drop function if exists f2;
 drop function if exists f3;
@@ -65,8 +64,6 @@ drop function if exists f12;
 drop function if exists f13;
 drop function if exists f14;
 drop function if exists f15;
-drop function if exists f16;
-drop function if exists f17;
 --enable_warnings
 create table t1 (i int primary key);
 insert into t1 values (1), (2), (3), (4), (5);
@@ -173,26 +170,6 @@ begin
   call p2(k);
   return k;
 end|
-create function f16() returns int
-begin
-  create temporary table if not exists temp1 (a int);
-  insert into temp1 select * from t1;
-  drop temporary table temp1;
-  return 1;
-end|
-create function f17() returns int
-begin
-  declare j int;
-  select i from t1 where i = 1 into j;
-  call p3;
-  return 1;
-end|
-create procedure p3()
-begin
-  create temporary table if not exists temp1 (a int);
-  insert into temp1 select * from t1;
-  drop temporary table temp1;
-end|
 create trigger t4_bi before insert on t4 for each row
 begin
   declare k int;
@@ -240,7 +217,6 @@ connection con1;
 --disable_result_log
 show create procedure p1;
 show create procedure p2;
-show create procedure p3;
 show create function f1;
 show create function f2;
 show create function f3;
@@ -256,8 +232,6 @@ show create function f12;
 show create function f13;
 show create function f14;
 show create function f15;
-show create function f16;
-show create function f17;
 --enable_result_log
 --echo # Switch back to connection 'default'.
 connection default;
@@ -518,15 +492,18 @@ let $restore_table= t2;
 --echo # 4.1 SELECT/SET with a stored function which does not 
 --echo #     modify data and uses SELECT in its turn.
 --echo #
---echo # There is no need to take strong locks on the table
+--echo # In theory there is no need to take strong locks on the table
 --echo # being selected from in SF as the call to such function
---echo # won't get into the binary log.
+--echo # won't get into the binary log. In practice, however, we
+--echo # discover that fact too late in the process to be able to
+--echo # affect the decision what locks should be taken.
+--echo # Hence, strong locks are taken in this case.
 let $statement= select f1();
 let $restore_table= ;
---source include/check_concurrent_insert.inc
+--source include/check_no_concurrent_insert.inc
 let $statement= set @a:= f1();
 let $restore_table= ;
---source include/check_concurrent_insert.inc
+--source include/check_no_concurrent_insert.inc
 
 --echo #
 --echo # 4.2 INSERT (or other statement which modifies data) with
@@ -561,20 +538,22 @@ let $restore_table= t2;
 --echo #      modify data and reads a table through subselect
 --echo #      in a control construct.
 --echo #
---echo # Call to this function won't get to the
---echo # binary log and thus no strong lock is needed.
+--echo # Again, in theory a call to this function won't get to the
+--echo # binary log and thus no strong lock is needed. But in practice
+--echo # we don't detect this fact early enough (get_lock_type_for_table())
+--echo # to avoid taking a strong lock.
 let $statement= select f3();
 let $restore_table= ;
---source include/check_concurrent_insert.inc
+--source include/check_no_concurrent_insert.inc
 let $statement= set @a:= f3();
 let $restore_table= ;
---source include/check_concurrent_insert.inc
+--source include/check_no_concurrent_insert.inc
 let $statement= select f4();
 let $restore_table= ;
---source include/check_concurrent_insert.inc
+--source include/check_no_concurrent_insert.inc
 let $statement= set @a:= f4();
 let $restore_table= ;
---source include/check_concurrent_insert.inc
+--source include/check_no_concurrent_insert.inc
 
 --echo #
 --echo # 4.5. INSERT (or other statement which modifies data) with
@@ -612,21 +591,22 @@ let $restore_table= t2;
 --echo #     doesn't modify data and reads tables through
 --echo #     a view.
 --echo #
---echo # Calls to such functions won't get into
---echo # the binary log and thus don't need strong
---echo # locks.
+--echo # Once again, in theory, calls to such functions won't
+--echo # get into the binary log and thus don't need strong
+--echo # locks. But in practice this fact is discovered
+--echo # too late to have any effect.
 let $statement= select f6();
 let $restore_table= t2;
---source include/check_concurrent_insert.inc
+--source include/check_no_concurrent_insert.inc
 let $statement= set @a:= f6();
 let $restore_table= t2;
---source include/check_concurrent_insert.inc
+--source include/check_no_concurrent_insert.inc
 let $statement= select f7();
 let $restore_table= t2;
---source include/check_concurrent_insert.inc
+--source include/check_no_concurrent_insert.inc
 let $statement= set @a:= f7();
 let $restore_table= t2;
---source include/check_concurrent_insert.inc
+--source include/check_no_concurrent_insert.inc
 
 --echo #
 --echo # 4.8 INSERT which uses stored function which
@@ -664,11 +644,12 @@ let $restore_table= t2;
 --echo #      data and reads a table indirectly, by calling another
 --echo #      function.
 --echo #
---echo # Calls to such functions won't get into the binary
---echo # log and thus don't need to acquire strong locks.
+--echo # In theory, calls to such functions won't get into the binary
+--echo # log and thus don't need to acquire strong locks. But in practice
+--echo # this fact is discovered too late to have any effect.
 let $statement= select f10();
 let $restore_table= ;
---source include/check_concurrent_insert.inc
+--source include/check_no_concurrent_insert.inc
 
 --echo #
 --echo # 4.11 INSERT which uses a stored function which doesn't modify
@@ -719,36 +700,6 @@ let $statement= insert into t2 values (f13((select i+10 from t1 where i=1)));
 let $restore_table= t2;
 --source include/check_no_concurrent_insert.inc
 
---echo #
---echo # 4.15 SELECT/SET with a stored function which 
---echo #      inserts data into a temporary table using
---echo #      SELECT on t1.
---echo #
---echo # Since this statement is written to the binary log it should
---echo # be serialized with concurrent statements affecting the data it
---echo # uses. Therefore it should take strong locks on the data it reads.
-let $statement= select f16();
-let $restore_table= ;
---source include/check_no_concurrent_insert.inc
-let $statement= set @a:= f16();
-let $restore_table= ;
---source include/check_no_concurrent_insert.inc
-
---echo #
---echo # 4.16 SELECT/SET with a stored function which call procedure
---echo #      which inserts data into a temporary table using
---echo #      SELECT on t1.
---echo #
---echo # Since this statement is written to the binary log it should
---echo # be serialized with concurrent statements affecting the data it
---echo # uses. Therefore it should take strong locks on the data it reads.
-let $statement= select f17();
-let $restore_table= ;
---source include/check_no_concurrent_insert.inc
-let $statement= set @a:= f17();
-let $restore_table= ;
---source include/check_no_concurrent_insert.inc
-
 
 --echo #
 --echo # 5. Statements that read tables through stored procedures.
@@ -779,11 +730,12 @@ let $restore_table= t2;
 --echo # 5.3 SELECT that calls a function that doesn't modify data and
 --echo #     uses a CALL statement that reads a table via SELECT.
 --echo #
---echo # Calls to such functions won't get into the binary
---echo # log and thus don't need to acquire strong locks.
+--echo # In theory, calls to such functions won't get into the binary
+--echo # log and thus don't need to acquire strong locks. But in practice
+--echo # this fact is discovered too late to have any effect.
 let $statement= select f15();
 let $restore_table= ;
---source include/check_concurrent_insert.inc
+--source include/check_no_concurrent_insert.inc
 
 --echo #
 --echo # 5.4 INSERT which calls function which doesn't modify data and
@@ -848,6 +800,7 @@ let $statement= update t5 set l= 2 where l = 1;
 let $restore_table= t5;
 --source include/check_no_concurrent_insert.inc
 
+
 --echo # Clean-up.
 drop function f1;
 drop function f2;
@@ -864,12 +817,9 @@ drop function f12;
 drop function f13;
 drop function f14;
 drop function f15;
-drop function f16;
-drop function f17;
 drop view v1, v2;
 drop procedure p1;
 drop procedure p2;
-drop procedure p3;
 drop table t1, t2, t3, t4, t5;
 
 disconnect con1;
@@ -1088,10 +1038,6 @@ INSERT INTO t1 VALUES (1), (2);
 connect (con1, localhost, root);
 connect (con2, localhost, root);
 
---echo # Note: This test now provides coverage for the scenario where
---echo # opening of table during analyze phase of OPTIMIZE TABLE
---echo # fails (instead of original coverage for open_ltable() code).
-
 --echo # Connection con1
 connection con1;
 SET SESSION lock_wait_timeout= 1;
@@ -1104,7 +1050,7 @@ connection con2;
 SET DEBUG_SYNC= 'now WAIT_FOR opti_recreate';
 SET DEBUG_SYNC= 'after_lock_tables_takes_lock SIGNAL thrlock WAIT_FOR release_thrlock';
 --echo # Sending:
---send LOCK TABLES t1 WRITE
+--send INSERT INTO t1 VALUES (3)
 
 --echo # Connection default
 connection default;
@@ -1121,7 +1067,7 @@ disconnect con1;
 
 --echo # Connection con2
 connection con2;
---echo # Reaping: LOCK TABLES t1 WRITE
+--echo # Reaping: INSERT INTO t1 VALUES (3)
 --reap
 disconnect con2;
 --source include/wait_until_disconnected.inc
@@ -1189,58 +1135,6 @@ DROP VIEW v1;
 DROP TABLE t1;
 disconnect con1;
 disconnect con2;
-
-
---echo #
---echo #Bug#18110156: RECREATE+ANALYZE OPTIMIZE TABLE T AND ONLINE 
---echo #              ALTER TABLE T MAY DEADLOCK
-
-CREATE TABLE t1 (fld1 INT) ENGINE=InnoDB;
-connect (con1, localhost, root);
-connect (con2, localhost, root);
-
---enable_connect_log
-connection con1;
-SET DEBUG_SYNC= 'before_lock_tables_takes_lock SIGNAL before_thr_lock WAIT_FOR do_thr_lock EXECUTE 3';
-SET DEBUG_SYNC= 'ha_admin_open_ltable SIGNAL opti_recreate WAIT_FOR opti_analyze';
---send OPTIMIZE TABLE t1
-
-connection con2;
---echo # Skip thr_lock acquisition during the initial phase of OPTIMIZE TABLE
-SET DEBUG_SYNC= 'now WAIT_FOR before_thr_lock';
-SET DEBUG_SYNC= 'now SIGNAL do_thr_lock';
---echo # Skip thr_lock acquisition during the recreate phase of OPTIMIZE TABLE
-SET DEBUG_SYNC= 'now WAIT_FOR before_thr_lock';
-SET DEBUG_SYNC= 'now SIGNAL do_thr_lock';
-SET DEBUG_SYNC= 'now WAIT_FOR opti_recreate';
-SET DEBUG_SYNC= 'alter_table_inplace_after_lock_downgrade SIGNAL lock_downgraded
-WAIT_FOR finish_alter';
---send ALTER TABLE t1 ADD INDEX index1(fld1), ALGORITHM=INPLACE, LOCK=NONE
-
---echo #Without the patch, the test case hangs.
-connection default;
-SET DEBUG_SYNC= 'now WAIT_FOR lock_downgraded';
-SET DEBUG_SYNC= 'now SIGNAL opti_analyze';
-SET DEBUG_SYNC= 'now WAIT_FOR before_thr_lock';
-SET DEBUG_SYNC= 'now SIGNAL finish_alter';
-SET DEBUG_SYNC= 'now SIGNAL do_thr_lock';
-
---echo #Reap: OPTIMIZE TABLE t1
---connection con1
---reap
-
---echo #Reap: ALTER TABLE t1
---connection con2
---reap 
---disable_connect_log
-
---echo #Clean up.
---connection default
-DROP TABLE t1;
-SET DEBUG_SYNC= 'RESET';
---disconnect con2
---disconnect con1
-
 
 --echo #
 --echo # Bug#19070633 - POSSIBLE ACCESS TO FREED MEMORY IN IS_FREE_LOCK() AND IS_USED_LOCK().

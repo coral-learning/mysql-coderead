@@ -10,8 +10,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 /**
   @file
@@ -364,7 +364,7 @@ sql_parse_prepare(const LEX_STRING *file_name, MEM_ROOT *mem_root,
 {
   MY_STAT stat_info;
   size_t len;
-  char *buff, *end, *sign;
+  char *end, *sign;
   File_parser *parser;
   File file;
   DBUG_ENTER("sql_parse_prepare");
@@ -386,7 +386,7 @@ sql_parse_prepare(const LEX_STRING *file_name, MEM_ROOT *mem_root,
     DBUG_RETURN(0);
   }
 
-  if (!(buff= (char*) alloc_root(mem_root, stat_info.st_size+1)))
+  if (!(parser->buff= (char*) alloc_root(mem_root, stat_info.st_size+1)))
   {
     DBUG_RETURN(0);
   }
@@ -397,8 +397,9 @@ sql_parse_prepare(const LEX_STRING *file_name, MEM_ROOT *mem_root,
     DBUG_RETURN(0);
   }
   
-  if ((len= mysql_file_read(file, (uchar *)buff, stat_info.st_size,
-                            MYF(MY_WME))) == MY_FILE_ERROR)
+  if ((len= mysql_file_read(file, (uchar *)parser->buff,
+                            stat_info.st_size, MYF(MY_WME))) ==
+      MY_FILE_ERROR)
   {
     mysql_file_close(file, MYF(MY_WME));
     DBUG_RETURN(0);
@@ -409,20 +410,20 @@ sql_parse_prepare(const LEX_STRING *file_name, MEM_ROOT *mem_root,
     DBUG_RETURN(0);
   }
 
-  end= buff + len;
+  end= parser->end= parser->buff + len;
   *end= '\0'; // barrier for more simple parsing
 
   // 7 = 5 (TYPE=) + 1 (letter at least of type name) + 1 ('\n')
   if (len < 7 ||
-      buff[0] != 'T' ||
-      buff[1] != 'Y' ||
-      buff[2] != 'P' ||
-      buff[3] != 'E' ||
-      buff[4] != '=')
+      parser->buff[0] != 'T' ||
+      parser->buff[1] != 'Y' ||
+      parser->buff[2] != 'P' ||
+      parser->buff[3] != 'E' ||
+      parser->buff[4] != '=')
     goto frm_error;
 
   // skip signature;
-  parser->file_type.str= sign= buff + 5;
+  parser->file_type.str= sign= parser->buff + 5;
   while (*sign >= 'A' && *sign <= 'Z' && sign < end)
     sign++;
   if (*sign != '\n')
@@ -431,7 +432,6 @@ sql_parse_prepare(const LEX_STRING *file_name, MEM_ROOT *mem_root,
   // EOS for file signature just for safety
   *sign= '\0';
 
-  parser->end= end;
   parser->start= sign + 1;
   parser->content_ok= 1;
 
@@ -464,12 +464,11 @@ frm_error:
 */
 
 
-static const char *
-parse_string(const char *ptr, const char *end, MEM_ROOT *mem_root,
-             LEX_STRING *str)
+static char *
+parse_string(char *ptr, char *end, MEM_ROOT *mem_root, LEX_STRING *str)
 {
   // get string length
-  const char *eol= strchr(ptr, '\n');
+  char *eol= strchr(ptr, '\n');
 
   if (eol >= end)
     return 0;
@@ -496,7 +495,7 @@ parse_string(const char *ptr, const char *end, MEM_ROOT *mem_root,
 */
 
 my_bool
-read_escaped_string(const char *ptr, const char *eol, LEX_STRING *str)
+read_escaped_string(char *ptr, char *eol, LEX_STRING *str)
 {
   char *write_pos= str->str;
 
@@ -556,11 +555,10 @@ read_escaped_string(const char *ptr, const char *eol, LEX_STRING *str)
 */
 
 
-const char *
-parse_escaped_string(const char *ptr, const char *end, MEM_ROOT *mem_root,
-                     LEX_STRING *str)
+char *
+parse_escaped_string(char *ptr, char *end, MEM_ROOT *mem_root, LEX_STRING *str)
 {
-  const char *eol= strchr(ptr, '\n');
+  char *eol= strchr(ptr, '\n');
 
   if (eol == 0 || eol >= end ||
       !(str->str= (char*) alloc_root(mem_root, (eol - ptr) + 1)) ||
@@ -586,11 +584,11 @@ parse_escaped_string(const char *ptr, const char *end, MEM_ROOT *mem_root,
     \#	  pointer on symbol after string
 */
 
-static const char *
-parse_quoted_escaped_string(const char *ptr, const char *end,
+static char *
+parse_quoted_escaped_string(char *ptr, char *end,
 			    MEM_ROOT *mem_root, LEX_STRING *str)
 {
-  const char *eol;
+  char *eol;
   uint result_len= 0;
   bool escaped= 0;
 
@@ -627,7 +625,7 @@ parse_quoted_escaped_string(const char *ptr, const char *end,
   @param[in] mem_root         MEM_ROOT for parameters allocation
 */
 
-bool get_file_options_ulllist(const char *&ptr, const char *end, const char *line,
+bool get_file_options_ulllist(char *&ptr, char *end, char *line,
                               uchar* base, File_option *parameter,
                               MEM_ROOT *mem_root)
 {
@@ -638,7 +636,7 @@ bool get_file_options_ulllist(const char *&ptr, const char *end, const char *lin
   while (ptr < end)
   {
     int not_used;
-    char *num_end= const_cast<char *>(end);
+    char *num_end= end;
     if (!(num= (ulonglong*)alloc_root(mem_root, sizeof(ulonglong))) ||
         nlist->push_back(num, mem_root))
       goto nlist_err;
@@ -693,18 +691,18 @@ nlist_err:
 my_bool
 File_parser::parse(uchar* base, MEM_ROOT *mem_root,
                    struct File_option *parameters, uint required,
-                   Unknown_key_hook *hook) const
+                   Unknown_key_hook *hook)
 {
   uint first_param= 0, found= 0;
-  const char *ptr= start;
-  const char *eol;
+  char *ptr= start;
+  char *eol;
   LEX_STRING *str;
   List<LEX_STRING> *list;
   DBUG_ENTER("File_parser::parse");
 
   while (ptr < end && found < required)
   {
-    const char *line= ptr;
+    char *line= ptr;
     if (*ptr == '#')
     {
       // it is comment
@@ -897,9 +895,9 @@ list_err:
 */
 
 bool
-File_parser_dummy_hook::process_unknown_string(const char *&unknown_key,
+File_parser_dummy_hook::process_unknown_string(char *&unknown_key,
                                                uchar* base, MEM_ROOT *mem_root,
-                                               const char *end)
+                                               char *end)
 {
   DBUG_ENTER("file_parser_dummy_hook::process_unknown_string");
   DBUG_PRINT("info", ("Unknown key: '%60s'", unknown_key));

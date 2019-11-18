@@ -1,5 +1,5 @@
 /* Copyright (c) 2000, 2006 MySQL AB
-   Use is subject to license terms.
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,8 +11,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef __MYSQL_CUSTOM_BUILD_CONFIG__
 #define __MYSQL_CUSTOM_BUILD_CONFIG__

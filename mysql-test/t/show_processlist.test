@@ -12,7 +12,7 @@
 --enable_connect_log
 connect(connection1,localhost,root,,test,$MASTER_MYPORT,);
 --connection default
-SET DEBUG_SYNC='before_copying_threads SIGNAL parked1 WAIT_FOR go';
+SET DEBUG_SYNC='before_one_element_read_from_threads_iterator SIGNAL parked1 WAIT_FOR go';
 --send SHOW PROCESSLIST
 --connection connection1
 echo "Wait_for parked1";
@@ -22,14 +22,15 @@ connect(connection3,localhost,root,,test,$MASTER_MYPORT,);
 SET DEBUG_SYNC='now SIGNAL go';
 
 --connection default
-# We are yet to copy threads when connection 2 and connection 3 joined the
-# system. So this will show all 4 connections ( default + connection 1,2,3).
+# We are yet to read the first element from the iterator when connection 2 and
+# connection 3 joined the system. So this will show all 4 connections
+# ( default + connection 1,2,3).
 --replace_column 1 <Id> 3 <Host> 5 <Command> 6 <Time> 7 <State> 8 <Info>
 --reap
 
-# Test 2: To prove that connections which joined after copying thread will not
-# be entertained
-SET DEBUG_SYNC='after_copying_threads SIGNAL parked1 WAIT_FOR go';
+# Test 2: To prove that connections which joined after reading the
+# first element from the thread iterator will not be entertained
+SET DEBUG_SYNC='after_one_element_read_from_threads_iterator SIGNAL parked1 WAIT_FOR go';
 --send SHOW PROCESSLIST
 
 --connection connection1

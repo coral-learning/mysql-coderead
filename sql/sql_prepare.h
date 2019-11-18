@@ -1,6 +1,7 @@
 #ifndef SQL_PREPARE_H
 #define SQL_PREPARE_H
-/* Copyright (c) 2009, 2013, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 1995-2008 MySQL AB, 2009 Sun Microsystems, Inc.
+   Use is subject to license terms.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +13,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #include "sql_error.h"
 
@@ -67,12 +68,12 @@ private:
 
 void mysqld_stmt_prepare(THD *thd, const char *packet, uint packet_length);
 void mysqld_stmt_execute(THD *thd, char *packet, uint packet_length);
-void mysqld_stmt_close(THD *thd, char *packet, uint packet_length);
+void mysqld_stmt_close(THD *thd, char *packet);
 void mysql_sql_stmt_prepare(THD *thd);
 void mysql_sql_stmt_execute(THD *thd);
 void mysql_sql_stmt_close(THD *thd);
 void mysqld_stmt_fetch(THD *thd, char *packet, uint packet_length);
-void mysqld_stmt_reset(THD *thd, char *packet, uint packet_length);
+void mysqld_stmt_reset(THD *thd, char *packet);
 void mysql_stmt_get_longdata(THD *thd, char *pos, ulong packet_length);
 void reinit_stmt_before_use(THD *thd, LEX *lex);
 
@@ -252,9 +253,16 @@ public:
   */
   ulong get_warn_count() const
   {
-    return m_diagnostics_area.warn_count();
+    return m_warning_info.warn_count();
   }
-
+  /**
+    Get the server warnings as a result set.
+    The result set has fixed metadata:
+    The first column is the level.
+    The second is a numeric code.
+    The third is warning text.
+  */
+  List<MYSQL_ERROR> *get_warn_list() { return &m_warning_info.warn_list(); }
   /**
     The following members are only valid if execute_direct()
     or move_to_next_result() returned an error.
@@ -289,7 +297,7 @@ public:
     one.
     Never fails.
   */
-  bool has_next_result() const { return MY_TEST(m_current_rset->m_next_rset); }
+  bool has_next_result() const { return test(m_current_rset->m_next_rset); }
   /**
     Only valid to call if has_next_result() returned true.
     Otherwise the result is undefined.
@@ -297,12 +305,13 @@ public:
   bool move_to_next_result()
   {
     m_current_rset= m_current_rset->m_next_rset;
-    return MY_TEST(m_current_rset);
+    return test(m_current_rset);
   }
 
   ~Ed_connection() { free_old_result(); }
 private:
   Diagnostics_area m_diagnostics_area;
+  Warning_info m_warning_info;
   /**
     Execute direct interface does not support multi-statements, only
     multi-results. So we never have a situation when we have

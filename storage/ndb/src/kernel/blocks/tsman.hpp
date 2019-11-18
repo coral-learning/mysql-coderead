@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003, 2005-2007 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef TSMAN_H
 #define TSMAN_H
@@ -24,7 +23,6 @@
 #include <DLList.hpp>
 #include <NodeBitmask.hpp>
 #include <signaldata/GetTabInfo.hpp>
-#include <SafeMutex.hpp>
 
 #include "lgman.hpp"
 #include "pgman.hpp"
@@ -32,7 +30,7 @@
 class Tsman : public SimulatedBlock
 {
 public:
-  Tsman(Block_context&);
+  Tsman(Block_context&, Pgman*, Lgman*);
   virtual ~Tsman();
   BLOCK_DEFINES(Tsman);
   
@@ -43,12 +41,11 @@ protected:
   void execREAD_CONFIG_REQ(Signal* signal);
   void execDUMP_STATE_ORD(Signal* signal);
   void execCONTINUEB(Signal* signal);
-  void execNODE_FAILREP(Signal* signal);
 
-  void execCREATE_FILE_IMPL_REQ(Signal* signal);
-  void execCREATE_FILEGROUP_IMPL_REQ(Signal* signal);
-  void execDROP_FILE_IMPL_REQ(Signal* signal);
-  void execDROP_FILEGROUP_IMPL_REQ(Signal* signal);
+  void execCREATE_FILE_REQ(Signal* signal);
+  void execCREATE_FILEGROUP_REQ(Signal* signal);
+  void execDROP_FILE_REQ(Signal* signal);
+  void execDROP_FILEGROUP_REQ(Signal* signal);
 
   void execSTART_RECREQ(Signal*);
   
@@ -95,8 +92,7 @@ public:
     
     Uint32 m_tablespace_ptr_i;
     Uint32 m_extent_size;   
-    Uint16 m_state;
-    Uint16 m_ref_count;
+    Uint32 m_state;
 
     enum FileState 
     {
@@ -152,7 +148,7 @@ public:
   struct Tablespace
   {
     Tablespace(){}
-    Tablespace(Tsman*, const struct CreateFilegroupImplReq*);
+    Tablespace(Tsman*, Lgman*, const struct CreateFilegroupImplReq*);
     
     Uint32 m_magic;
     union {
@@ -160,8 +156,7 @@ public:
       Uint32 m_tablespace_id;
     };
     Uint32 m_version;
-    Uint16 m_state;
-    Uint16 m_ref_count; // Can't release when m_ref_count > 0
+    Uint32 m_state;
 
     enum TablespaceState 
     {
@@ -172,8 +167,7 @@ public:
 
     Uint32 m_extent_size;       // In pages
     Datafile_list::Head m_free_files; // Files w/ free space
-    Tsman* m_tsman;
-    Uint32 m_logfile_group_id;
+    Logfile_client m_logfile_client;
 
     Datafile_list::Head m_full_files; // Files wo/ free space
     Datafile_list::Head m_meta_files; // Files being created/dropped
@@ -208,16 +202,10 @@ private:
   Datafile_hash m_file_hash;
   Tablespace_list m_tablespace_list;
   Tablespace_hash m_tablespace_hash;
-  SimulatedBlock * m_pgman;
-  Lgman * m_lgman;
-  SimulatedBlock * m_tup;
-
-  SafeMutex m_client_mutex;
-  void client_lock(BlockNumber block, int line);
-  void client_unlock(BlockNumber block, int line);
+  Page_cache_client m_page_cache_client;
+  Lgman * const m_lgman;
   
-  int open_file(Signal*, Ptr<Tablespace>, Ptr<Datafile>, CreateFileImplReq*,
-		SectionHandle* handle);
+  int open_file(Signal*, Ptr<Tablespace>, Ptr<Datafile>, CreateFileImplReq*);
   void load_extent_pages(Signal* signal, Ptr<Datafile> ptr);
   void load_extent_page_callback(Signal*, Uint32, Uint32);
   void create_file_ref(Signal*, Ptr<Tablespace>, Ptr<Datafile>, 
@@ -281,46 +269,23 @@ Tsman::calc_page_no_in_extent(Uint32 page_no, const Tsman::req* val) const
 class Tablespace_client
 {
 public:
-  Uint32 m_block;
   Tsman * m_tsman;
   Signal* m_signal;
   Uint32 m_table_id;
   Uint32 m_fragment_id;
   Uint32 m_tablespace_id;
-  bool m_lock;
-  DEBUG_OUT_DEFINES(TSMAN);
 
 public:
-  Tablespace_client(Signal* signal, SimulatedBlock* block, Tsman* tsman, 
-		    Uint32 table, Uint32 fragment, Uint32 tablespaceId,
-                    bool lock = true) {
-    Uint32 bno = block->number();
-    Uint32 ino = block->instance();
-    m_block= numberToBlock(bno, ino);
+  Tablespace_client(Signal* signal, Tsman* tsman, 
+		    Uint32 table, Uint32 fragment, Uint32 tablespaceId) {
     m_tsman= tsman;
     m_signal= signal;
     m_table_id= table;
     m_fragment_id= fragment;
     m_tablespace_id= tablespaceId;
-    m_lock = lock;
-
-    D("client ctor " << bno << "/" << ino
-      << V(m_table_id) << V(m_fragment_id) << V(m_tablespace_id));
-    if (m_lock)
-      m_tsman->client_lock(m_block, 0);
   }
 
-  Tablespace_client(Signal* signal, Tsman* tsman, Local_key* key);//undef
-
-  ~Tablespace_client() {
-#ifdef VM_TRACE
-    Uint32 bno = blockToMain(m_block);
-    Uint32 ino = blockToInstance(m_block);
-#endif
-    D("client dtor " << bno << "/" << ino);
-    if (m_lock)
-      m_tsman->client_unlock(m_block, 0);
-  }
+  Tablespace_client(Signal* signal, Tsman* tsman, Local_key* key);
   
   /**
    * Return >0 if success, no of pages in extent, sets key
@@ -404,10 +369,9 @@ Tablespace_client::alloc_extent(Local_key* key)
   
   if(req->reply.errorCode == 0){
     * key = req->reply.page_id;
-    D("alloc_extent" << V(*key) << V(req->reply.page_count));
     return req->reply.page_count;
   } else {
-    return -(int)req->reply.errorCode;
+    return -req->reply.errorCode; 
   }
 }
 
@@ -425,10 +389,9 @@ Tablespace_client::alloc_page_from_extent(Local_key* key, Uint32 bits)
 
   if(req->reply.errorCode == 0){
     *key = req->key;
-    D("alloc_page_from_extent" << V(*key) << V(bits) << V(req->bits));
     return req->bits;
   } else {
-    return -(int)req->reply.errorCode;
+    return -req->reply.errorCode; 
   }
 }
 
@@ -445,10 +408,9 @@ Tablespace_client::free_extent(Local_key* key, Uint64 lsn)
   m_tsman->execFREE_EXTENT_REQ(m_signal);
   
   if(req->reply.errorCode == 0){
-    D("free_extent" << V(*key) << V(lsn));
     return 0;
   } else {
-    return -(int)req->reply.errorCode;
+    return -req->reply.errorCode; 
   }
 }
 
@@ -457,7 +419,6 @@ int
 Tablespace_client::update_page_free_bits(Local_key *key, 
 					 unsigned committed_bits)
 {
-  D("update_page_free_bits" << V(*key) << V(committed_bits));
   return m_tsman->update_page_free_bits(m_signal, key, committed_bits);
 }
 

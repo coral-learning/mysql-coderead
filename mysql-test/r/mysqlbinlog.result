@@ -23,7 +23,7 @@ use `test`/*!*/;
 SET TIMESTAMP=1000000000/*!*/;
 SET @@session.pseudo_thread_id=999999999/*!*/;
 SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
-SET @@session.sql_mode=1073741824/*!*/;
+SET @@session.sql_mode=0/*!*/;
 SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
 /*!\C latin1 *//*!*/;
 SET @@session.character_set_client=8,@@session.collation_connection=8,@@session.collation_server=8/*!*/;
@@ -106,7 +106,7 @@ DELIMITER /*!*/;
 SET TIMESTAMP=1000000000/*!*/;
 SET @@session.pseudo_thread_id=999999999/*!*/;
 SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
-SET @@session.sql_mode=1073741824/*!*/;
+SET @@session.sql_mode=0/*!*/;
 SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
 /*!\C latin1 *//*!*/;
 SET @@session.character_set_client=8,@@session.collation_connection=8,@@session.collation_server=8/*!*/;
@@ -145,7 +145,7 @@ ROLLBACK/*!*/;
 SET TIMESTAMP=1000000000/*!*/;
 SET @@session.pseudo_thread_id=999999999/*!*/;
 SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
-SET @@session.sql_mode=1073741824/*!*/;
+SET @@session.sql_mode=0/*!*/;
 SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
 /*!\C latin1 *//*!*/;
 SET @@session.character_set_client=8,@@session.collation_connection=8,@@session.collation_server=8/*!*/;
@@ -159,6 +159,7 @@ COMMIT
 SET TIMESTAMP=1000000000/*!*/;
 BEGIN
 /*!*/;
+SET INSERT_ID=1/*!*/;
 SET TIMESTAMP=1000000000/*!*/;
 COMMIT
 /*!*/;
@@ -200,7 +201,7 @@ DELIMITER /*!*/;
 SET TIMESTAMP=1000000000/*!*/;
 SET @@session.pseudo_thread_id=999999999/*!*/;
 SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
-SET @@session.sql_mode=1073741824/*!*/;
+SET @@session.sql_mode=0/*!*/;
 SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
 /*!\C latin1 *//*!*/;
 SET @@session.character_set_client=8,@@session.collation_connection=8,@@session.collation_server=8/*!*/;
@@ -231,7 +232,7 @@ use `test`/*!*/;
 SET TIMESTAMP=1000000000/*!*/;
 SET @@session.pseudo_thread_id=999999999/*!*/;
 SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
-SET @@session.sql_mode=1073741824/*!*/;
+SET @@session.sql_mode=0/*!*/;
 SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
 /*!\C latin1 *//*!*/;
 SET @@session.character_set_client=8,@@session.collation_connection=8,@@session.collation_server=8/*!*/;
@@ -314,7 +315,7 @@ DELIMITER /*!*/;
 SET TIMESTAMP=1000000000/*!*/;
 SET @@session.pseudo_thread_id=999999999/*!*/;
 SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
-SET @@session.sql_mode=1073741824/*!*/;
+SET @@session.sql_mode=0/*!*/;
 SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
 /*!\C latin1 *//*!*/;
 SET @@session.character_set_client=8,@@session.collation_connection=8,@@session.collation_server=8/*!*/;
@@ -353,7 +354,7 @@ ROLLBACK/*!*/;
 SET TIMESTAMP=1000000000/*!*/;
 SET @@session.pseudo_thread_id=999999999/*!*/;
 SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
-SET @@session.sql_mode=1073741824/*!*/;
+SET @@session.sql_mode=0/*!*/;
 SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
 /*!\C latin1 *//*!*/;
 SET @@session.character_set_client=8,@@session.collation_connection=8,@@session.collation_server=8/*!*/;
@@ -367,6 +368,7 @@ COMMIT
 SET TIMESTAMP=1000000000/*!*/;
 BEGIN
 /*!*/;
+SET INSERT_ID=1/*!*/;
 SET TIMESTAMP=1000000000/*!*/;
 COMMIT
 /*!*/;
@@ -408,7 +410,7 @@ DELIMITER /*!*/;
 SET TIMESTAMP=1000000000/*!*/;
 SET @@session.pseudo_thread_id=999999999/*!*/;
 SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
-SET @@session.sql_mode=1073741824/*!*/;
+SET @@session.sql_mode=0/*!*/;
 SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
 /*!\C latin1 *//*!*/;
 SET @@session.character_set_client=8,@@session.collation_connection=8,@@session.collation_server=8/*!*/;
@@ -521,7 +523,7 @@ use `test`/*!*/;
 SET TIMESTAMP=1000000000/*!*/;
 SET @@session.pseudo_thread_id=999999999/*!*/;
 SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
-SET @@session.sql_mode=1073741824/*!*/;
+SET @@session.sql_mode=0/*!*/;
 SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
 /*!\C latin1 *//*!*/;
 SET @@session.character_set_client=8,@@session.collation_connection=8,@@session.collation_server=8/*!*/;
@@ -573,7 +575,7 @@ use `test`/*!*/;
 SET TIMESTAMP=1000000000/*!*/;
 SET @@session.pseudo_thread_id=999999999/*!*/;
 SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
-SET @@session.sql_mode=1073741824/*!*/;
+SET @@session.sql_mode=0/*!*/;
 SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
 /*!\C latin1 *//*!*/;
 SET @@session.character_set_client=8,@@session.collation_connection=8,@@session.collation_server=8/*!*/;
@@ -731,8 +733,9 @@ RESET MASTER;
 FLUSH LOGS;
 SELECT
 (@a:=LOAD_FILE("MYSQLTEST_VARDIR/tmp/mysqlbinlog_bug37313.binlog"))
-IS NOT NULL AS Loaded;
-Loaded
+IS NOT NULL;
+(@a:=LOAD_FILE("MYSQLTEST_VARDIR/tmp/mysqlbinlog_bug37313.binlog"))
+IS NOT NULL
 1
 *** Unsigned server_id 4294967295 is found: 1 ***
 SET @@global.server_id= 1;
@@ -908,12 +911,10 @@ ROLLBACK /* added by mysqlbinlog */;
 /*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=0*/;
 End of 5.0 tests
 End of 5.1 tests
-# Expect error for unknown argument.
-Unknown option to base64-output: always
-Alternatives are: 'NEVER','AUTO','UNSPEC','DECODE-ROWS'
-# Expect error for unknown argument again.
-Unknown option to base64-output: std_data/master-bin.000001
-Alternatives are: 'NEVER','AUTO','UNSPEC','DECODE-ROWS'
+# Expect deprecation warning.
+WARNING: The --base64-output=always flag and the --base64-output flag (with '=MODE' omitted), are deprecated. The output generated when these flags are used cannot be parsed by mysql 5.6.0 and later. The flags will be removed in a future version. Please use --base64-output=auto instead.
+# Expect deprecation warning again.
+WARNING: The --base64-output=always flag and the --base64-output flag (with '=MODE' omitted), are deprecated. The output generated when these flags are used cannot be parsed by mysql 5.6.0 and later. The flags will be removed in a future version. Please use --base64-output=auto instead.
 RESET MASTER;
 CREATE DATABASE test1;
 USE test1;
@@ -925,7 +926,7 @@ CREATE TABLE t1(id int);
 DROP TABLE t1;
 DROP DATABASE test1;
 FLUSH LOGS;
-include/show_binlog_events.inc
+show binlog events in 'master-bin.000002' from <binlog_start>;
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
 master-bin.000002	#	Query	#	#	CREATE DATABASE test1
 master-bin.000002	#	Query	#	#	use `test1`; CREATE TABLE t1(id int)
@@ -946,27 +947,3 @@ t1
 SHOW TABLES IN test;
 Tables_in_test
 SET GLOBAL SERVER_ID = 1;
-#
-# Bug#12688860 : SECURITY RECOMMENDATION: PASSWORDS ON CLI
-#
-Warning: Using a password on the command line interface can be insecure.
-/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=1*/;
-/*!40019 SET @@session.max_insert_delayed_threads=0*/;
-/*!50003 SET @OLD_COMPLETION_TYPE=@@COMPLETION_TYPE,COMPLETION_TYPE=0*/;
-DELIMITER /*!*/;
-# at 4
-#010619 20:55:55 server id 2  end_log_pos 76 	Start: binlog v 2, server v 4.0.0-debug-log created 010619 20:55:55 at startup
-ROLLBACK/*!*/;
-BINLOG '
-K5IvOwECAAAASwAAAAEAAAAAAAIANC4wLjAtZGVidWctbG9nAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAArki87
-'/*!*/;
-# at 79
-#010619 20:56:06 server id 2  end_log_pos 0 	Stop
-DELIMITER ;
-# End of log file
-ROLLBACK /* added by mysqlbinlog */;
-/*!50003 SET COMPLETION_TYPE=@OLD_COMPLETION_TYPE*/;
-/*!50530 SET @@SESSION.PSEUDO_SLAVE_MODE=0*/;
-
-End of tests

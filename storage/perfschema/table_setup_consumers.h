@@ -1,4 +1,5 @@
-/* Copyright (c) 2008, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2008 MySQL AB, 2010 Sun Microsystems, Inc.
+   Use is subject to license terms.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -36,8 +37,6 @@ struct row_setup_consumers
   LEX_STRING m_name;
   /** Column ENABLED. */
   bool *m_enabled_ptr;
-  /** Hidden column, refresh. */
-  bool m_refresh;
 };
 
 /** Table PERFORMANCE_SCHEMA.SETUP_CONSUMERS. */

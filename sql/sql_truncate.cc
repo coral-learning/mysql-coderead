@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, 2015, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2010, 2018, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -18,8 +18,9 @@
 #include "sql_class.h"   // THD
 #include "sql_base.h"    // open_and_lock_tables
 #include "sql_table.h"   // write_bin_log
+#include "sql_handler.h" // mysql_ha_rm_tables
 #include "datadict.h"    // dd_recreate_table()
-#include "lock.h"        // MYSQL_OPEN_* flags
+#include "lock.h"        // MYSQL_OPEN_TEMPORARY_ONLY
 #include "sql_acl.h"     // DROP_ACL
 #include "sql_parse.h"   // check_one_table_access()
 #include "sql_truncate.h"
@@ -190,13 +191,13 @@ fk_truncate_illegal_if_parent(THD *thd, TABLE *table)
                         binlong the statement.
 */
 
-enum Sql_cmd_truncate_table::truncate_result
-Sql_cmd_truncate_table::handler_truncate(THD *thd, TABLE_LIST *table_ref,
-                                             bool is_tmp_table)
+enum Truncate_statement::truncate_result
+Truncate_statement::handler_truncate(THD *thd, TABLE_LIST *table_ref,
+                                     bool is_tmp_table)
 {
   int error= 0;
-  uint flags= 0;
-  DBUG_ENTER("Sql_cmd_truncate_table::handler_truncate");
+  uint flags;
+  DBUG_ENTER("Truncate_statement::handler_truncate");
 
   /*
     Can't recreate, the engine must mechanically delete all rows
@@ -204,7 +205,9 @@ Sql_cmd_truncate_table::handler_truncate(THD *thd, TABLE_LIST *table_ref,
   */
 
   /* If it is a temporary table, no need to take locks. */
-  if (!is_tmp_table)
+  if (is_tmp_table)
+    flags= MYSQL_OPEN_TEMPORARY_ONLY;
+  else
   {
     /* We don't need to load triggers. */
     DBUG_ASSERT(table_ref->trg_event_map == 0);
@@ -219,7 +222,7 @@ Sql_cmd_truncate_table::handler_truncate(THD *thd, TABLE_LIST *table_ref,
       the MDL lock taken above and otherwise there is no way to
       wait for FLUSH TABLES in deadlock-free fashion.
     */
-    flags= MYSQL_OPEN_IGNORE_FLUSH;
+    flags= MYSQL_OPEN_IGNORE_FLUSH | MYSQL_OPEN_SKIP_TEMPORARY;
     /*
       Even though we have an MDL lock on the table here, we don't
       pass MYSQL_OPEN_HAS_MDL_LOCK to open_and_lock_tables
@@ -298,10 +301,10 @@ static bool recreate_temporary_table(THD *thd, TABLE *table)
     on table and schema names.
   */
   ha_create_table(thd, share->normalized_path.str, share->db.str,
-                  share->table_name.str, &create_info, true, true);
+                  share->table_name.str, &create_info, 1);
 
   if (open_table_uncached(thd, share->path.str, share->db.str,
-                          share->table_name.str, true, true))
+                          share->table_name.str, TRUE))
   {
     error= FALSE;
     thd->thread_specific_used= TRUE;
@@ -329,11 +332,11 @@ static bool recreate_temporary_table(THD *thd, TABLE *table)
   @retval  TRUE   Error.
 */
 
-bool Sql_cmd_truncate_table::lock_table(THD *thd, TABLE_LIST *table_ref,
-                                        bool *hton_can_recreate)
+bool Truncate_statement::lock_table(THD *thd, TABLE_LIST *table_ref,
+                                    bool *hton_can_recreate)
 {
   TABLE *table= NULL;
-  DBUG_ENTER("Sql_cmd_truncate_table::lock_table");
+  DBUG_ENTER("Truncate_statement::lock_table");
 
   /* Lock types are set in the parser. */
   DBUG_ASSERT(table_ref->lock_type == TL_WRITE);
@@ -368,7 +371,8 @@ bool Sql_cmd_truncate_table::lock_table(THD *thd, TABLE_LIST *table_ref,
     /* Acquire an exclusive lock. */
     DBUG_ASSERT(table_ref->next_global == NULL);
     if (lock_table_names(thd, table_ref, NULL,
-                         thd->variables.lock_wait_timeout, 0))
+                         thd->variables.lock_wait_timeout,
+                         MYSQL_OPEN_SKIP_TEMPORARY))
       DBUG_RETURN(TRUE);
 
     if (dd_check_storage_engine_flag(thd, table_ref->db, table_ref->table_name,
@@ -390,7 +394,7 @@ bool Sql_cmd_truncate_table::lock_table(THD *thd, TABLE_LIST *table_ref,
     m_ticket_downgrade= table->mdl_ticket;
     /* Close if table is going to be recreated. */
     if (*hton_can_recreate)
-      close_all_tables_for_name(thd, table->s, false, NULL);
+      close_all_tables_for_name(thd, table->s, FALSE, NULL);
   }
   else
   {
@@ -417,33 +421,32 @@ bool Sql_cmd_truncate_table::lock_table(THD *thd, TABLE_LIST *table_ref,
   @retval  TRUE   Error.
 */
 
-bool Sql_cmd_truncate_table::truncate_table(THD *thd, TABLE_LIST *table_ref)
+bool Truncate_statement::truncate_table(THD *thd, TABLE_LIST *table_ref)
 {
   int error;
+  TABLE *table;
   bool binlog_stmt;
-  DBUG_ENTER("Sql_cmd_truncate_table::truncate_table");
-
-  DBUG_ASSERT((!table_ref->table) ||
-              (table_ref->table && table_ref->table->s));
+  DBUG_ENTER("Truncate_statement::truncate_table");
 
   /* Initialize, or reinitialize in case of reexecution (SP). */
   m_ticket_downgrade= NULL;
 
-  /* If it is a temporary table, no need to take locks. */
-  if (is_temporary_table(table_ref))
-  {
-    TABLE *tmp_table= table_ref->table;
+  /* Remove table from the HANDLER's hash. */
+  mysql_ha_rm_tables(thd, table_ref);
 
+  /* If it is a temporary table, no need to take locks. */
+  if ((table= find_temporary_table(thd, table_ref)))
+  {
     /* In RBR, the statement is not binlogged if the table is temporary. */
     binlog_stmt= !thd->is_current_stmt_binlog_format_row();
 
     /* Note that a temporary table cannot be partitioned. */
-    if (ha_check_storage_engine_flag(tmp_table->s->db_type(), HTON_CAN_RECREATE))
+    if (ha_check_storage_engine_flag(table->s->db_type(), HTON_CAN_RECREATE))
     {
-      if ((error= recreate_temporary_table(thd, tmp_table)))
+      if ((error= recreate_temporary_table(thd, table)))
         binlog_stmt= FALSE; /* No need to binlog failed truncate-by-recreate. */
 
-      DBUG_ASSERT(! thd->transaction.stmt.cannot_safely_rollback());
+      DBUG_ASSERT(! thd->transaction.stmt.modified_non_trans_table);
     }
     else
     {
@@ -524,7 +527,7 @@ bool Sql_cmd_truncate_table::truncate_table(THD *thd, TABLE_LIST *table_ref)
     to a shared one.
   */
   if (m_ticket_downgrade)
-    m_ticket_downgrade->downgrade_lock(MDL_SHARED_NO_READ_WRITE);
+    m_ticket_downgrade->downgrade_exclusive_lock(MDL_SHARED_NO_READ_WRITE);
 
   DBUG_RETURN(error);
 }
@@ -537,11 +540,12 @@ bool Sql_cmd_truncate_table::truncate_table(THD *thd, TABLE_LIST *table_ref)
 
   @return FALSE on success.
 */
-bool Sql_cmd_truncate_table::execute(THD *thd)
+
+bool Truncate_statement::execute(THD *thd)
 {
   bool res= TRUE;
   TABLE_LIST *first_table= thd->lex->select_lex.table_list.first;
-  DBUG_ENTER("Sql_cmd_truncate_table::execute");
+  DBUG_ENTER("Truncate_statement::execute");
 
   if (check_one_table_access(thd, DROP_ACL, first_table))
     DBUG_RETURN(res);

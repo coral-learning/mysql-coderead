@@ -1,5 +1,3 @@
-#Want to skip this test from daily Valgrind execution
---source include/no_valgrind_without_big.inc
 # Turn on compression between the client and server
 # and run a number of tests
 

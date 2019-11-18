@@ -1,6 +1,6 @@
 CALL mtr.add_suppression("Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT");
 DROP TABLE if exists t1,t2,t3,t4,t5,t6;
-SET default_storage_engine=ARCHIVE;
+SET storage_engine=ARCHIVE;
 CREATE TABLE t1 (
 Period smallint(4) unsigned zerofill DEFAULT '0000' NOT NULL,
 Varor_period smallint(4) unsigned DEFAULT '0' NOT NULL
@@ -11126,8 +11126,6 @@ SELECT COUNT(auto) FROM t2;
 COUNT(auto)
 1213
 INSERT DELAYED INTO t2 VALUES (99999,011403,37,'the','delayed','insert','');
-Warnings:
-Warning	1287	'INSERT DELAYED' is deprecated and will be removed in a future release. Please use INSERT instead
 INSERT INTO t2 VALUES (100000,000001,00,'after','delayed','insert','');
 SELECT COUNT(auto) FROM t2;
 COUNT(auto)
@@ -12731,17 +12729,15 @@ id	id	name	name
 2	2	a	b
 DROP TABLE t1,t2;
 SHOW CREATE TABLE t1;
-Table	Create Table
-t1	CREATE TABLE `t1` (
-  `col1` int(11) DEFAULT NULL,
-  `col2` varchar(20) DEFAULT NULL
-) ENGINE=ARCHIVE DEFAULT CHARSET=latin1
+ERROR HY000: Table upgrade required. Please do "REPAIR TABLE `t1`" or dump/reload to fix it!
 SELECT * FROM t1;
-col1	col2
+ERROR HY000: Table upgrade required. Please do "REPAIR TABLE `t1`" or dump/reload to fix it!
 INSERT INTO t1 (col1, col2) VALUES (1, "value");
+ERROR HY000: Table upgrade required. Please do "REPAIR TABLE `t1`" or dump/reload to fix it!
 REPAIR TABLE t1;
 Table	Op	Msg_type	Msg_text
-test.t1	repair	status	OK
+test.t1	repair	Error	Table upgrade required. Please do "REPAIR TABLE `t1`" or dump/reload to fix it!
+test.t1	repair	error	Corrupt
 DROP TABLE t1;
 #
 # BUG#48757 - missing .ARZ file causes server crash
@@ -12749,9 +12745,9 @@ DROP TABLE t1;
 CREATE TABLE t1(a INT) ENGINE=ARCHIVE;
 FLUSH TABLE t1;
 SELECT * FROM t1;
-ERROR HY000: Can't find file: 't1' (errno: 2 - No such file or directory)
+ERROR HY000: Can't find file: 't1' (errno: 2)
 DROP TABLE t1;
-ERROR 42S02: Unknown table 'test.t1'
+ERROR 42S02: Unknown table 't1'
 #
 # Ensure that TRUNCATE fails for non-empty archive tables.
 #
@@ -12828,77 +12824,6 @@ a	b	c	d	e	f
 DROP TABLE t1;
 SET sort_buffer_size=DEFAULT;
 #
-# BUG#11756687 - 48633: ARCHIVE TABLES ARE NOT UPGRADEABLE
-#
-SHOW CREATE TABLE t1;
-Table	Create Table
-t1	CREATE TABLE `t1` (
-  `a` int(11) DEFAULT NULL,
-  `b` text,
-  `c` varchar(255) DEFAULT NULL,
-  `d` blob,
-  `e` blob
-) ENGINE=ARCHIVE DEFAULT CHARSET=latin1
-SELECT * FROM t1;
-a	b	c	d	e
-1	text	varchar	blob1	blob2
-2	text	varchar	blob1	blob2
-SELECT * FROM t1;
-a	b	c	d	e
-1	text	varchar	blob1	blob2
-2	text	varchar	blob1	blob2
-FLUSH TABLE t1;
-SELECT * FROM t1;
-a	b	c	d	e
-1	text	varchar	blob1	blob2
-2	text	varchar	blob1	blob2
-CHECK TABLE t1;
-Table	Op	Msg_type	Msg_text
-test.t1	check	error	Table upgrade required. Please do "REPAIR TABLE `t1`" or dump/reload to fix it!
-SELECT * FROM t1;
-a	b	c	d	e
-1	text	varchar	blob1	blob2
-2	text	varchar	blob1	blob2
-INSERT INTO t1 VALUES(3, 'text', 'varchar', 'blob1', 'blob2');
-SELECT * FROM t1;
-a	b	c	d	e
-1	text	varchar	blob1	blob2
-2	text	varchar	blob1	blob2
-3	text	varchar	blob1	blob2
-FLUSH TABLE t1;
-SELECT * FROM t1;
-a	b	c	d	e
-1	text	varchar	blob1	blob2
-2	text	varchar	blob1	blob2
-3	text	varchar	blob1	blob2
-REPAIR TABLE t1;
-Table	Op	Msg_type	Msg_text
-test.t1	repair	status	OK
-SELECT * FROM t1;
-a	b	c	d	e
-1	text	varchar	blob1	blob2
-2	text	varchar	blob1	blob2
-3	text	varchar	blob1	blob2
-CHECK TABLE t1;
-Table	Op	Msg_type	Msg_text
-test.t1	check	status	OK
-DROP TABLE t1;
-#
-# BUG 11757503 - 49556: ERROR 1005 (HY000): CAN'T CREATE TABLE '#SQL-B7C_3' (ERRNO: -1)
-#
-DROP TABLE IF EXISTS t1;
-CREATE TABLE t1 (c1 decimal(19,14) NOT NULL) ENGINE=ARCHIVE;
-CALL mtr.add_suppression("Found wrong key definition in #sql.* Please do \"ALTER TABLE `#sql.*` FORCE \" to fix it!");
-CREATE INDEX i1 ON t1(c1);
-ERROR HY000: Got error -1 from storage engine
-SHOW WARNINGS;
-Level	Code	Message
-Warning	1071	Specified key was too long; max key length is 8 bytes
-Warning	1194	Found wrong key definition in #sql-temporary; Please do "ALTER TABLE `#sql-temporary` FORCE" to fix it!
-Warning	1194	Found wrong key definition in #sql-temporary; Please do "ALTER TABLE `#sql-temporary` FORCE" to fix it!
-Error	1030	Got error -1 from storage engine
-DROP TABLE t1;
-#
 # BUG#11758979 - 51252: ARCHIVE TABLES STILL FAIL UNDER STRESS
 #                TESTS: CRASH, CORRUPTION, 4G MEMOR
 # (to be executed with valgrind)
@@ -12917,11 +12842,3 @@ OPTIMIZE TABLE t1;
 Table	Op	Msg_type	Msg_text
 test.t1	optimize	status	OK
 DROP TABLE t1;
-#
-# Bug#13907676: HA_ARCHIVE::INFO
-#
-CREATE TABLE t1 (a INT) ENGINE=ARCHIVE;
-CREATE TABLE t2 SELECT * FROM t1;
-SELECT * FROM t2;
-a
-DROP TABLE t1, t2;

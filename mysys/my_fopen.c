@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2012, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #include "mysys_priv.h"
 #include "my_static.h"
@@ -86,13 +86,9 @@ FILE *my_fopen(const char *filename, int flags, myf MyFlags)
     my_errno=errno;
   DBUG_PRINT("error",("Got error %d on open",my_errno));
   if (MyFlags & (MY_FFNF | MY_FAE | MY_WME))
-  {
-    char errbuf[MYSYS_STRERROR_SIZE];
     my_error((flags & O_RDONLY) || (flags == O_RDONLY ) ? EE_FILENOTFOUND :
-             EE_CANTCREATEFILE,
-             MYF(ME_BELL+ME_WAITTANG), filename,
-             my_errno, my_strerror(errbuf, sizeof(errbuf), my_errno));
-  }
+	     EE_CANTCREATEFILE,
+	     MYF(ME_BELL+ME_WAITTANG), filename, my_errno);
   DBUG_RETURN((FILE*) 0);
 } /* my_fopen */
 
@@ -120,10 +116,7 @@ static FILE *my_win_freopen(const char *path, const char *mode, FILE *stream)
                         FILE_SHARE_DELETE, NULL,
                         OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL,
                         NULL)) == INVALID_HANDLE_VALUE)
-  {
-    _close(fd);
     return NULL;
-  }
 
   if ((handle_fd= _open_osfhandle((intptr_t)osfh,
                                   _O_APPEND | _O_TEXT)) == -1)
@@ -147,7 +140,7 @@ static FILE *my_win_freopen(const char *path, const char *mode, FILE *stream)
 
 /* No close operation hook. */
 
-static int no_close(void *cookie MY_ATTRIBUTE((unused)))
+static int no_close(void *cookie __attribute__((unused)))
 {
   return 0;
 }
@@ -248,11 +241,8 @@ int my_fclose(FILE *fd, myf MyFlags)
   {
     my_errno=errno;
     if (MyFlags & (MY_FAE | MY_WME))
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      my_error(EE_BADCLOSE, MYF(ME_BELL+ME_WAITTANG), my_filename(file),
-               my_errno, my_strerror(errbuf, sizeof(errbuf), my_errno));
-    }
+      my_error(EE_BADCLOSE, MYF(ME_BELL+ME_WAITTANG),
+	       my_filename(file),errno);
   }
   else
     my_stream_opened--;
@@ -287,11 +277,7 @@ FILE *my_fdopen(File Filedes, const char *name, int Flags, myf MyFlags)
   {
     my_errno=errno;
     if (MyFlags & (MY_FAE | MY_WME))
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      my_error(EE_CANT_OPEN_STREAM, MYF(ME_BELL+ME_WAITTANG),
-               my_errno, my_strerror(errbuf, sizeof(errbuf), my_errno));
-    }
+      my_error(EE_CANT_OPEN_STREAM, MYF(ME_BELL+ME_WAITTANG),errno);
   }
   else
   {

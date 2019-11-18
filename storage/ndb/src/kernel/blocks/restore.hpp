@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2005-2008 MySQL AB, 2010 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2005, 2006 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef Restore_H
 #define Restore_H
@@ -31,10 +29,8 @@
 
 class Restore : public SimulatedBlock
 {
-  friend class RestoreProxy;
-
 public:
-  Restore(Block_context& ctx, Uint32 instanceNumber = 0);
+  Restore(Block_context& ctx);
   virtual ~Restore();
   BLOCK_DEFINES(Restore);
   
@@ -89,7 +85,6 @@ private:
     Uint32 m_fd;          // File pointer
     Uint32 m_file_type;   // File type
     Uint32 m_status;
-    Uint32 m_lcp_version;
 
     enum StatusFlags 
     {
@@ -147,8 +142,6 @@ private:
 
   void parse_error(Signal*, FilePtr, Uint32 line, Uint32 extra);
   int check_file_version(Signal*, Uint32 file_version);
-  void restore_lcp_conf(Signal* signal, FilePtr);
-  void crash_during_restore(FilePtr, Uint32 line, Uint32 errCode);
 public:
   
 private:

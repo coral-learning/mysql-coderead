@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2003, 2005-2008 MySQL AB
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,63 +12,71 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef CREATE_TAB_HPP
 #define CREATE_TAB_HPP
 
 #include "SignalData.hpp"
 
-struct CreateTabReq
-{
-  STATIC_CONST( SignalLength = 6 );
-  STATIC_CONST( SignalLengthLDM = 6 + 11 );
-
-  enum RequestType {
-  };
-
-  Uint32 senderRef;
-  Uint32 senderData;
-  Uint32 tableId;
-  Uint32 tableVersion;
-  Uint32 requestType;
-  Uint32 gci;
+/**
+ * CreateTab
+ *
+ * Implemenatation of CreateTable
+ */
+class CreateTabReq {
+  /**
+   * Sender(s) / Reciver(s)
+   */
+  friend class Dbdict;
 
   /**
-   * Used when sending to LQH++
+   * For printing
    */
-  Uint32 noOfCharsets;
-  Uint32 tableType;           // DictTabInfo::TableType
-  Uint32 primaryTableId;      // table of index or RNIL
-  Uint32 tablespace_id;       // RNIL for MM table
-  Uint32 forceVarPartFlag;
-  Uint32 noOfAttributes;
-  Uint32 noOfNullAttributes;
-  Uint32 noOfKeyAttr;
-  Uint32 checksumIndicator;
-  Uint32 GCPIndicator;
-  Uint32 extraRowAuthorBits;
+  friend bool printCREATE_TAB_REQ(FILE*, const Uint32*, Uint32, Uint16);
+  
+public:
+  STATIC_CONST( SignalLength = 8 );
+  
+  enum RequestType {
+    CreateTablePrepare = 0, // Prepare create table
+    CreateTableCommit = 1,  // Commit create table
+    CreateTableDrop = 2     // Prepare failed, drop instead
+  };
+private:
+  Uint32 senderRef;
+  Uint32 senderData;
+  Uint32 clientRef;
+  Uint32 clientData;
+
+  Uint32 tableId;
+  Uint32 tableVersion;
+  Uint32 gci;
+  Uint32 requestType;
 
   SECTION( DICT_TAB_INFO = 0 );
   SECTION( FRAGMENTATION = 1 );
 };
 
-struct CreateTabConf {
-  STATIC_CONST( SignalLength = 3 );
-
-  Uint32 senderRef;
-  Uint32 senderData;
-
-  union {
-    Uint32 lqhConnectPtr;
-    Uint32 tuxConnectPtr;
-    Uint32 tupConnectPtr;
-  };
-};
-
 struct CreateTabRef {
+  /**
+   * Sender(s) / Reciver(s)
+   */
+  friend class Dbdict;
+  friend class SafeCounter;
+  
+  /**
+   * For printing
+   */
+  friend bool printCREATE_TAB_REF(FILE *, const Uint32 *, Uint32, Uint16);
+  
   STATIC_CONST( SignalLength = 6 );
+  STATIC_CONST( GSN = GSN_CREATE_TAB_REF );
+
+  enum ErrorCode {
+    NF_FakeErrorREF = 255
+  };
+
 
   Uint32 senderRef;
   Uint32 senderData;
@@ -79,29 +86,24 @@ struct CreateTabRef {
   Uint32 errorStatus;
 };
 
-/**
- * TcSchVerReq is CreateTab but towards TC...
- *   should be removed in favor of CreateTab
- */
-struct TcSchVerReq
-{
-  Uint32 tableId;
-  Uint32 tableVersion;
-  Uint32 tableLogged;
-  Uint32 senderRef;
-  Uint32 tableType;
-  Uint32 senderData;
-  Uint32 noOfPrimaryKeys;
-  Uint32 singleUserMode;
-  Uint32 userDefinedPartition;
-  STATIC_CONST( SignalLength = 9 );
-};
-
-struct TcSchVerConf
-{
-  Uint32 senderRef;
-  Uint32 senderData;
+class CreateTabConf {
+  /**
+   * Sender(s) / Reciver(s)
+   */
+  friend class Dbdict;
+  friend class Suma;
+  
+  /**
+   * For printing
+   */
+  friend bool printCREATE_TAB_CONF(FILE *, const Uint32 *, Uint32, Uint16);
+  
+public:
   STATIC_CONST( SignalLength = 2 );
+
+private:
+  Uint32 senderRef;
+  Uint32 senderData;
 };
 
 #endif

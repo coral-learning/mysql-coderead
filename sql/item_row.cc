@@ -1,4 +1,4 @@
-/* Copyright (c) 2002, 2013, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2002, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -10,8 +10,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #include "sql_priv.h"
 /*
@@ -56,30 +56,6 @@ Item_row::Item_row(List<Item> &arg):
   }
 }
 
-Item_row::Item_row(Item *head, List<Item> &tail):
-  used_tables_cache(0), not_null_tables_cache(0),
-  const_item_cache(1), with_null(0)
-{
-
-  //TODO: think placing 2-3 component items in item (as it done for function)
-  arg_count= 1 + tail.elements;
-  items= (Item**) sql_alloc(sizeof(Item*)*arg_count);
-  if (items == NULL)
-  {
-    arg_count= 0;
-    return; // OOM
-  }
-  items[0]= head;
-  List_iterator<Item> li(tail);
-  uint i= 1;
-  Item *item;
-  while ((item= li++))
-  {
-    items[i]= item;
-    i++;    
-  }
-}
-
 void Item_row::illegal_method_call(const char *method)
 {
   DBUG_ENTER("Item_row::illegal_method_call");
@@ -97,7 +73,7 @@ bool Item_row::fix_fields(THD *thd, Item **ref)
   Item **arg, **arg_end;
   for (arg= items, arg_end= items+arg_count; arg != arg_end ; arg++)
   {
-    if (!(*arg)->fixed && (*arg)->fix_fields(thd, arg))
+    if ((*arg)->fix_fields(thd, arg))
       return TRUE;
     // we can't assign 'item' before, because fix_fields() can change arg
     Item *item= *arg;
@@ -116,8 +92,7 @@ bool Item_row::fix_fields(THD *thd, Item **ref)
       }
     }
     maybe_null|= item->maybe_null;
-    with_sum_func|= item->with_sum_func;
-    with_subselect|= item->has_subquery();
+    with_sum_func= with_sum_func || item->with_sum_func;
   }
   fixed= 1;
   return FALSE;
@@ -138,7 +113,7 @@ void Item_row::cleanup()
 }
 
 
-void Item_row::split_sum_func(THD *thd, Ref_ptr_array ref_pointer_array,
+void Item_row::split_sum_func(THD *thd, Item **ref_pointer_array,
                               List<Item> &fields)
 {
   Item **arg, **arg_end;
@@ -150,30 +125,11 @@ void Item_row::split_sum_func(THD *thd, Ref_ptr_array ref_pointer_array,
 void Item_row::update_used_tables()
 {
   used_tables_cache= 0;
-  const_item_cache= true;
-  with_subselect= false;
-  with_stored_program= false;
+  const_item_cache= 1;
   for (uint i= 0; i < arg_count; i++)
   {
     items[i]->update_used_tables();
     used_tables_cache|= items[i]->used_tables();
-    const_item_cache&= items[i]->const_item();
-    with_subselect|= items[i]->has_subquery();
-    with_stored_program|= items[i]->has_stored_program();
-  }
-}
-
-void Item_row::fix_after_pullout(st_select_lex *parent_select,
-                                 st_select_lex *removed_select)
-{
-  used_tables_cache= 0;
-  not_null_tables_cache= 0;
-  const_item_cache= true;
-  for (uint i= 0; i < arg_count; i++)
-  {
-    items[i]->fix_after_pullout(parent_select, removed_select);
-    used_tables_cache|= items[i]->used_tables();
-    not_null_tables_cache|= items[i]->not_null_tables();
     const_item_cache&= items[i]->const_item();
   }
 }

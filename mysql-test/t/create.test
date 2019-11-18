@@ -47,7 +47,7 @@ show create table `a/a`;
 create table t1 like `a/a`;
 drop table `a/a`;
 drop table `t1`;
---error ER_TOO_LONG_IDENT
+--error 1103
 create table `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` (aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa int);
 --error 1059
 create table a (`aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` int);
@@ -55,6 +55,10 @@ create table a (`aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 #
 # Some wrong defaults, so these creates should fail too (Bug #5902)
 #
+--error 1067
+create table t1 (a datetime default now());
+--error 1294
+create table t1 (a datetime on update now());
 --error 1067
 create table t1 (a int default 100 auto_increment);
 --error 1067
@@ -189,17 +193,17 @@ drop table if exists t1;
 #
 # Test default table type
 #
-SET SESSION default_storage_engine="heap";
-SELECT @@default_storage_engine;
+SET SESSION storage_engine="heap";
+SELECT @@storage_engine;
 CREATE TABLE t1 (a int not null);
 show create table t1;
 drop table t1;
 --error 1286
-SET SESSION default_storage_engine="gemini";
-SELECT @@default_storage_engine;
+SET SESSION storage_engine="gemini";
+SELECT @@storage_engine;
 CREATE TABLE t1 (a int not null);
 show create table t1;
-SET SESSION default_storage_engine=default;
+SET SESSION storage_engine=default;
 drop table t1;
 
 
@@ -347,17 +351,17 @@ drop tables t1, t2;
 #
 # Test default table type
 #
-SET SESSION default_storage_engine="heap";
-SELECT @@default_storage_engine;
+SET SESSION storage_engine="heap";
+SELECT @@storage_engine;
 CREATE TABLE t1 (a int not null);
 show create table t1;
 drop table t1;
 --error 1286
-SET SESSION default_storage_engine="gemini";
-SELECT @@default_storage_engine;
+SET SESSION storage_engine="gemini";
+SELECT @@storage_engine;
 CREATE TABLE t1 (a int not null);
 show create table t1;
-SET SESSION default_storage_engine=default;
+SET SESSION storage_engine=default;
 drop table t1;
 
 #
@@ -396,7 +400,7 @@ explain t2;
 select * from t2;
 drop table t1, t2;
 
-create table t1 (a tinyint, b smallint, c mediumint, d int, e bigint, f float(3,2), g double(4,3), h decimal(5,4), i year, j date, k timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, l datetime, m enum('a','b'), n set('a','b'), o char(10));
+create table t1 (a tinyint, b smallint, c mediumint, d int, e bigint, f float(3,2), g double(4,3), h decimal(5,4), i year, j date, k timestamp, l datetime, m enum('a','b'), n set('a','b'), o char(10));
 create table t2 select ifnull(a,a), ifnull(b,b), ifnull(c,c), ifnull(d,d), ifnull(e,e), ifnull(f,f), ifnull(g,g), ifnull(h,h), ifnull(i,i), ifnull(j,j), ifnull(k,k), ifnull(l,l), ifnull(m,m), ifnull(n,n), ifnull(o,o) from t1;
 show create table t2;
 drop table t1,t2;
@@ -785,8 +789,9 @@ create table t2 select * from t1;
 create table if not exists t2 select * from t1;
 unlock tables;
 lock table t1 read, t2 read;
---error ER_TABLE_EXISTS_ERROR
+--error ER_TABLE_NOT_LOCKED_FOR_WRITE
 create table t2 select * from t1;
+--error ER_TABLE_NOT_LOCKED_FOR_WRITE
 create table if not exists t2 select * from t1;
 unlock tables;
 lock table t1 read, t2 write;
@@ -1275,9 +1280,9 @@ drop table t1,t2;
 # Test incorrect database names
 #
 
---error ER_TOO_LONG_IDENT
+--error 1102
 CREATE DATABASE aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
---error ER_TOO_LONG_IDENT
+--error 1102
 DROP DATABASE aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
 
 # TODO: enable these tests when RENAME DATABASE is implemented.
@@ -1290,9 +1295,9 @@ DROP DATABASE aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 # RENAME DATABASE mysqltest TO aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
 # drop database mysqltest;
 
---error ER_TOO_LONG_IDENT
+--error 1102
 USE aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
---error ER_TOO_LONG_IDENT
+--error 1102
 SHOW CREATE DATABASE aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
 
 #
@@ -1474,19 +1479,19 @@ DROP TABLE IF EXISTS t3;
 
 --echo
 
-CREATE TABLE t1(c1 TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, c2 TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00');
+CREATE TABLE t1(c1 TIMESTAMP, c2 TIMESTAMP);
 
 --echo
 
 SET sql_mode = NO_ZERO_DATE;
 
 --echo
+--error ER_INVALID_DEFAULT
 CREATE TABLE t2(c1 TIMESTAMP, c2 TIMESTAMP DEFAULT 0);
-DROP TABLE t2;
 
 --echo
 --error ER_INVALID_DEFAULT
-CREATE TABLE t2(c1 TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, c2 TIMESTAMP NOT NULL);
+CREATE TABLE t2(c1 TIMESTAMP, c2 TIMESTAMP);
 
 --echo
 --echo # -- Check that NULL column still can be created.
@@ -1494,6 +1499,7 @@ CREATE TABLE t2(c1 TIMESTAMP NULL);
 
 --echo
 --echo # -- Check ALTER TABLE.
+--error ER_INVALID_DEFAULT
 ALTER TABLE t1 ADD INDEX(c1);
 
 --echo
@@ -2011,87 +2017,3 @@ create table if not exists t1 (a int unique, b int)
 select * from t1;
 drop table t1;
 --echo #
-
---echo #
---echo # WL#5576 Prohibit CREATE TABLE ... SELECT to modify other tables
---echo #
-
-delimiter |;
-create function f()
-returns int
-begin
-insert into t2 values(1);
-return 1;
-end|
-delimiter ;|
-
---echo #
---echo # 1. The function updates a base table
---echo #
-create table t2(c1 int);
-
---error ER_CANT_UPDATE_TABLE_IN_CREATE_TABLE_SELECT
-create table t1 select f();
---error ER_CANT_UPDATE_TABLE_IN_CREATE_TABLE_SELECT
-create temporary table t1 select f();
-
-
-drop table t2;
-
---echo #
---echo # 2. The function updates a view which derives from a base table
---echo #
-create table t3(c1 int);
-create view t2 as select c1 from t3;
-
---error ER_CANT_UPDATE_TABLE_IN_CREATE_TABLE_SELECT
-create table t1 select f();
---error ER_CANT_UPDATE_TABLE_IN_CREATE_TABLE_SELECT
-create temporary table t1 select f();
-
-drop view t2;
-
---echo #
---echo # 3. The function updates a view which derives from two base tables
---echo #
-create table t4(c1 int);
-create view t2 as select t3.c1 as c1 from t3, t4;
-
---error ER_CANT_UPDATE_TABLE_IN_CREATE_TABLE_SELECT
-create table t1 select f();
---error ER_CANT_UPDATE_TABLE_IN_CREATE_TABLE_SELECT
-create temporary table t1 select f();
-
-drop view t2;
-drop tables t3, t4;
-
---echo #
---echo # 4. The function updates a view which selects a constant number
---echo #
-create view t2 as select 1;
-
---error ER_CANT_UPDATE_TABLE_IN_CREATE_TABLE_SELECT
-create table t1 select f();
---error ER_CANT_UPDATE_TABLE_IN_CREATE_TABLE_SELECT
-create temporary table t1 select f();
-
-drop view t2;
-drop function f;
-
---echo #
---echo # BUG#11762377 - 54963: ENHANCE THE ERROR MESSAGE TO 
---echo #                       REDUCE USER CONFUSION 
---echo #
-
---error ER_TOO_BIG_ROWSIZE
-CREATE TABLE t1 (v varchar(65535));
-
---echo #
---echo # Bug#11746295 - 25168: "INCORRECT TABLE NAME" INSTEAD OF "IDENTIFIER TOO
---echo #                       LONG" IF TABLE NAME > 64 CHARACTERS
---echo #
-
---error ER_TOO_LONG_IDENT
-CREATE TABLE t01234567890123456789012345678901234567890123456789012345678901234567890123456789(a int);
---error ER_TOO_LONG_IDENT
-CREATE DATABASE t01234567890123456789012345678901234567890123456789012345678901234567890123456789;

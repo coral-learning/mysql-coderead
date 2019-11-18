@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003-2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef Transporter_H
 #define Transporter_H
@@ -30,8 +29,6 @@
 #include <NdbMutex.h>
 #include <NdbThread.h>
 
-#include <ndb_socket.h>
-
 class Transporter {
   friend class TransporterRegistry;
 public:
@@ -46,15 +43,18 @@ public:
    * None blocking
    *    Use isConnected() to check status
    */
-  virtual bool connect_client();
+  bool connect_client();
   bool connect_client(NDB_SOCKET_TYPE sockfd);
-  bool connect_server(NDB_SOCKET_TYPE socket, BaseString& errormsg);
+  bool connect_server(NDB_SOCKET_TYPE socket);
 
   /**
    * Blocking
    */
   virtual void doDisconnect();
 
+  virtual Uint32 * getWritePtr(Uint32 lenBytes, Uint32 prio) = 0;
+  virtual void updateWritePtr(Uint32 lenBytes, Uint32 prio) = 0;
+  
   /**
    * Are we currently connected
    */
@@ -86,22 +86,8 @@ public:
       m_socket_client->set_port(port);
   };
 
-  void update_status_overloaded(Uint32 used)
-  {
-    m_transporter_registry.set_status_overloaded(remoteNodeId,
-                                                 used >= m_overload_limit);
-  }
-
-  virtual int doSend() = 0;
-
-  bool has_data_to_send()
-  {
-    return get_callback_obj()->has_data_to_send(remoteNodeId);
-  }
-
-  /* Get the configured maximum send buffer usage. */
-  Uint32 get_max_send_buffer() { return m_max_send_buffer; }
-
+  virtual Uint32 get_free_buffer() const = 0;
+  
 protected:
   Transporter(TransporterRegistry &,
 	      TransporterType,
@@ -115,11 +101,7 @@ protected:
 	      int byteorder, 
 	      bool compression, 
 	      bool checksum, 
-	      bool signalId,
-              Uint32 max_send_buffer);
-
-  virtual bool configure(const TransporterConfiguration* conf);
-  virtual bool configure_derived(const TransporterConfiguration* conf) = 0;
+	      bool signalId);
 
   /**
    * Blocking, for max timeOut milli seconds
@@ -127,7 +109,6 @@ protected:
    */
   virtual bool connect_server_impl(NDB_SOCKET_TYPE sockfd) = 0;
   virtual bool connect_client_impl(NDB_SOCKET_TYPE sockfd) = 0;
-  virtual int pre_connect_options(NDB_SOCKET_TYPE sockfd) { return 0;}
   
   /**
    * Blocking
@@ -156,9 +137,6 @@ protected:
   bool checksumUsed;
   bool signalIdUsed;
   Packer m_packer;  
-  Uint32 m_max_send_buffer;
-  /* Overload limit, as configured with the OverloadLimit config parameter. */
-  Uint32 m_overload_limit;
 
 private:
 
@@ -171,23 +149,20 @@ private:
   SocketClient *m_socket_client;
   struct in_addr m_connect_address;
 
-  virtual bool send_is_possible(int timeout_millisec) const = 0;
-  virtual bool send_limit_reached(int bufsize) = 0;
+protected:
+  Uint32 getErrorCount();
+  Uint32 m_errorCount;
+  Uint32 m_timeOutMillis;
 
 protected:
-  Uint32 m_os_max_iovec;
-  Uint32 m_timeOutMillis;
   bool m_connected;     // Are we connected
   TransporterType m_type;
 
   TransporterRegistry &m_transporter_registry;
-  TransporterCallback *get_callback_obj() { return m_transporter_registry.callbackObj; };
-  void do_disconnect(int err){m_transporter_registry.do_disconnect(remoteNodeId,err);};
+  void *get_callback_obj() { return m_transporter_registry.callbackObj; };
+  void report_disconnect(int err){m_transporter_registry.report_disconnect(remoteNodeId,err);};
   void report_error(enum TransporterError err, const char *info = 0)
-    { m_transporter_registry.report_error(remoteNodeId, err, info); };
-
-  Uint32 fetch_send_iovec_data(struct iovec dst[], Uint32 cnt);
-  void iovec_data_sent(int nBytesSent);
+    { reportError(get_callback_obj(), remoteNodeId, err, info); };
 };
 
 inline
@@ -208,25 +183,11 @@ Transporter::getLocalNodeId() const {
   return localNodeId;
 }
 
-/**
- * Get data to send (in addition to data possibly remaining from previous
- * partial send).
- */
 inline
 Uint32
-Transporter::fetch_send_iovec_data(struct iovec dst[], Uint32 cnt)
-{
-  return get_callback_obj()->get_bytes_to_send_iovec(remoteNodeId,
-                                                     dst, cnt);
-}
-
-inline
-void
-Transporter::iovec_data_sent(int nBytesSent)
-{
-  Uint32 used_bytes
-    = get_callback_obj()->bytes_sent(remoteNodeId, nBytesSent);
-  update_status_overloaded(used_bytes);
+Transporter::getErrorCount()
+{ 
+  return m_errorCount;
 }
 
 #endif // Define of Transporter_H

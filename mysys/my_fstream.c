@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -55,20 +55,12 @@ size_t my_fread(FILE *stream, uchar *Buffer, size_t Count, myf MyFlags)
     if (MyFlags & (MY_WME | MY_FAE | MY_FNABP))
     {
       if (ferror(stream))
-      {
-        char errbuf[MYSYS_STRERROR_SIZE];
-        my_error(EE_READ, MYF(ME_BELL+ME_WAITTANG),
-                 my_filename(my_fileno(stream)),
-                 errno, my_strerror(errbuf, sizeof(errbuf), errno));
-      }
+	my_error(EE_READ, MYF(ME_BELL+ME_WAITTANG),
+		 my_filename(my_fileno(stream)),errno);
       else
       if (MyFlags & (MY_NABP | MY_FNABP))
-      {
-        char errbuf[MYSYS_STRERROR_SIZE];
-        my_error(EE_EOFERR, MYF(ME_BELL+ME_WAITTANG),
-                 my_filename(my_fileno(stream)), errno,
-                 my_strerror(errbuf, sizeof(errbuf), errno));
-      }
+	my_error(EE_EOFERR, MYF(ME_BELL+ME_WAITTANG),
+		 my_filename(my_fileno(stream)),errno);
     }
     my_errno=errno ? errno : -1;
     if (ferror(stream) || MyFlags & (MY_NABP | MY_FNABP))
@@ -104,7 +96,6 @@ size_t my_fwrite(FILE *stream, const uchar *Buffer, size_t Count, myf MyFlags)
   DBUG_ENTER("my_fwrite");
   DBUG_PRINT("my",("stream: 0x%lx  Buffer: 0x%lx  Count: %u  MyFlags: %d",
 		   (long) stream, (long) Buffer, (uint) Count, MyFlags));
-  DBUG_EXECUTE_IF("simulate_fwrite_error",  DBUG_RETURN(-1););
 
 #if !defined(NO_BACKGROUND) && defined(USE_MY_STREAM)
   errors=0;
@@ -147,15 +138,13 @@ size_t my_fwrite(FILE *stream, const uchar *Buffer, size_t Count, myf MyFlags)
 #endif
       if (ferror(stream) || (MyFlags & (MY_NABP | MY_FNABP)))
       {
-        if (MyFlags & (MY_WME | MY_FAE | MY_FNABP))
-        {
-          char errbuf[MYSYS_STRERROR_SIZE];
-          my_error(EE_WRITE, MYF(ME_BELL+ME_WAITTANG),
-                   my_filename(my_fileno(stream)),
-                   errno, my_strerror(errbuf, sizeof(errbuf), errno));
-        }
-        writtenbytes= (size_t) -1;        /* Return that we got error */
-        break;
+	if (MyFlags & (MY_WME | MY_FAE | MY_FNABP))
+	{
+	  my_error(EE_WRITE, MYF(ME_BELL+ME_WAITTANG),
+		   my_filename(my_fileno(stream)),errno);
+	}
+	writtenbytes= (size_t) -1;        /* Return that we got error */
+	break;
       }
     }
     if (MyFlags & (MY_NABP | MY_FNABP))
@@ -171,7 +160,7 @@ size_t my_fwrite(FILE *stream, const uchar *Buffer, size_t Count, myf MyFlags)
 /* Seek to position in file */
 
 my_off_t my_fseek(FILE *stream, my_off_t pos, int whence,
-		  myf MyFlags MY_ATTRIBUTE((unused)))
+		  myf MyFlags __attribute__((unused)))
 {
   DBUG_ENTER("my_fseek");
   DBUG_PRINT("my",("stream: 0x%lx  pos: %lu  whence: %d  MyFlags: %d",
@@ -183,7 +172,7 @@ my_off_t my_fseek(FILE *stream, my_off_t pos, int whence,
 
 /* Tell current position of file */
 
-my_off_t my_ftell(FILE *stream, myf MyFlags MY_ATTRIBUTE((unused)))
+my_off_t my_ftell(FILE *stream, myf MyFlags __attribute__((unused)))
 {
   off_t pos;
   DBUG_ENTER("my_ftell");

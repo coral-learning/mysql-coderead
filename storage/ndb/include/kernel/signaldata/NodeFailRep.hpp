@@ -1,5 +1,5 @@
-/*
-   Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2003, 2005 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef NODE_FAILREP_HPP
 #define NODE_FAILREP_HPP
@@ -23,12 +22,11 @@
 
 /**
  * This signals is sent by Qmgr to NdbCntr
- *   and then from NdbCntr sent to: dih, dict, lqh, tc, API
- *   and others
+ *   and then from NdbCntr sent to: dih, dict, lqh, tc & API
  */
 struct NodeFailRep {
-  STATIC_CONST( SignalLength = 3 + NdbNodeBitmask::Size );
-  STATIC_CONST( SignalLengthLong = 3 + NodeBitmask::Size );
+  STATIC_CONST( SignalLength = 3 + NodeBitmask::Size );
+  
   Uint32 failNo;
 
   /**
@@ -38,7 +36,7 @@ struct NodeFailRep {
   Uint32 masterNodeId;
 
   Uint32 noOfNodes;
-  Uint32 theNodes[NdbNodeBitmask::Size];
+  Uint32 theNodes[NodeBitmask::Size];
 };
 
 #endif

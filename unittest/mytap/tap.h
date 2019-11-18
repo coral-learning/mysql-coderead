@@ -1,4 +1,4 @@
-/* Copyright (c) 2006, 2016, Oracle and/or its affiliates. All rights reserved. 
+/* Copyright (c) 2006, 2010, Oracle and/or its affiliates. All rights reserved. 
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 
    Library for providing TAP support for testing C and C++ was written
    by Mats Kindahl <mats@mysql.com>.
@@ -126,7 +126,7 @@ void plan(int const count);
 */
 
 void ok(int const pass, char const *fmt, ...)
-  MY_ATTRIBUTE((format(printf,2,3)));
+  __attribute__((format(printf,2,3)));
 
 
 /**
@@ -168,8 +168,8 @@ void ok1(int const pass);
    @param reason     A reason for skipping the tests
  */
 
-void skip(int how_many, char const *reason, ...)
-    MY_ATTRIBUTE((format(printf,2,3)));
+void skip(int how_many, char const *const reason, ...)
+    __attribute__((format(printf,2,3)));
 
 
 /**
@@ -218,7 +218,7 @@ void skip(int how_many, char const *reason, ...)
  */
 
 void diag(char const *fmt, ...)
-  MY_ATTRIBUTE((format(printf,1,2)));
+  __attribute__((format(printf,1,2)));
 
 
 /**
@@ -240,7 +240,7 @@ void diag(char const *fmt, ...)
 */
 
 void BAIL_OUT(char const *fmt, ...)
-  MY_ATTRIBUTE((noreturn, format(printf,1,2)));
+  __attribute__((noreturn, format(printf,1,2)));
 
 
 /**
@@ -271,7 +271,7 @@ int exit_status(void);
  */
 
 void skip_all(char const *reason, ...)
-  MY_ATTRIBUTE((noreturn, format(printf, 1, 2)));
+  __attribute__((noreturn, format(printf, 1, 2)));
 
 
 /**
@@ -296,7 +296,7 @@ void skip_all(char const *reason, ...)
 */
 
 void todo_start(char const *message, ...)
-  MY_ATTRIBUTE((format(printf, 1, 2)));
+  __attribute__((format(printf, 1, 2)));
 
 
 /**

@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2000, 2015, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -17,6 +17,10 @@
 
 /* This file is originally from the mysql distribution. Coded by monty */
 
+#ifdef USE_PRAGMA_IMPLEMENTATION
+#pragma implementation				// gcc: Class implementation
+#endif
+
 #include <my_global.h>
 #include <my_sys.h>
 #include <m_string.h>
@@ -24,11 +28,6 @@
 #include <mysql_com.h>
 
 #include "sql_string.h"
-
-#include <algorithm>
-
-using std::min;
-using std::max;
 
 /*****************************************************************************
 ** String functions
@@ -59,19 +58,12 @@ bool String::real_alloc(uint32 length)
 ** (for C functions)
 */
 
-bool String::realloc(uint32 alloc_length, bool force_on_heap)
+bool String::realloc(uint32 alloc_length)
 {
   uint32 len=ALIGN_SIZE(alloc_length+1);
   DBUG_ASSERT(len > alloc_length);
   if (len <= alloc_length)
     return TRUE;                                 /* Overflow */
-
-  if (force_on_heap && !alloced)
-  {
-    /* Bytes will be allocated on the heap.*/
-    Alloced_length= 0;
-  }
-
   if (Alloced_length < len)
   {
     char *new_ptr;
@@ -98,7 +90,7 @@ bool String::realloc(uint32 alloc_length, bool force_on_heap)
   return FALSE;
 }
 
-bool String::set(longlong num, const CHARSET_INFO *cs)
+bool String::set(longlong num, CHARSET_INFO *cs)
 {
   uint l=20*cs->mbmaxlen+1;
 
@@ -109,7 +101,7 @@ bool String::set(longlong num, const CHARSET_INFO *cs)
   return FALSE;
 }
 
-bool String::set(ulonglong num, const CHARSET_INFO *cs)
+bool String::set(ulonglong num, CHARSET_INFO *cs)
 {
   uint l=20*cs->mbmaxlen+1;
 
@@ -120,7 +112,7 @@ bool String::set(ulonglong num, const CHARSET_INFO *cs)
   return FALSE;
 }
 
-bool String::set(double num,uint decimals, const CHARSET_INFO *cs)
+bool String::set(double num,uint decimals, CHARSET_INFO *cs)
 {
   char buff[FLOATING_POINT_BUFFER];
   uint dummy_errors;
@@ -159,7 +151,7 @@ bool String::copy(const String &str)
   return FALSE;
 }
 
-bool String::copy(const char *str,uint32 arg_length, const CHARSET_INFO *cs)
+bool String::copy(const char *str,uint32 arg_length, CHARSET_INFO *cs)
 {
   if (alloc(arg_length))
     return TRUE;
@@ -194,8 +186,8 @@ bool String::copy(const char *str,uint32 arg_length, const CHARSET_INFO *cs)
 */
 
 bool String::needs_conversion(uint32 arg_length,
-			      const CHARSET_INFO *from_cs,
-			      const CHARSET_INFO *to_cs,
+			      CHARSET_INFO *from_cs,
+			      CHARSET_INFO *to_cs,
 			      uint32 *offset)
 {
   *offset= 0;
@@ -236,7 +228,7 @@ bool String::needs_conversion(uint32 arg_length,
 */
 
 bool String::copy_aligned(const char *str,uint32 arg_length, uint32 offset,
-			  const CHARSET_INFO *cs)
+			  CHARSET_INFO *cs)
 {
   /* How many bytes are in incomplete character */
   offset= cs->mbmaxlen - offset; /* How many zeros we should prepend */
@@ -251,7 +243,7 @@ bool String::copy_aligned(const char *str,uint32 arg_length, uint32 offset,
     If we add big-endian UCS-2 sometimes, this code
     will be more complicated. But it's OK for now.
   */
-  memset(Ptr, 0, offset);
+  bzero((char*) Ptr, offset);
   memcpy(Ptr + offset, str, arg_length);
   Ptr[aligned_length]=0;
   /* str_length is always >= 0 as arg_length is != 0 */
@@ -262,7 +254,7 @@ bool String::copy_aligned(const char *str,uint32 arg_length, uint32 offset,
 
 
 bool String::set_or_copy_aligned(const char *str,uint32 arg_length,
-				 const CHARSET_INFO *cs)
+				 CHARSET_INFO *cs)
 {
   /* How many bytes are in incomplete character */
   uint32 offset= (arg_length % cs->mbminlen); 
@@ -278,7 +270,7 @@ bool String::set_or_copy_aligned(const char *str,uint32 arg_length,
 	/* Copy with charset convertion */
 
 bool String::copy(const char *str, uint32 arg_length,
-		  const CHARSET_INFO *from_cs, const CHARSET_INFO *to_cs, uint *errors)
+		  CHARSET_INFO *from_cs, CHARSET_INFO *to_cs, uint *errors)
 {
   uint32 offset;
   if (!needs_conversion(arg_length, from_cs, to_cs, &offset))
@@ -342,7 +334,7 @@ bool String::fill(uint32 max_length,char fill_char)
   {
     if (realloc(max_length))
       return TRUE;
-    memset(Ptr+str_length, fill_char, max_length-str_length);
+    bfill(Ptr+str_length,max_length-str_length,fill_char);
     str_length=max_length;
   }
   return FALSE;
@@ -417,7 +409,7 @@ bool String::append(const char *s)
   with character set recoding
 */
 
-bool String::append(const char *s,uint32 arg_length, const CHARSET_INFO *cs)
+bool String::append(const char *s,uint32 arg_length, CHARSET_INFO *cs)
 {
   uint32 dummy_offset;
   
@@ -479,14 +471,14 @@ bool String::append_with_prefill(const char *s,uint32 arg_length,
   t_length= full_length - arg_length;
   if (t_length > 0)
   {
-    memset(Ptr+str_length, fill_char, t_length);
+    bfill(Ptr+str_length, t_length, fill_char);
     str_length=str_length + t_length;
   }
   append(s, arg_length);
   return FALSE;
 }
 
-uint32 String::numchars() const
+uint32 String::numchars()
 {
   return str_charset->cset->numchars(str_charset, Ptr, Ptr+str_length);
 }
@@ -661,7 +653,7 @@ void String::qs_append(uint i)
 */
 
 
-int sortcmp(const String *s,const String *t, const CHARSET_INFO *cs)
+int sortcmp(const String *s,const String *t, CHARSET_INFO *cs)
 {
  return cs->coll->strnncollsp(cs,
                               (unsigned char *) s->ptr(),s->length(),
@@ -697,14 +689,14 @@ int stringcmp(const String *s,const String *t)
 
 String *copy_if_not_alloced(String *to,String *from,uint32 from_length)
 {
-  if (from->alloced && from->Alloced_length >= from_length)
+  if (from->Alloced_length >= from_length)
     return from;
   if ((from->alloced && (from->Alloced_length != 0)) || !to || from == to)
   {
-    (void) from->realloc(from_length, true);
+    (void) from->realloc(from_length);
     return from;
   }
-  if (to->realloc(from_length, true))
+  if (to->realloc(from_length))
     return from;				// Actually an error
   if ((to->str_length=min(from->str_length,from_length)))
     memcpy(to->Ptr,from->Ptr,to->str_length);
@@ -716,6 +708,80 @@ String *copy_if_not_alloced(String *to,String *from,uint32 from_length)
 /****************************************************************************
   Help functions
 ****************************************************************************/
+
+/*
+  copy a string from one character set to another
+  
+  SYNOPSIS
+    copy_and_convert()
+    to			Store result here
+    to_cs		Character set of result string
+    from		Copy from here
+    from_length		Length of from string
+    from_cs		From character set
+
+  NOTES
+    'to' must be big enough as form_length * to_cs->mbmaxlen
+
+  RETURN
+    length of bytes copied to 'to'
+*/
+
+
+uint32
+copy_and_convert(char *to, uint32 to_length, CHARSET_INFO *to_cs, 
+                 const char *from, uint32 from_length, CHARSET_INFO *from_cs,
+                 uint *errors)
+{
+  int         cnvres;
+  my_wc_t     wc;
+  const uchar *from_end= (const uchar*) from+from_length;
+  char *to_start= to;
+  uchar *to_end= (uchar*) to+to_length;
+  my_charset_conv_mb_wc mb_wc= from_cs->cset->mb_wc;
+  my_charset_conv_wc_mb wc_mb= to_cs->cset->wc_mb;
+  uint error_count= 0;
+
+  while (1)
+  {
+    if ((cnvres= (*mb_wc)(from_cs, &wc, (uchar*) from,
+				      from_end)) > 0)
+      from+= cnvres;
+    else if (cnvres == MY_CS_ILSEQ)
+    {
+      error_count++;
+      from++;
+      wc= '?';
+    }
+    else if (cnvres > MY_CS_TOOSMALL)
+    {
+      /*
+        A correct multibyte sequence detected
+        But it doesn't have Unicode mapping.
+      */
+      error_count++;
+      from+= (-cnvres);
+      wc= '?';
+    }
+    else
+      break;  // Not enough characters
+
+outp:
+    if ((cnvres= (*wc_mb)(to_cs, wc, (uchar*) to, to_end)) > 0)
+      to+= cnvres;
+    else if (cnvres == MY_CS_ILUNI && wc != '?')
+    {
+      error_count++;
+      wc= '?';
+      goto outp;
+    }
+    else
+      break;
+  }
+  *errors= error_count;
+  return (uint32) (to - to_start);
+}
+
 
 void String::print(String *str)
 {
@@ -766,5 +832,5 @@ void String::swap(String &s)
   swap_variables(uint32, str_length, s.str_length);
   swap_variables(uint32, Alloced_length, s.Alloced_length);
   swap_variables(bool, alloced, s.alloced);
-  swap_variables(const CHARSET_INFO*, str_charset, s.str_charset);
+  swap_variables(CHARSET_INFO*, str_charset, s.str_charset);
 }

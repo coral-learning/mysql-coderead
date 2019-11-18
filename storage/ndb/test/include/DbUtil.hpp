@@ -1,6 +1,5 @@
-/*
-   Copyright (C) 2007, 2008 MySQL AB, 2008, 2009 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2007, 2008 MySQL AB
+   Use is subject to license terms
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,8 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 // dbutil.h: interface for the database utilities class.
 // Supplies a database to the test application
@@ -61,18 +59,15 @@ public:
   void reset(void);
   // Remove current row from resultset
   void remove();
-  // Clear result
-  void clear();
 
   SqlResultSet();
   ~SqlResultSet();
 
   const char* column(const char* col_name);
   uint columnAsInt(const char* col_name);
-  unsigned long long columnAsLong(const char* col_name);
 
-  unsigned long long insertId();
-  unsigned long long affectedRows();
+  uint insertId();
+  uint affectedRows();
   uint numRows(void);
   uint mysqlErrno();
   const char* mysqlError();
@@ -80,7 +75,6 @@ public:
 
 private:
   uint get_int(const char* name);
-  unsigned long long get_long(const char* name);
   const char* get_string(const char* name);
 
   const Properties* m_curr_row;
@@ -88,29 +82,33 @@ private:
 };
 
 
+#define DBU_FAILED 1
+#define DBU_OK 0
+
 class DbUtil
 {
 public:
 
   DbUtil(MYSQL* mysql);
   DbUtil(const char* dbname = "mysql",
+         const char* user = "root",
+         const char* pass = "",
          const char* suffix = NULL);
   ~DbUtil();
 
   bool doQuery(const char* query);
   bool doQuery(const char* query, SqlResultSet& result);
   bool doQuery(const char* query, const Properties& args, SqlResultSet& result);
-  bool doQuery(const char* query, const Properties& args);
 
   bool doQuery(BaseString& str);
   bool doQuery(BaseString& str, SqlResultSet& result);
   bool doQuery(BaseString& str, const Properties& args, SqlResultSet& result);
-  bool doQuery(BaseString& str, const Properties& args);
 
-  bool waitConnected(int timeout = 120);
+  bool waitConnected(int timeout);
 
-  bool  databaseLogin(const char * host,
-                      const char * user,
+  /* Deprecated, see connect() */
+  void  databaseLogin(const char * system,
+                      const char * usr,
                       const char * password,
                       unsigned int portIn,
                       const char * sockIn,
@@ -130,18 +128,14 @@ public:
   void databaseLogout();
   void mysqlCloseStmHandle(MYSQL_STMT *my_stmt);
 
-  bool connect();
+  int connect();
   void disconnect();
-  bool selectDb();
-  bool selectDb(const char *);
-  bool createDb(BaseString&);
+  int selectDb();
+  int selectDb(const char *);
+  int createDb(BaseString&);
   int getErrorNumber();
-  const char* last_error() const { return m_last_error.c_str(); }
-  int last_errno() const { return m_last_errno; }
 
-  unsigned long long selectCountTable(const char * table);
-
-  void silent() { m_silent= true; };
+  unsigned long selectCountTable(const char * table);
 
 protected:
 
@@ -167,14 +161,6 @@ private:
   BaseString m_default_group;
 
   unsigned int m_port;     // MySQL Server port
-
-  int m_last_errno;
-  BaseString m_last_error;
-
-  bool m_silent;
-
-  void report_error(const char* message, MYSQL* mysql);
-  void clear_error(void) { m_last_errno= 0; m_last_error.clear(); }
 
   void setDbName(const char * name){m_dbname.assign(name);};
   void setUser(const char * user_name){m_user.assign(user_name);};

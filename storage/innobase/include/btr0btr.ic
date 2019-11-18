@@ -1,6 +1,6 @@
 /*****************************************************************************
 
-Copyright (c) 1994, 2016, Oracle and/or its affiliates. All Rights Reserved.
+Copyright (c) 1994, 2011, Oracle and/or its affiliates. All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -11,8 +11,8 @@ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
 FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
-this program; if not, write to the Free Software Foundation, Inc.,
-51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA
+this program; if not, write to the Free Software Foundation, Inc., 
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
 
 *****************************************************************************/
 
@@ -81,7 +81,7 @@ btr_page_set_index_id(
 	index_id_t	id,	/*!< in: index id */
 	mtr_t*		mtr)	/*!< in: mtr */
 {
-	if (page_zip) {
+	if (UNIV_LIKELY_NULL(page_zip)) {
 		mach_write_to_8(page + (PAGE_HEADER + PAGE_INDEX_ID), id);
 		page_zip_write_header(page_zip,
 				      page + (PAGE_HEADER + PAGE_INDEX_ID),
@@ -126,6 +126,22 @@ btr_page_get_level_low(
 }
 
 /********************************************************//**
+Gets the node level field in an index page.
+@return	level, leaf level == 0 */
+UNIV_INLINE
+ulint
+btr_page_get_level(
+/*===============*/
+	const page_t*	page,	/*!< in: index page */
+	mtr_t*		mtr __attribute__((unused)))
+				/*!< in: mini-transaction handle */
+{
+	ut_ad(page && mtr);
+
+	return(btr_page_get_level_low(page));
+}
+
+/********************************************************//**
 Sets the node level field in an index page. */
 UNIV_INLINE
 void
@@ -140,7 +156,7 @@ btr_page_set_level(
 	ut_ad(page && mtr);
 	ut_ad(level <= BTR_MAX_NODE_LEVEL);
 
-	if (page_zip) {
+	if (UNIV_LIKELY_NULL(page_zip)) {
 		mach_write_to_2(page + (PAGE_HEADER + PAGE_LEVEL), level);
 		page_zip_write_header(page_zip,
 				      page + (PAGE_HEADER + PAGE_LEVEL),
@@ -159,11 +175,10 @@ ulint
 btr_page_get_next(
 /*==============*/
 	const page_t*	page,	/*!< in: index page */
-	mtr_t*		mtr MY_ATTRIBUTE((unused)))
+	mtr_t*		mtr __attribute__((unused)))
 				/*!< in: mini-transaction handle */
 {
-	ut_ad(page != NULL);
-	ut_ad(mtr != NULL);
+	ut_ad(page && mtr);
 	ut_ad(mtr_memo_contains_page(mtr, page, MTR_MEMO_PAGE_X_FIX)
 	      || mtr_memo_contains_page(mtr, page, MTR_MEMO_PAGE_S_FIX));
 
@@ -182,10 +197,9 @@ btr_page_set_next(
 	ulint		next,	/*!< in: next page number */
 	mtr_t*		mtr)	/*!< in: mini-transaction handle */
 {
-	ut_ad(page != NULL);
-	ut_ad(mtr != NULL);
+	ut_ad(page && mtr);
 
-	if (page_zip) {
+	if (UNIV_LIKELY_NULL(page_zip)) {
 		mach_write_to_4(page + FIL_PAGE_NEXT, next);
 		page_zip_write_header(page_zip, page + FIL_PAGE_NEXT, 4, mtr);
 	} else {
@@ -201,10 +215,9 @@ ulint
 btr_page_get_prev(
 /*==============*/
 	const page_t*	page,	/*!< in: index page */
-	mtr_t*	mtr MY_ATTRIBUTE((unused))) /*!< in: mini-transaction handle */
+	mtr_t*	mtr __attribute__((unused))) /*!< in: mini-transaction handle */
 {
-	ut_ad(page != NULL);
-	ut_ad(mtr != NULL);
+	ut_ad(page && mtr);
 
 	return(mach_read_from_4(page + FIL_PAGE_PREV));
 }
@@ -221,10 +234,9 @@ btr_page_set_prev(
 	ulint		prev,	/*!< in: previous page number */
 	mtr_t*		mtr)	/*!< in: mini-transaction handle */
 {
-	ut_ad(page != NULL);
-	ut_ad(mtr != NULL);
+	ut_ad(page && mtr);
 
-	if (page_zip) {
+	if (UNIV_LIKELY_NULL(page_zip)) {
 		mach_write_to_4(page + FIL_PAGE_PREV, prev);
 		page_zip_write_header(page_zip, page + FIL_PAGE_PREV, 4, mtr);
 	} else {
@@ -260,13 +272,12 @@ btr_node_ptr_get_child_page_no(
 
 	page_no = mach_read_from_4(field);
 
-	if (page_no == 0) {
+	if (UNIV_UNLIKELY(page_no == 0)) {
 		fprintf(stderr,
 			"InnoDB: a nonsensical page number 0"
 			" in a node ptr record at offset %lu\n",
 			(ulong) page_offset(rec));
 		buf_page_print(page_align(rec), 0, 0);
-		ut_ad(0);
 	}
 
 	return(page_no);

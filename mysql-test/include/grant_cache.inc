@@ -2,11 +2,12 @@
 #
 # Test grants with query cache
 #
-# Now normal protocol and ps-protocol produces the same result.
-# (After splitting open and lock tables into different stages,
-# to be able to prune locks of individual partitions.)
+# Last update:
+# 2007-05-03 ML - Move t/grant_cache.test to include/grant_cache.inc
+#               - Remove the disabling of the ps-protocol
+#               - minor improvements like error names instead of numbers
+#               - Create two toplevel tests sourcing this routine
 #
-# Before this change, the below was true:
 # Running this test with and without "--ps-protocol" produces different
 # Qcache_not_cached results because of the following reason:
 # In normal protocol, a SELECT failing due to insufficient privileges
